@@ -9,7 +9,7 @@ import {
   systemPreferences
 } from 'electron'
 import { join } from 'path'
-import { existsSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
 import { execFile } from 'child_process'
 import {
@@ -20,6 +20,8 @@ import {
   type DevAccounts,
   type DevAccountState,
   type LockState,
+  type RunResult,
+  type SheetIapInfo,
   type StoreKind
 } from '../shared/launch-types'
 
@@ -90,11 +92,130 @@ function upsertAccount(email: string, patch: { memo?: string; apps?: string[] })
   return accounts
 }
 
+// 개발자 계정 이메일이 바뀌면 이전 계정에서 스토어 연결 해제.
+// 남은 흔적(강제 메일 앱 제외 연결·비밀번호·메모)이 없으면 계정 자체를 정리한다.
+function unlinkStoreFromAccount(email: string, storeApp: string): void {
+  let accounts = readAccounts()
+  const account = accounts.find((a) => a.email === email)
+  if (!account) return
+  account.apps = account.apps.filter((x) => x !== storeApp)
+  account.updatedAt = new Date().toISOString()
+  const mailApp = mailAppForEmail(email)
+  const meaningfulApps = account.apps.filter((x) => x !== mailApp)
+  const hasSecrets = Object.keys(readSecrets()).some((k) => k.startsWith(email + '::'))
+  if (meaningfulApps.length === 0 && !hasSecrets && !account.memo) {
+    accounts = accounts.filter((a) => a.id !== account.id)
+  }
+  writeAccounts(accounts)
+}
+
+
+// ---------- 스토어 실황 조회 헬퍼 ----------
+async function googleTokenFor(saPath: string): Promise<string | null> {
+  const tokenScript = join(app.getAppPath(), 'launch', 'scripts', 'google', 'token.js')
+  return await new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [tokenScript, '--sa', saPath],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 30_000 },
+      (_err, stdout) => {
+        try {
+          const j = JSON.parse(stdout)
+          resolve(j.ok ? j.access_token : null)
+        } catch {
+          resolve(null)
+        }
+      }
+    )
+  })
+}
+
+async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: string }): Promise<string | null> {
+  const script = join(app.getAppPath(), 'launch', 'scripts', 'apple', 'asc-token.js')
+  return await new Promise((resolve) => {
+    execFile(
+      process.execPath,
+      [script, '--key', asc.keyPath, '--kid', asc.keyId, '--iss', asc.issuerId],
+      { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 30_000 },
+      (_err, stdout) => {
+        try {
+          const j = JSON.parse(stdout)
+          resolve(j.ok ? j.token : null)
+        } catch {
+          resolve(null)
+        }
+      }
+    )
+  })
+}
+
+function firstAscCreds(): { keyPath: string; keyId: string; issuerId: string } | null {
+  if (!existsSync(ANSWERS_DIR)) return null
+  for (const f of readdirSync(ANSWERS_DIR).filter((x) => x.endsWith('.json') && !x.startsWith('_'))) {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, f), 'utf8'))
+      const asc = sheet.credentials?.asc
+      if (asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId) return asc
+    } catch {
+      /* skip */
+    }
+  }
+  return null
+}
+
 interface SheetSummary {
   file: string
   appName: string
   packageName: string
   iapCount: number
+  icon?: string
+}
+
+// 출시된 앱의 아이콘 — Apple 공개 조회(iTunes Lookup) → Play 스토어 페이지 순으로 시도, 로컬 캐시
+const iconsDir = (): string => join(app.getPath('userData'), 'app-icons')
+const iconPathFor = (file: string): string => join(iconsDir(), file.replace(/\.json$/, '') + '.png')
+
+function iconDataUri(file: string): string | undefined {
+  const p = iconPathFor(file)
+  if (!existsSync(p)) return undefined
+  return 'data:image/png;base64,' + readFileSync(p).toString('base64')
+}
+
+async function fetchAppIcon(file: string): Promise<boolean> {
+  const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+  mkdirSync(iconsDir(), { recursive: true })
+  if (existsSync(iconPathFor(file))) return true
+  let url: string | null = null
+  try {
+    const r = await fetch(
+      `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(sheet.app.bundleId)}&country=KR`
+    )
+    const j = (await r.json()) as { results?: { artworkUrl512?: string; artworkUrl100?: string }[] }
+    url = j.results?.[0]?.artworkUrl512 ?? j.results?.[0]?.artworkUrl100 ?? null
+  } catch {
+    /* 다음 소스로 */
+  }
+  if (!url) {
+    try {
+      const r = await fetch(
+        `https://play.google.com/store/apps/details?id=${encodeURIComponent(sheet.app.packageName)}&hl=ko`
+      )
+      if (r.ok) {
+        const html = await r.text()
+        const mch =
+          html.match(/property="og:image"\s+content="([^"]+)"/) ??
+          html.match(/content="([^"]+)"\s+property="og:image"/)
+        url = mch?.[1] ?? null
+      }
+    } catch {
+      /* 없으면 포기 */
+    }
+  }
+  if (!url) return false
+  const imgR = await fetch(url)
+  if (!imgR.ok) return false
+  writeFileSync(iconPathFor(file), Buffer.from(await imgR.arrayBuffer()))
+  return true
 }
 
 function listSheets(): SheetSummary[] {
@@ -108,7 +229,8 @@ function listSheets(): SheetSummary[] {
           file,
           appName: sheet.app?.name ?? file,
           packageName: sheet.app?.packageName ?? '',
-          iapCount: Array.isArray(sheet.iap) ? sheet.iap.length : 0
+          iapCount: Array.isArray(sheet.iap) ? sheet.iap.length : 0,
+          icon: iconDataUri(file)
         }
       } catch {
         return { file, appName: `${file} (${mainMsg('parseFail')})`, packageName: '', iapCount: 0 }
@@ -176,8 +298,8 @@ let unlockedUntil = 0
 // renderer가 동기화해주는 로케일 — main이 만드는 사용자 노출 문구(Touch ID 프롬프트 등)용
 let appLocale: 'ko' | 'en' = 'ko'
 const MAIN_MSG = {
-  ko: { reveal: '비밀번호 보기', copy: '비밀번호 복사', update: '비밀번호 변경', delete: '비밀번호 삭제', parseFail: '파싱 실패' },
-  en: { reveal: 'reveal password', copy: 'copy password', update: 'change password', delete: 'delete password', parseFail: 'parse failed' }
+  ko: { reveal: '비밀번호 보기', copy: '비밀번호 복사', update: '비밀번호 변경', delete: '비밀번호 삭제', deleteAccount: '계정 삭제', parseFail: '파싱 실패' },
+  en: { reveal: 'reveal password', copy: 'copy password', update: 'change password', delete: 'delete password', deleteAccount: 'delete account', parseFail: 'parse failed' }
 } as const
 const mainMsg = (k: keyof (typeof MAIN_MSG)['ko']): string => MAIN_MSG[appLocale][k]
 
@@ -276,6 +398,280 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
+  // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록
+  ipcMain.handle(
+    'launch:createSheet',
+    (
+      _e,
+      name: string,
+      packageName: string,
+      bundleId: string
+    ): { ok: boolean; file?: string; error?: string } => {
+      const slug = (packageName.split('.').pop() || name)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      if (!slug) return { ok: false, error: 'invalid-name' }
+      const file = `${slug}.json`
+      const path = join(ANSWERS_DIR, file)
+      if (existsSync(path)) return { ok: false, error: 'exists' }
+      const sheet = {
+        app: { name, packageName, bundleId: bundleId || packageName },
+        iap: [],
+        credentials: { googleSa: '', asc: { keyPath: '', keyId: '', issuerId: '' } },
+        console_answers: { data_safety: {}, content_rating: {}, app_access: '', review_notes: '' }
+      }
+      writeFileSync(path, JSON.stringify(sheet, null, 2))
+      return { ok: true, file }
+    }
+  )
+  // 기존 앱 가져오기 — 패키지명 실존·접근 검증(SA 제공 시) 후 시트 생성
+  ipcMain.handle(
+    'launch:importApp',
+    async (
+      _e,
+      name: string,
+      packageName: string,
+      saPath: string
+    ): Promise<{ ok: boolean; file?: string; verified?: boolean; error?: string; detail?: string }> => {
+      const slug = (packageName.split('.').pop() || name)
+        .toLowerCase()
+        .replace(/[^a-z0-9-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+      if (!slug || !packageName) return { ok: false, error: 'invalid-name' }
+      const file = `${slug}.json`
+      const path = join(ANSWERS_DIR, file)
+      if (existsSync(path)) return { ok: false, error: 'exists' }
+
+      let verified = false
+      if (saPath) {
+        if (!existsSync(saPath)) return { ok: false, error: 'verify-failed', detail: 'SA file not found' }
+        const tokenScript = join(app.getAppPath(), 'launch', 'scripts', 'google', 'token.js')
+        const tok = await new Promise<{ ok?: boolean; access_token?: string } | null>((resolve) => {
+          execFile(
+            process.execPath,
+            [tokenScript, '--sa', saPath],
+            { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 30_000 },
+            (_err, stdout) => {
+              try {
+                resolve(JSON.parse(stdout))
+              } catch {
+                resolve(null)
+              }
+            }
+          )
+        })
+        if (!tok?.ok || !tok.access_token) {
+          return { ok: false, error: 'verify-failed', detail: 'token' }
+        }
+        const r = await fetch(
+          `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(packageName)}/oneTimeProducts`,
+          { headers: { Authorization: 'Bearer ' + tok.access_token } }
+        )
+        if (!r.ok) return { ok: false, error: 'verify-failed', detail: `HTTP ${r.status}` }
+        verified = true
+        writeState({ ...readState(), lastGoogleSa: saPath })
+      }
+
+      const sheet = {
+        app: { name: name || slug, packageName, bundleId: packageName },
+        iap: [],
+        credentials: { googleSa: saPath || '', asc: { keyPath: '', keyId: '', issuerId: '' } },
+        console_answers: { data_safety: {}, content_rating: {}, app_access: '', review_notes: '' }
+      }
+      writeFileSync(path, JSON.stringify(sheet, null, 2))
+      return { ok: true, file, verified }
+    }
+  )
+  // 스토어 실황 IAP — 기존 앱은 스토어가 진실 (iOS/Android 별도)
+  ipcMain.handle(
+    'launch:storeIap',
+    async (
+      _e,
+      file: string
+    ): Promise<{
+      google: { id: string; title: string; state: string }[] | null
+      googleError?: string
+      apple: { id: string; name: string; state: string }[] | null
+      appleError?: string
+    }> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const result: {
+        google: { id: string; title: string; state: string }[] | null
+        googleError?: string
+        apple: { id: string; name: string; state: string }[] | null
+        appleError?: string
+      } = { google: null, apple: null }
+
+      const saPath = sheet.credentials?.googleSa
+      if (saPath && existsSync(saPath)) {
+        const tok = await googleTokenFor(saPath)
+        if (!tok) result.googleError = 'token'
+        else {
+          const r = await fetch(
+            `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}/oneTimeProducts`,
+            { headers: { Authorization: 'Bearer ' + tok } }
+          )
+          if (!r.ok) result.googleError = `HTTP ${r.status}`
+          else {
+            interface GProduct {
+              productId?: string
+              listings?: { title?: string }[]
+              purchaseOptions?: { state?: string }[]
+            }
+            const j = (await r.json()) as { oneTimeProducts?: GProduct[] }
+            result.google = (j.oneTimeProducts ?? []).map((prod) => ({
+              id: prod.productId ?? '',
+              title: prod.listings?.[0]?.title ?? '',
+              state: prod.purchaseOptions?.[0]?.state ?? ''
+            }))
+          }
+        }
+      } else result.googleError = 'no-key'
+
+      const asc = sheet.credentials?.asc
+      if (asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId) {
+        const tok = await ascTokenFor(asc)
+        if (!tok) result.appleError = 'token'
+        else {
+          const headers = { Authorization: 'Bearer ' + tok }
+          const appsR = await fetch(
+            `https://api.appstoreconnect.apple.com/v1/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+            { headers }
+          )
+          if (!appsR.ok) result.appleError = `HTTP ${appsR.status}`
+          else {
+            const appsJ = (await appsR.json()) as { data?: { id: string }[] }
+            const appId = appsJ.data?.[0]?.id
+            if (!appId) result.appleError = 'app-not-found'
+            else {
+              const iapR = await fetch(
+                `https://api.appstoreconnect.apple.com/v1/apps/${appId}/inAppPurchasesV2?limit=50`,
+                { headers }
+              )
+              if (!iapR.ok) result.appleError = `HTTP ${iapR.status}`
+              else {
+                const iapJ = (await iapR.json()) as {
+                  data?: { attributes?: { productId?: string; name?: string; state?: string } }[]
+                }
+                result.apple = (iapJ.data ?? []).map((d) => ({
+                  id: d.attributes?.productId ?? '',
+                  name: d.attributes?.name ?? '',
+                  state: d.attributes?.state ?? ''
+                }))
+              }
+            }
+          }
+        }
+      } else result.appleError = 'no-key'
+
+      return result
+    }
+  )
+  // Apple 계정의 앱 목록 — 가져오기에서 클릭 선택용 (Play는 목록 API가 없음)
+  ipcMain.handle(
+    'launch:listAscApps',
+    async (): Promise<{ name: string; bundleId: string }[]> => {
+      const asc = firstAscCreds()
+      if (!asc) return []
+      const tok = await ascTokenFor(asc)
+      if (!tok) return []
+      const r = await fetch('https://api.appstoreconnect.apple.com/v1/apps?limit=50', {
+        headers: { Authorization: 'Bearer ' + tok }
+      })
+      if (!r.ok) return []
+      const j = (await r.json()) as {
+        data?: { attributes?: { name?: string; bundleId?: string } }[]
+      }
+      return (j.data ?? []).map((d) => ({
+        name: d.attributes?.name ?? '',
+        bundleId: d.attributes?.bundleId ?? ''
+      }))
+    }
+  )
+  ipcMain.handle('launch:fetchIcon', async (_e, file: string): Promise<boolean> => {
+    return await fetchAppIcon(file)
+  })
+  ipcMain.handle('launch:lastSa', (): string => (readState().lastGoogleSa as string) ?? '')
+  // 앱별 출시 여정 진행 상태 — 시트에 저장 (며칠 걸리는 여정의 이어하기)
+  ipcMain.handle('launch:getJourney', (_e, file: string): { registered: boolean } => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      return { registered: !!sheet.journey?.registered }
+    } catch {
+      return { registered: false }
+    }
+  })
+  ipcMain.handle(
+    'launch:setJourney',
+    (_e, file: string, registered: boolean): { registered: boolean } => {
+      const path = join(ANSWERS_DIR, file)
+      const sheet = JSON.parse(readFileSync(path, 'utf8'))
+      sheet.journey = { ...(sheet.journey ?? {}), registered }
+      writeFileSync(path, JSON.stringify(sheet, null, 2))
+      return { registered }
+    }
+  )
+  ipcMain.handle('launch:sheetIap', (_e, file: string): SheetIapInfo => {
+    const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+    interface RawIap {
+      productId?: string
+      listings?: Record<string, { title?: string }>
+      price?: Record<string, string>
+      currency?: Record<string, string>
+    }
+    const products = ((sheet.iap ?? []) as RawIap[]).map((p) => {
+      const firstListing = Object.values(p.listings ?? {})[0]
+      const [region, units] = Object.entries(p.price ?? {})[0] ?? []
+      return {
+        productId: p.productId ?? '',
+        title: firstListing?.title ?? '',
+        priceLabel: region ? `${units} ${p.currency?.[region] ?? region}` : ''
+      }
+    })
+    return { packageName: sheet.app?.packageName ?? '', products }
+  })
+  // 검증된 CLI 실행 — 스크립트는 화이트리스트 고정, 인자는 시트에서 main이 직접 구성
+  ipcMain.handle(
+    'launch:runIap',
+    async (_e, file: string, action: 'upsert' | 'activate'): Promise<RunResult> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const saPath: string = sheet.credentials?.googleSa ?? ''
+      if (!saPath || !existsSync(saPath)) return { ok: false, output: 'google-sa-missing' }
+      const script = join(
+        app.getAppPath(),
+        'launch',
+        'scripts',
+        'google',
+        action === 'upsert' ? 'otp-upsert.js' : 'otp-activate.js'
+      )
+      const answersPath = join(ANSWERS_DIR, file)
+      return await new Promise<RunResult>((resolve) => {
+        execFile(
+          process.execPath,
+          [script, '--sa', saPath, '--answers', answersPath],
+          { env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, timeout: 60_000 },
+          (err, stdout, stderr) => {
+            let parsed: unknown = null
+            try {
+              parsed = JSON.parse(stdout)
+            } catch {
+              /* 원문 유지 */
+            }
+            const okFlag =
+              parsed !== null && typeof parsed === 'object' && 'ok' in (parsed as object)
+                ? Boolean((parsed as { ok: unknown }).ok)
+                : !err
+            resolve({
+              ok: !err && okFlag,
+              output: parsed ?? stdout.slice(0, 4000),
+              stderr: stderr ? stderr.slice(0, 2000) : undefined
+            })
+          }
+        )
+      })
+    }
+  )
   ipcMain.handle('launch:getDevAccounts', (): DevAccounts => {
     return (readState().devAccounts as DevAccounts) ?? {}
   })
@@ -283,13 +679,17 @@ app.whenReady().then(() => {
     'launch:setDevAccount',
     (_e, store: StoreKind, info: DevAccountState): DevAccounts => {
       const state = readState()
+      const storeApp = store === 'play' ? 'play-console' : 'app-store-connect'
+      const prev = ((state.devAccounts as DevAccounts) ?? {})[store]
+      // 이메일이 바뀌거나 제거되면 이전 계정의 연결을 정리 (오타 계정 잔존 방지)
+      if (prev?.email && prev.email !== info.email) {
+        unlinkStoreFromAccount(prev.email, storeApp)
+      }
       const devAccounts = { ...((state.devAccounts as DevAccounts) ?? {}), [store]: info }
       writeState({ ...state, devAccounts })
       // "있음" + 이메일 입력 시 계정 인벤토리에 자동 등록·연동 (모듈 1 → 모듈 2)
       if (info.status === 'yes' && info.email) {
-        upsertAccount(info.email, {
-          apps: [store === 'play' ? 'play-console' : 'app-store-connect']
-        })
+        upsertAccount(info.email, { apps: [storeApp] })
       }
       return devAccounts
     }
@@ -297,6 +697,22 @@ app.whenReady().then(() => {
   ipcMain.handle('accounts:list', (): Account[] => readAccounts())
   ipcMain.handle('accounts:add', (_e, email: string, memo: string, apps: string[]): Account[] => {
     return upsertAccount(email, { memo, apps })
+  })
+  // 계정 삭제 — 저장된 비밀번호가 있으면 인증 필요(파괴적), 해당 이메일의 암호문도 함께 정리
+  ipcMain.handle('accounts:delete', async (_e, id: string): Promise<Account[]> => {
+    const accounts = readAccounts()
+    const account = accounts.find((a) => a.id === id)
+    if (!account) return accounts
+    const secrets = readSecrets()
+    const keys = Object.keys(secrets).filter((k) => k.startsWith(account.email + '::'))
+    if (keys.length > 0) {
+      await biometricGate(`${account.email} ${mainMsg('deleteAccount')}`)
+      keys.forEach((k) => delete secrets[k])
+      writeSecrets(secrets)
+    }
+    const remaining = accounts.filter((a) => a.id !== id)
+    writeAccounts(remaining)
+    return remaining
   })
   ipcMain.handle('accounts:setMemo', (_e, id: string, memo: string): Account[] => {
     const accounts = readAccounts()

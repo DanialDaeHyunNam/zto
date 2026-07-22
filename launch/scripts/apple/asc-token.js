@@ -1,5 +1,5 @@
 // App Store Connect API JWT 발급 (관리용 — IAP CRUD·메타데이터·스크린샷)
-// ⚠️ App Manager 역할 키 필요 — 미발급 상태 (SPEC §2.2). 발급 즉시 이 스크립트부터 스모크 테스트.
+// App Manager 역할 키 필요 (SPEC §2.2). 2026-07-22 실키 프로브 통과.
 //    Server API(영수증 검증)용 In-App Purchase 키와 혼동 금지 — 그 키로는 여기 못 쓴다.
 // 사용: node asc-token.js --key <AuthKey_XXXX.p8> --kid <Key ID> --iss <Issuer ID>
 const fs = require('node:fs')

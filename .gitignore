@@ -1,6 +1,9 @@
 node_modules/
 out/
 dist/
+# 답안 시트는 개인 데이터 (자격증명 경로 포함) — 템플릿만 커밋
+launch/answers/*.json
+!launch/answers/_template.json
 *.log
 *.tsbuildinfo
 .DS_Store

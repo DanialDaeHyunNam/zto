@@ -4,6 +4,18 @@ export interface SheetSummary {
   appName: string
   packageName: string
   iapCount: number
+  icon?: string // data URI (로컬 캐시된 스토어 아이콘)
+}
+
+export interface SheetIapInfo {
+  packageName: string
+  products: { productId: string; title: string; priceLabel: string }[]
+}
+
+export interface RunResult {
+  ok: boolean
+  output: unknown
+  stderr?: string
 }
 
 export interface CredentialStatus {
@@ -149,4 +161,42 @@ export const PLATFORM_DOMAINS: Record<string, string> = {
 export function mailAppForEmail(email: string): string | null {
   const domain = email.split('@')[1]?.toLowerCase()
   return domain ? (EMAIL_DOMAIN_APP[domain] ?? null) : null
+}
+
+export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+// 편집거리 1 이내 판정 (오타 추정용)
+function within1Edit(a: string, b: string): boolean {
+  if (a === b) return false
+  if (Math.abs(a.length - b.length) > 1) return false
+  let i = 0
+  let j = 0
+  let edits = 0
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i++
+      j++
+      continue
+    }
+    if (++edits > 1) return false
+    if (a.length > b.length) i++
+    else if (b.length > a.length) j++
+    else {
+      i++
+      j++
+    }
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1
+}
+
+// "gmail.cpm" 같은 도메인 오타 → 알려진 도메인으로 교정 제안
+export function suggestEmailDomain(email: string): string | null {
+  const [local, domain] = email.split('@')
+  if (!local || !domain) return null
+  const d = domain.toLowerCase()
+  if (EMAIL_DOMAIN_APP[d]) return null
+  for (const known of Object.keys(EMAIL_DOMAIN_APP)) {
+    if (within1Edit(d, known)) return `${local}@${known}`
+  }
+  return null
 }

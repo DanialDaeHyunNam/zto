@@ -181,6 +181,12 @@ button {
   padding: 40px 48px 60px;
 }
 
+/* 스크롤바가 공간을 차지해 콘텐츠 폭이 출렁이는 것 방지 — 숨기되 스크롤은 유지 */
+.content::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
 .content h1 {
   font-size: 28px;
   font-weight: 800;
@@ -877,6 +883,51 @@ button {
   font-size: 14px;
 }
 
+/* ---------- 모드 선택 ---------- */
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 28px;
+  max-width: 820px;
+}
+
+.mode-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 30px 26px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mode-card strong {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.mode-card span {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.mode-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 34px rgba(139, 92, 246, 0.18);
+}
+
+.guide.no-indent {
+  margin-left: 0;
+}
+
 /* ---------- 위저드 ---------- */
 
 .wizard {
@@ -1033,6 +1084,67 @@ button {
   color: var(--warn);
 }
 
+.store-sub-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.sub-email {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ok);
+}
+
+.sub-linked {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.sub-actions {
+  display: inline-flex;
+  gap: 2px;
+}
+
+.ghost-btn.mini {
+  padding: 2px 8px;
+  font-size: 11px;
+  opacity: 0.45;
+}
+
+.store-block:hover .ghost-btn.mini {
+  opacity: 1;
+}
+
+.field-err {
+  color: #f87171;
+  font-size: 12px;
+  margin-top: 6px;
+  margin-left: 54px;
+}
+
+.suggest-row {
+  margin-top: 8px;
+  margin-left: 54px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  color: var(--warn);
+  flex-wrap: wrap;
+}
+
+.acc-detail-foot {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
 .guide {
   margin-top: 12px;
   margin-left: 54px;
@@ -1085,9 +1197,116 @@ button {
   font-size: 14px;
 }
 
+.sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sheet-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
 .sheet-card.active {
   border-color: var(--accent);
   box-shadow: var(--glow);
+}
+
+.sheet-card.new {
+  border-style: dashed;
+  justify-content: center;
+  align-items: center;
+  color: var(--muted);
+  min-width: 110px;
+}
+
+.sheet-card.new:hover {
+  color: var(--fg);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.form-card.slim {
+  margin: 14px 0 4px;
+  box-shadow: none;
+}
+
+.field-err.no-indent {
+  margin-left: 0;
+  margin-top: 0;
+}
+
+.product-list {
+  display: flex;
+  flex-direction: column;
+  margin: 8px 0 4px;
+}
+
+.product-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: center;
+  padding: 8px 0;
+  font-size: 13px;
+}
+
+.product-row + .product-row {
+  border-top: 1px solid var(--border);
+}
+
+.product-row code {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 5px;
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.product-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.product-price {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.warn-note {
+  color: var(--warn);
+}
+
+.run-block {
+  margin-top: 10px;
+}
+
+.run-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.choice.danger-confirm {
+  background: #dc2626;
+  border-color: transparent;
+  color: #fff;
+}
+
+.run-output {
+  margin-top: 8px;
+  max-height: 220px;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-all;
 }
 
 .todo-list {

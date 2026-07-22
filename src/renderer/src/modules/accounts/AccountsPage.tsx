@@ -470,17 +470,20 @@ function AccountRow({
   account,
   showMemo,
   onSetApps,
-  onSetMemo
+  onSetMemo,
+  onDelete
 }: {
   account: Account
   showMemo: boolean
   onSetApps: (id: string, apps: string[]) => void
   onSetMemo: (id: string, memo: string) => void
+  onDelete: (id: string) => void
 }): React.JSX.Element {
   const { m } = useI18n()
   const [open, setOpen] = useState(false)
   const [editingApps, setEditingApps] = useState(false)
   const [memoEditing, setMemoEditing] = useState(false)
+  const [confirmDeleteAcc, setConfirmDeleteAcc] = useState(false)
   const [memoDraft, setMemoDraft] = useState('')
   const [secretApps, setSecretApps] = useState<string[]>([])
   const apps = account.apps ?? []
@@ -607,6 +610,22 @@ function AccountRow({
               </span>
             )}
           </div>
+
+          <div className="acc-detail-foot">
+            <button
+              className={`act-btn delete ${confirmDeleteAcc ? 'arm' : ''}`}
+              onClick={() => {
+                if (!confirmDeleteAcc) {
+                  setConfirmDeleteAcc(true)
+                  setTimeout(() => setConfirmDeleteAcc(false), 3000)
+                  return
+                }
+                onDelete(account.id)
+              }}
+            >
+              {confirmDeleteAcc ? m.accounts.deleteSure : m.accounts.deleteAccount}
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -701,6 +720,15 @@ export default function AccountsPage(): React.JSX.Element {
 
   const setAccountMemo = (id: string, memo: string): void => {
     window.zto.accounts.setMemo(id, memo).then(setAccounts)
+  }
+
+  const deleteAccount = (id: string): void => {
+    window.zto.accounts
+      .delete(id)
+      .then(setAccounts)
+      .catch(() => {
+        /* 인증 취소 — 아무것도 안 함 */
+      })
   }
 
   // 앱별 통계 — "이 소셜미디어에 내 계정이 몇 개" 뷰의 재료
@@ -808,6 +836,7 @@ export default function AccountsPage(): React.JSX.Element {
               showMemo={showMemos}
               onSetApps={setAccountApps}
               onSetMemo={setAccountMemo}
+              onDelete={deleteAccount}
             />
           ))}
         </div>

@@ -14,7 +14,7 @@
 | `google/token.js` | Play 액세스 토큰 발급 (스모크 테스트 겸용) | ✅ 검증 코드 이관 |
 | `google/otp-upsert.js` | One-time product 업서트 (신 API, 403 함정 회피) | 이관 — 실전 검증 대기 |
 | `google/otp-activate.js` | 구매 옵션 활성화 | 이관 — 실전 검증 대기 |
-| `apple/asc-token.js` | ASC 관리용 JWT + 읽기 프로브 | ⏸ App Manager 키 발급 대기 |
+| `apple/asc-token.js` | ASC 관리용 JWT + 읽기 프로브 | ✅ 실키로 프로브 검증 완료 (2026-07-22) |
 
 사용 예:
 

@@ -6,6 +6,8 @@ import type {
   DevAccounts,
   DevAccountState,
   LockState,
+  RunResult,
+  SheetIapInfo,
   SheetSummary,
   StoreKind
 } from '../shared/launch-types'
@@ -21,7 +23,38 @@ const api = {
     getDevAccounts: (): Promise<DevAccounts> => ipcRenderer.invoke('launch:getDevAccounts'),
     setDevAccount: (store: StoreKind, info: DevAccountState): Promise<DevAccounts> =>
       ipcRenderer.invoke('launch:setDevAccount', store, info),
-    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('launch:openExternal', url)
+    openExternal: (url: string): Promise<void> => ipcRenderer.invoke('launch:openExternal', url),
+    createSheet: (
+      name: string,
+      packageName: string,
+      bundleId: string
+    ): Promise<{ ok: boolean; file?: string; error?: string }> =>
+      ipcRenderer.invoke('launch:createSheet', name, packageName, bundleId),
+    importApp: (
+      name: string,
+      packageName: string,
+      saPath: string
+    ): Promise<{ ok: boolean; file?: string; verified?: boolean; error?: string; detail?: string }> =>
+      ipcRenderer.invoke('launch:importApp', name, packageName, saPath),
+    lastSa: (): Promise<string> => ipcRenderer.invoke('launch:lastSa'),
+    fetchIcon: (file: string): Promise<boolean> => ipcRenderer.invoke('launch:fetchIcon', file),
+    storeIap: (
+      file: string
+    ): Promise<{
+      google: { id: string; title: string; state: string }[] | null
+      googleError?: string
+      apple: { id: string; name: string; state: string }[] | null
+      appleError?: string
+    }> => ipcRenderer.invoke('launch:storeIap', file),
+    listAscApps: (): Promise<{ name: string; bundleId: string }[]> =>
+      ipcRenderer.invoke('launch:listAscApps'),
+    getJourney: (file: string): Promise<{ registered: boolean }> =>
+      ipcRenderer.invoke('launch:getJourney', file),
+    setJourney: (file: string, registered: boolean): Promise<{ registered: boolean }> =>
+      ipcRenderer.invoke('launch:setJourney', file, registered),
+    sheetIap: (file: string): Promise<SheetIapInfo> => ipcRenderer.invoke('launch:sheetIap', file),
+    runIap: (file: string, action: 'upsert' | 'activate'): Promise<RunResult> =>
+      ipcRenderer.invoke('launch:runIap', file, action)
   },
   accounts: {
     list: (): Promise<Account[]> => ipcRenderer.invoke('accounts:list'),
@@ -30,7 +63,8 @@ const api = {
     setApps: (id: string, apps: string[]): Promise<Account[]> =>
       ipcRenderer.invoke('accounts:setApps', id, apps),
     setMemo: (id: string, memo: string): Promise<Account[]> =>
-      ipcRenderer.invoke('accounts:setMemo', id, memo)
+      ipcRenderer.invoke('accounts:setMemo', id, memo),
+    delete: (id: string): Promise<Account[]> => ipcRenderer.invoke('accounts:delete', id)
   },
   secrets: {
     list: (email: string): Promise<string[]> => ipcRenderer.invoke('secrets:list', email),
