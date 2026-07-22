@@ -1,0 +1,30 @@
+{
+  "_comment": "앱별 답안 시트 (SSOT) — 표기명·설문답·심사노트·가격이 전부 여기. 스크립트(L1)와 Claude in Chrome(L2)이 같이 읽는다.",
+  "app": {
+    "name": "앱 표시명",
+    "packageName": "com.example.app",
+    "bundleId": "com.example.app"
+  },
+  "iap": [
+    {
+      "productId": "product_id_snake",
+      "type": "consumable",
+      "listings": {
+        "ko-KR": { "title": "상품명 (한국어)", "description": "상품 설명" }
+      },
+      "price": { "KR": "4400" },
+      "currency": { "KR": "KRW" }
+    }
+  ],
+  "credentials": {
+    "googleSa": "서비스 계정 JSON 절대경로 (repo에 커밋 금지)",
+    "asc": { "keyPath": "AuthKey_XXXX.p8 절대경로", "keyId": "", "issuerId": "" }
+  },
+  "console_answers": {
+    "_comment": "L2(Claude in Chrome)용 — 데이터 보안 폼·등급 설문·App access 문안. 앱별로 채운다",
+    "data_safety": {},
+    "content_rating": {},
+    "app_access": "",
+    "review_notes": ""
+  }
+}
