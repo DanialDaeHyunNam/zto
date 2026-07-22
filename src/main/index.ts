@@ -111,7 +111,7 @@ function listSheets(): SheetSummary[] {
           iapCount: Array.isArray(sheet.iap) ? sheet.iap.length : 0
         }
       } catch {
-        return { file, appName: `${file} (파싱 실패)`, packageName: '', iapCount: 0 }
+        return { file, appName: `${file} (${mainMsg('parseFail')})`, packageName: '', iapCount: 0 }
       }
     })
 }
@@ -173,6 +173,14 @@ function writeSecrets(secrets: Record<string, SecretRecord>): void {
 const UNLOCK_TTL_MS = 30 * 60_000
 let unlockedUntil = 0
 
+// renderer가 동기화해주는 로케일 — main이 만드는 사용자 노출 문구(Touch ID 프롬프트 등)용
+let appLocale: 'ko' | 'en' = 'ko'
+const MAIN_MSG = {
+  ko: { reveal: '비밀번호 보기', copy: '비밀번호 복사', update: '비밀번호 변경', delete: '비밀번호 삭제', parseFail: '파싱 실패' },
+  en: { reveal: 'reveal password', copy: 'copy password', update: 'change password', delete: 'delete password', parseFail: 'parse failed' }
+} as const
+const mainMsg = (k: keyof (typeof MAIN_MSG)['ko']): string => MAIN_MSG[appLocale][k]
+
 export function lockSecrets(): void {
   unlockedUntil = 0
 }
@@ -212,9 +220,17 @@ function decryptSecret(email: string, appId: string): string | null {
 }
 
 function createWindow(): void {
+  // 지난 실행의 창 크기·위치 복원
+  const saved = readState().windowBounds as
+    | { width: number; height: number; x?: number; y?: number }
+    | undefined
   const mainWindow = new BrowserWindow({
-    width: 1200,
-    height: 800,
+    width: saved?.width ?? 1200,
+    height: saved?.height ?? 800,
+    x: saved?.x,
+    y: saved?.y,
+    minWidth: 960,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     title: 'ZTO',
@@ -227,6 +243,15 @@ function createWindow(): void {
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
   })
+
+  const saveBounds = (): void => {
+    if (!mainWindow.isDestroyed() && !mainWindow.isFullScreen()) {
+      writeState({ ...readState(), windowBounds: mainWindow.getBounds() })
+    }
+  }
+  mainWindow.on('resized', saveBounds)
+  mainWindow.on('moved', saveBounds)
+  mainWindow.on('close', saveBounds)
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
@@ -246,6 +271,9 @@ app.whenReady().then(() => {
   powerMonitor.on('suspend', lockSecrets)
 
   ipcMain.handle('ping', () => 'pong')
+  ipcMain.handle('app:setLocale', (_e, locale: 'ko' | 'en'): void => {
+    appLocale = locale
+  })
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
   ipcMain.handle('launch:getDevAccounts', (): DevAccounts => {
@@ -269,6 +297,16 @@ app.whenReady().then(() => {
   ipcMain.handle('accounts:list', (): Account[] => readAccounts())
   ipcMain.handle('accounts:add', (_e, email: string, memo: string, apps: string[]): Account[] => {
     return upsertAccount(email, { memo, apps })
+  })
+  ipcMain.handle('accounts:setMemo', (_e, id: string, memo: string): Account[] => {
+    const accounts = readAccounts()
+    const account = accounts.find((a) => a.id === id)
+    if (account) {
+      account.memo = memo
+      account.updatedAt = new Date().toISOString()
+      writeAccounts(accounts)
+    }
+    return accounts
   })
   ipcMain.handle('accounts:setApps', (_e, id: string, apps: string[]): Account[] => {
     const accounts = readAccounts()
@@ -297,7 +335,7 @@ app.whenReady().then(() => {
       // 첫 저장은 무인증(기존 비밀을 건드리지 않음), 변경은 파괴적이므로 인증 필요
       if (exists) {
         try {
-          await biometricGate(`${email} · ${appId} 비밀번호 변경`)
+          await biometricGate(`${email} · ${appId} ${mainMsg('update')}`)
         } catch (e) {
           logAccess({ email, appId, action: 'update', ok: false })
           throw e
@@ -315,7 +353,7 @@ app.whenReady().then(() => {
   ipcMain.handle('secrets:reveal', async (_e, email: string, appId: string): Promise<string | null> => {
     try {
       // 평문 표시는 세션 무시, 항상 재인증
-      await biometricGateStrict(`${email} · ${appId} 비밀번호 보기`)
+      await biometricGateStrict(`${email} · ${appId} ${mainMsg('reveal')}`)
     } catch (e) {
       logAccess({ email, appId, action: 'reveal', ok: false })
       throw e
@@ -325,7 +363,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('secrets:copy', async (_e, email: string, appId: string): Promise<boolean> => {
     try {
-      await biometricGate(`${email} · ${appId} 비밀번호 복사`)
+      await biometricGate(`${email} · ${appId} ${mainMsg('copy')}`)
     } catch (e) {
       logAccess({ email, appId, action: 'copy', ok: false })
       throw e
@@ -384,7 +422,7 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('secrets:delete', async (_e, email: string, appId: string): Promise<boolean> => {
     try {
-      await biometricGate(`${email} · ${appId} 비밀번호 삭제`)
+      await biometricGate(`${email} · ${appId} ${mainMsg('delete')}`)
     } catch (e) {
       logAccess({ email, appId, action: 'delete', ok: false })
       throw e

@@ -13,6 +13,7 @@ import type {
 const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
+  setLocale: (locale: 'ko' | 'en'): Promise<void> => ipcRenderer.invoke('app:setLocale', locale),
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),
     checkCredentials: (file: string): Promise<CredentialStatus> =>
@@ -27,7 +28,9 @@ const api = {
     add: (email: string, memo: string, apps: string[]): Promise<Account[]> =>
       ipcRenderer.invoke('accounts:add', email, memo, apps),
     setApps: (id: string, apps: string[]): Promise<Account[]> =>
-      ipcRenderer.invoke('accounts:setApps', id, apps)
+      ipcRenderer.invoke('accounts:setApps', id, apps),
+    setMemo: (id: string, memo: string): Promise<Account[]> =>
+      ipcRenderer.invoke('accounts:setMemo', id, memo)
   },
   secrets: {
     list: (email: string): Promise<string[]> => ipcRenderer.invoke('secrets:list', email),

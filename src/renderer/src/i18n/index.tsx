@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { en, type Messages } from './en'
 import { ko } from './ko'
 
@@ -23,6 +23,12 @@ const I18nContext = createContext<I18nValue>({ locale: 'en', m: en, setLocale: (
 
 export function I18nProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [locale, setLocaleState] = useState<Locale>(initialLocale)
+
+  // main 프로세스도 로케일을 알아야 함 (Touch ID 프롬프트 등 main발 문구)
+  useEffect(() => {
+    window.zto.setLocale(locale)
+  }, [locale])
+
   const setLocale = useCallback((next: Locale) => {
     localStorage.setItem(STORAGE_KEY, next)
     setLocaleState(next)

@@ -468,14 +468,20 @@ function SecurityPanel(): React.JSX.Element {
 
 function AccountRow({
   account,
-  onSetApps
+  showMemo,
+  onSetApps,
+  onSetMemo
 }: {
   account: Account
+  showMemo: boolean
   onSetApps: (id: string, apps: string[]) => void
+  onSetMemo: (id: string, memo: string) => void
 }): React.JSX.Element {
   const { m } = useI18n()
   const [open, setOpen] = useState(false)
   const [editingApps, setEditingApps] = useState(false)
+  const [memoEditing, setMemoEditing] = useState(false)
+  const [memoDraft, setMemoDraft] = useState('')
   const [secretApps, setSecretApps] = useState<string[]>([])
   const apps = account.apps ?? []
 
@@ -501,7 +507,12 @@ function AccountRow({
         </span>
         <span className="acc-main">
           <span className="acc-email">{account.email}</span>
-          {account.memo && <span className="acc-memo">{account.memo}</span>}
+          {showMemo &&
+            (account.memo ? (
+              <span className="acc-memo">{account.memo}</span>
+            ) : (
+              <span className="acc-memo empty">{m.accounts.noMemo}</span>
+            ))}
         </span>
         <span className="acc-apps">
           {apps.slice(0, 6).map((id) => (
@@ -547,6 +558,55 @@ function AccountRow({
               ))}
             </div>
           )}
+
+          <div className="memo-row">
+            <span className="form-label">{m.accounts.memoLabel}</span>
+            {memoEditing ? (
+              <span className="memo-edit">
+                <textarea
+                  className="email-input memo-area"
+                  rows={3}
+                  placeholder={m.accounts.memoPlaceholder}
+                  value={memoDraft}
+                  onChange={(e) => setMemoDraft(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      onSetMemo(account.id, memoDraft.trim())
+                      setMemoEditing(false)
+                    }
+                  }}
+                  autoFocus
+                />
+                <span className="memo-actions">
+                  <button
+                    className="choice tiny active"
+                    onClick={() => {
+                      onSetMemo(account.id, memoDraft.trim())
+                      setMemoEditing(false)
+                    }}
+                  >
+                    {m.accounts.save}
+                  </button>
+                  <button className="choice tiny" onClick={() => setMemoEditing(false)}>
+                    {m.accounts.cancel}
+                  </button>
+                </span>
+              </span>
+            ) : (
+              <span className="memo-view">
+                {account.memo && <span className="memo-text">{account.memo}</span>}
+                <button
+                  className="ghost-btn"
+                  onClick={() => {
+                    setMemoDraft(account.memo)
+                    setMemoEditing(true)
+                  }}
+                >
+                  {account.memo ? m.accounts.memoEdit : m.accounts.memoAdd}
+                </button>
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -623,6 +683,13 @@ export default function AccountsPage(): React.JSX.Element {
   const [showForm, setShowForm] = useState(false)
   const [showSecurity, setShowSecurity] = useState(false)
   const [filter, setFilter] = useState<string | null>(null)
+  const [showMemos, setShowMemos] = useState(() => localStorage.getItem('zto-show-memos') !== '0')
+
+  const toggleMemos = (): void => {
+    const next = !showMemos
+    localStorage.setItem('zto-show-memos', next ? '1' : '0')
+    setShowMemos(next)
+  }
 
   useEffect(() => {
     window.zto.accounts.list().then(setAccounts)
@@ -630,6 +697,10 @@ export default function AccountsPage(): React.JSX.Element {
 
   const setAccountApps = (id: string, next: string[]): void => {
     window.zto.accounts.setApps(id, next).then(setAccounts)
+  }
+
+  const setAccountMemo = (id: string, memo: string): void => {
+    window.zto.accounts.setMemo(id, memo).then(setAccounts)
   }
 
   // 앱별 통계 — "이 소셜미디어에 내 계정이 몇 개" 뷰의 재료
@@ -705,6 +776,22 @@ export default function AccountsPage(): React.JSX.Element {
         </div>
       )}
 
+      {accounts.length > 0 && (
+        <div className="list-tools">
+          <span className="switch-row">
+            <span className="switch-label">{m.accounts.showMemos}</span>
+            <button
+              className={`switch ${showMemos ? 'on' : ''}`}
+              onClick={toggleMemos}
+              role="switch"
+              aria-checked={showMemos}
+            >
+              <span className="knob" />
+            </button>
+          </span>
+        </div>
+      )}
+
       {accounts.length === 0 && !showForm ? (
         <div className="empty-state">
           <p>{m.accounts.empty}</p>
@@ -715,7 +802,13 @@ export default function AccountsPage(): React.JSX.Element {
       ) : (
         <div className="panel">
           {visible.map((a) => (
-            <AccountRow key={a.id} account={a} onSetApps={setAccountApps} />
+            <AccountRow
+              key={a.id}
+              account={a}
+              showMemo={showMemos}
+              onSetApps={setAccountApps}
+              onSetMemo={setAccountMemo}
+            />
           ))}
         </div>
       )}
