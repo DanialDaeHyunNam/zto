@@ -195,6 +195,9 @@ export const ko: Messages = {
     surveySave: '저장',
     surveyIntro:
       'API가 없는 콘솔 전용 설정 — 여기서 답하면 채워드려요. 잘 모르겠으면 물음표를 눌러보세요.',
+    surveyPrefilled: '스토어에서 현재 설정을 불러왔어요 — 필요하면 고치세요.',
+    surveyNoAutoFetch:
+      'Play는 이 설정을 API로 가져올 수 없어요. 콘솔 → 앱 선택 → 정책 및 프로그램 → 앱 콘텐츠에서 확인·설정하세요.',
     levelNone: '없음',
     levelMild: '가끔·약함',
     levelIntense: '자주·강함',

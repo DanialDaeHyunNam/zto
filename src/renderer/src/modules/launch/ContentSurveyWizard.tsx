@@ -115,12 +115,16 @@ export default function ContentSurveyWizard({
   file,
   questionnaireId,
   consoleUrl,
+  prefill,
+  noAutoFetch,
   onClose,
   onSaved
 }: {
   file: string
   questionnaireId: string
   consoleUrl?: string
+  prefill?: Record<string, string> | null // 스토어에서 읽은 현재 설정 (iOS 연령 등급)
+  noAutoFetch?: boolean // Play — 자동 조회 불가 안내
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
@@ -131,14 +135,17 @@ export default function ContentSurveyWizard({
 
   useEffect(() => {
     window.zto.launch.questionnaire(questionnaireId).then(setQ)
+    // 스토어 프리필을 기반으로, 로컬 저장 답이 있으면 그게 우선(유저 편집 보존)
     window.zto.launch.getConsoleAnswers(file, questionnaireId).then((a) => {
-      if (a) setAnswers(a.answers)
+      setAnswers({ ...(prefill ?? {}), ...(a?.answers ?? {}) })
     })
     const onKey = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
+    // prefill은 열릴 때 확정되어 넘어옴 — 마운트 시 1회 병합
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file, questionnaireId, onClose])
 
   const label = (def: { label: string; labelEn?: string }): string =>
@@ -234,6 +241,10 @@ export default function ContentSurveyWizard({
           </button>
         </div>
         <p className="survey-intro">{m.launch.surveyIntro}</p>
+        {prefill && Object.keys(prefill).length > 0 && (
+          <p className="survey-note prefill">✓ {m.launch.surveyPrefilled}</p>
+        )}
+        {noAutoFetch && <p className="survey-note nofetch">{m.launch.surveyNoAutoFetch}</p>}
         {!q ? (
           <p className="survey-intro">…</p>
         ) : (

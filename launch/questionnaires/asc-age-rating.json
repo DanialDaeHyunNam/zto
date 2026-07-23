@@ -9,6 +9,7 @@
     { "id": "violenceCartoonOrFantasy", "type": "level", "label": "만화 또는 판타지 폭력", "labelEn": "Cartoon or Fantasy Violence", "help": "만화적·비현실적 캐릭터의 폭력. 도트 SRPG의 전투 연출 등이 여기 해당할 수 있어요." },
     { "id": "violenceRealistic", "type": "level", "label": "사실적 폭력", "labelEn": "Realistic Violence", "help": "사람·동물을 사실적으로 묘사한 폭력." },
     { "id": "violenceRealisticProlongedGraphicOrSadistic", "type": "level", "label": "지속적·잔혹한 사실적 폭력", "labelEn": "Prolonged Graphic or Sadistic Realistic Violence", "help": "피·고어를 사실적으로 오래 묘사하거나 가학적인 폭력." },
+    { "id": "gunsOrOtherWeapons", "type": "level", "label": "총기 또는 무기", "labelEn": "Guns or Other Weapons", "help": "총·검 등 무기 사용 묘사. 검 전투 게임은 대개 '자주·강함'." },
     { "id": "profanityOrCrudeHumor", "type": "level", "label": "비속어 또는 저속한 유머", "labelEn": "Profanity or Crude Humor", "help": "욕설, 저속하거나 화장실 유머." },
     { "id": "matureOrSuggestiveThemes", "type": "level", "label": "성숙 또는 선정적 주제", "labelEn": "Mature/Suggestive Themes", "help": "성인 지향적이거나 성적 암시가 있는 주제." },
     { "id": "horrorOrFearThemes", "type": "level", "label": "공포 또는 무서운 주제", "labelEn": "Horror/Fear Themes", "help": "공포심을 유발하는 연출·주제." },
@@ -19,6 +20,6 @@
     { "id": "sexualContentGraphicAndNudity", "type": "level", "label": "노골적 성적 콘텐츠 및 노출", "labelEn": "Graphic Sexual Content and Nudity", "help": "노골적인 성적 콘텐츠와 노출." },
     { "id": "gambling", "type": "bool", "label": "실제 도박", "labelEn": "Gambling", "help": "실제 돈을 걸 수 있나요? 대부분의 게임은 아니오." },
     { "id": "unrestrictedWebAccess", "type": "bool", "label": "제한 없는 웹 접근", "labelEn": "Unrestricted Web Access", "help": "앱 안에서 제한 없이 웹을 열 수 있나요(내장 브라우저 등)?" },
-    { "id": "contests", "type": "bool", "label": "콘테스트", "labelEn": "Contests", "help": "상품이 걸린 콘테스트가 있나요?" }
+    { "id": "contests", "type": "level", "label": "콘테스트", "labelEn": "Contests", "help": "상품이 걸린 콘테스트가 있나요?" }
   ]
 }

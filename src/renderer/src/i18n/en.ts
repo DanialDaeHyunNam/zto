@@ -193,6 +193,9 @@ export const en = {
     surveySave: 'Save',
     surveyIntro:
       "Console-only settings with no API — answer here and we'll fill it in. Not sure? Tap the question mark.",
+    surveyPrefilled: 'Loaded the current settings from the store — edit if needed.',
+    surveyNoAutoFetch:
+      "Play can't fetch these via API. Check/set them in the console → your app → Policy → App content.",
     levelNone: 'None',
     levelMild: 'Infrequent/Mild',
     levelIntense: 'Frequent/Intense',

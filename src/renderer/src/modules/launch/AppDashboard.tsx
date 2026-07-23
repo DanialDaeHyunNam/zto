@@ -955,6 +955,7 @@ export default function AppDashboard({
   const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
   const [surveyOpen, setSurveyOpen] = useState<string | null>(null) // 열린 설문 id
+  const [surveyPrefill, setSurveyPrefill] = useState<Record<string, string> | null>(null)
   const [surveyDone, setSurveyDone] = useState<Record<string, boolean>>({})
   const [edits, setEdits] = useState<Record<string, PendingEdit>>({})
 
@@ -1068,7 +1069,10 @@ export default function AppDashboard({
                   surveyDone={!!surveyDone[SURVEY.android.id]}
                   onImage={(urls, idx) => setLightbox({ urls, idx })}
                   onOpenMeta={() => setMetaOpen(true)}
-                  onOpenSurvey={() => setSurveyOpen(SURVEY.android.id)}
+                  onOpenSurvey={() => {
+                    setSurveyPrefill(null) // Play는 프리필 불가
+                    setSurveyOpen(SURVEY.android.id)
+                  }}
                 />
               ) : (
                 <PlatformError error={data.googleError} store="play" />
@@ -1081,7 +1085,14 @@ export default function AppDashboard({
                 surveyDone={!!surveyDone[SURVEY.ios.id]}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}
-                onOpenSurvey={() => setSurveyOpen(SURVEY.ios.id)}
+                onOpenSurvey={() => {
+                  // iOS 연령 등급은 스토어에서 읽힘 → 프리필 확보 후 연다
+                  setSurveyPrefill(null)
+                  window.zto.launch.ageRatingDeclaration(file).then((p) => {
+                    setSurveyPrefill(p)
+                    setSurveyOpen(SURVEY.ios.id)
+                  })
+                }}
               />
             ) : (
               <PlatformError error={data.appleError} store="asc" />
@@ -1111,6 +1122,8 @@ export default function AppDashboard({
                 : undefined
               : SURVEY.android.console
           }
+          prefill={surveyOpen === SURVEY.ios.id ? surveyPrefill : null}
+          noAutoFetch={surveyOpen === SURVEY.android.id}
           onClose={() => setSurveyOpen(null)}
           onSaved={refreshSurvey}
         />

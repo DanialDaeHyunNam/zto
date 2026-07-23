@@ -1219,6 +1219,41 @@ app.whenReady().then(() => {
       writeFileSync(path, JSON.stringify(sheet, null, 2))
     }
   )
+  // iOS 연령 등급은 스토어에서 읽힌다(ageRatingDeclaration) → 기존 앱 설문 프리필용.
+  // Play(콘텐츠 등급·데이터 안전·타깃 연령)는 read API 자체가 없어 프리필 불가 — 콘솔 확인만.
+  ipcMain.handle(
+    'launch:ageRatingDeclaration',
+    async (_e, file: string): Promise<Record<string, string> | null> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const asc = sheet.credentials?.asc
+      if (!(asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId)) return null
+      const tok = await ascTokenFor(asc)
+      if (!tok) return null
+      const A = 'https://api.appstoreconnect.apple.com/v1'
+      const headers = { Authorization: 'Bearer ' + tok }
+      const appsR = await fetch(
+        `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+        { headers }
+      )
+      if (!appsR.ok) return null
+      const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+      if (!appId) return null
+      const r = await fetch(`${A}/apps/${appId}/appInfos?include=ageRatingDeclaration`, { headers })
+      if (!r.ok) return null
+      const j = (await r.json()) as {
+        included?: { type: string; attributes?: Record<string, unknown> }[]
+      }
+      const decl = (j.included ?? []).find((x) => x.type === 'ageRatingDeclarations')?.attributes
+      if (!decl) return null
+      const LV = ['NONE', 'INFREQUENT_OR_MILD', 'FREQUENT_OR_INTENSE']
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(decl)) {
+        if (typeof v === 'boolean') out[k] = v ? 'YES' : 'NO'
+        else if (typeof v === 'string' && LV.includes(v)) out[k] = v
+      }
+      return out
+    }
+  )
   // P2 편집 적용 — 대기 diff를 배치로 스토어에 반영. 지금은 라우팅 골격만(실제 write는 다음 단계).
   // Play는 한 edit에 묶어 commit(원자적), ASC는 리소스별 PATCH(부분 실패 가능) 예정.
   ipcMain.handle(

@@ -75,6 +75,8 @@ const api = {
       ipcRenderer.invoke('launch:getConsoleAnswers', file, id),
     setConsoleAnswers: (file: string, id: string, data: ConsoleAnswers): Promise<void> =>
       ipcRenderer.invoke('launch:setConsoleAnswers', file, id, data),
+    ageRatingDeclaration: (file: string): Promise<Record<string, string> | null> =>
+      ipcRenderer.invoke('launch:ageRatingDeclaration', file),
     applyEdits: (file: string, edits: PendingEdit[]): Promise<ApplyResult[]> =>
       ipcRenderer.invoke('launch:applyEdits', file, edits),
     listAscApps: (): Promise<{ name: string; bundleId: string }[]> =>
