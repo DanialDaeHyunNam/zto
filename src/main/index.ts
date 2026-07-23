@@ -298,6 +298,17 @@ async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: stri
   })
 }
 
+// 200인데 빈 본문을 주는 스토어 API 대응 (예: one-time product 없는 앱의 oneTimeProducts, 없는 이미지 타입)
+async function jsonOrEmpty(r: Response): Promise<Record<string, unknown>> {
+  const t = await r.text()
+  if (!t) return {}
+  try {
+    return JSON.parse(t)
+  } catch {
+    return {}
+  }
+}
+
 // ---------- §4.5 앱 대시보드 pull (P1 읽기 전용) ----------
 
 // Play — 트랙·릴리스·국가별 메타는 edit 트랜잭션 안에서만 읽힌다: 생성→읽기→삭제 패턴
@@ -305,8 +316,8 @@ async function pullGoogleDashboard(sheet: {
   app: { packageName: string }
   credentials?: { googleSa?: string }
 }): Promise<{ data: DashGoogle | null; error?: string }> {
-  const saPath = sheet.credentials?.googleSa ?? ''
-  if (!saPath || !existsSync(saPath)) return { data: null, error: 'no-key' }
+  const saPath = resolveGoogleSa(sheet)
+  if (!saPath) return { data: null, error: 'no-key' }
   const tok = await googleTokenFor(saPath)
   if (!tok) return { data: null, error: 'token' }
   const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
@@ -335,7 +346,9 @@ async function pullGoogleDashboard(sheet: {
         versionCodes?: string[]
         releaseNotes?: { language?: string; text?: string }[]
       }
-      const tracksJ = (await tracksR.json()) as { tracks?: { track?: string; releases?: GRelease[] }[] }
+      const tracksJ = (await jsonOrEmpty(tracksR)) as {
+        tracks?: { track?: string; releases?: GRelease[] }[]
+      }
       for (const t of tracksJ.tracks ?? []) {
         const track = t.track ?? ''
         for (const r of t.releases ?? []) {
@@ -356,7 +369,7 @@ async function pullGoogleDashboard(sheet: {
       }
     }
     if (listingsR.ok) {
-      const lJ = (await listingsR.json()) as {
+      const lJ = (await jsonOrEmpty(listingsR)) as {
         listings?: {
           language?: string
           title?: string
@@ -376,7 +389,7 @@ async function pullGoogleDashboard(sheet: {
         .filter((l) => l.locale)
     }
     if (detailsR.ok) {
-      const dJ = (await detailsR.json()) as {
+      const dJ = (await jsonOrEmpty(detailsR)) as {
         defaultLanguage?: string
         contactEmail?: string
         contactWebsite?: string
@@ -396,7 +409,7 @@ async function pullGoogleDashboard(sheet: {
       )
       for (let i = 0; i < types.length; i++) {
         if (!imgRs[i].ok) continue
-        const j = (await imgRs[i].json()) as { images?: { url?: string }[] }
+        const j = (await jsonOrEmpty(imgRs[i])) as { images?: { url?: string }[] }
         const urls = (j.images ?? []).map((im) => im.url ?? '').filter(Boolean)
         if (urls.length > 0) images.push({ type: types[i], urls })
       }
@@ -417,7 +430,7 @@ async function pullGoogleDashboard(sheet: {
       listings?: { title?: string }[]
       purchaseOptions?: { state?: string; regionalPricingAndAvailabilityConfigs?: GConfig[] }[]
     }
-    const j = (await iapR.json()) as { oneTimeProducts?: GProduct[] }
+    const j = (await jsonOrEmpty(iapR)) as { oneTimeProducts?: GProduct[] }
     for (const p of j.oneTimeProducts ?? []) {
       const opt = p.purchaseOptions?.[0]
       const cfgs = opt?.regionalPricingAndAvailabilityConfigs ?? []
@@ -440,11 +453,9 @@ async function pullAppleDashboard(sheet: {
   app: { bundleId: string }
   credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
 }): Promise<{ data: DashApple | null; error?: string }> {
-  const asc = sheet.credentials?.asc
-  if (!(asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId)) {
-    return { data: null, error: 'no-key' }
-  }
-  const tok = await ascTokenFor(asc as { keyPath: string; keyId: string; issuerId: string })
+  const asc = resolveAsc(sheet)
+  if (!asc) return { data: null, error: 'no-key' }
+  const tok = await ascTokenFor(asc)
   if (!tok) return { data: null, error: 'token' }
   const A = 'https://api.appstoreconnect.apple.com/v1'
   const headers = { Authorization: 'Bearer ' + tok }
@@ -748,6 +759,22 @@ function firstGoogleSa(): string | null {
     }
   }
   return null
+}
+
+// 자격증명은 앱이 아니라 계정(브랜드) 단위 하나 — 시트에 자기 것이 있으면 우선, 없으면 계정의 것을 쓴다.
+// (Play SA·ASC 키의 접근 범위가 어떤 앱을 볼 수 있는지 결정한다. 예: ASC로 가져온 앱은 그 ASC 키로 조회)
+function resolveGoogleSa(sheet: { credentials?: { googleSa?: string } }): string | null {
+  const own = sheet.credentials?.googleSa
+  if (own && existsSync(own)) return own
+  return firstGoogleSa()
+}
+function resolveAsc(sheet: {
+  credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+}): { keyPath: string; keyId: string; issuerId: string } | null {
+  const a = sheet.credentials?.asc
+  if (a?.keyPath && existsSync(a.keyPath) && a.keyId && a.issuerId)
+    return { keyPath: a.keyPath, keyId: a.keyId, issuerId: a.issuerId }
+  return firstAscCreds()
 }
 
 interface SheetSummary {
@@ -1127,7 +1154,11 @@ app.whenReady().then(() => {
   // §4.5 앱 대시보드 — 양대 스토어 실황 pull + IAP 스냅샷 이력 축적 (읽기 전용)
   ipcMain.handle('launch:dashboard', async (_e, file: string): Promise<DashboardData> => {
     const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
-    const [g, a] = await Promise.all([pullGoogleDashboard(sheet), pullAppleDashboard(sheet)])
+    // pull이 던져도 loading이 영원히 안 풀리지 않게 — 예외를 에러 결과로 전환
+    const [g, a] = await Promise.all([
+      pullGoogleDashboard(sheet).catch((e) => ({ data: null, error: `err:${String(e).slice(0, 80)}` })),
+      pullAppleDashboard(sheet).catch((e) => ({ data: null, error: `err:${String(e).slice(0, 80)}` }))
+    ])
     const snapshot = recordStoreSnapshot(
       file,
       g.data ? { listings: g.data.listings, images: g.data.images, iap: g.data.iap } : null,
@@ -1225,8 +1256,8 @@ app.whenReady().then(() => {
     'launch:ageRatingDeclaration',
     async (_e, file: string): Promise<Record<string, string> | null> => {
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
-      const asc = sheet.credentials?.asc
-      if (!(asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId)) return null
+      const asc = resolveAsc(sheet)
+      if (!asc) return null
       const tok = await ascTokenFor(asc)
       if (!tok) return null
       const A = 'https://api.appstoreconnect.apple.com/v1'
@@ -1334,8 +1365,8 @@ app.whenReady().then(() => {
     'launch:runIap',
     async (_e, file: string, action: 'upsert' | 'activate'): Promise<RunResult> => {
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
-      const saPath: string = sheet.credentials?.googleSa ?? ''
-      if (!saPath || !existsSync(saPath)) return { ok: false, output: 'google-sa-missing' }
+      const saPath = resolveGoogleSa(sheet)
+      if (!saPath) return { ok: false, output: 'google-sa-missing' }
       const script = join(
         app.getAppPath(),
         'launch',
