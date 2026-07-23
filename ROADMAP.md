@@ -24,14 +24,16 @@
 - [x] **provider 토글 `[구독 | API 키]`** — Claude·ChatGPT 둘 다 (2026-07-23). active provider 선택 + 모델 선택
 - [x] ChatGPT 구독 = `codex` CLI 감지(claude와 대칭, 미감지 안내), Gemini는 API 키 전용
 - [x] API 키 모드 = 키체인(safeStorage) 저장 `zto-ai-keys.json`(암호문만)·삭제. `ai:setKey`/`hasKey`. 실측 앱 환경서 저장·삭제 검증
-- [ ] `ai:chat` — provider 추상화한 한 턴 실행(구독=CLI spawn `-p --resume` / 키=Anthropic·OpenAI API). **#2 팝오버에서 첫 소비 → 거기서 구현**
+- [x] `ai:chat` — Claude 구독 경로 구현(`claude -p --output-format json --model --resume`, is_error 전달). 실측 앱 환경서 대화·resume·추천 파싱 검증 (2026-07-23). codex 구독·API 키 경로는 잔여
 
 ### 2. 앱 콘텐츠 설문 위저드 (콘솔 전용 L2 설정) — 🔨 결정형 코어 완료
 - [x] 결정형 위저드 — 질문 세트 **버전 관리 JSON**(`launch/questionnaires/`). 파일럿 = ASC 연령 등급(14문항, ageRatingDeclaration 필드명 그대로 → 후에 API 자동 적용까지). `launch:questionnaire`/`getConsoleAnswers`/`setConsoleAnswers` (2026-07-23)
 - [x] 답 → 시트 `console_answers[id]`(version·answers·completedAt) 저장, iOS 설정 노드에 "앱 콘텐츠 설문 ✓ 작성됨" + 콘솔 딥링크. 실측 앱 검증(14문항 저장·완료·재로드)
 - [x] 질문별 "?" 도움(현재 help 텍스트) — 팝오버 자리 마련됨
-- [ ] **질문별 AI 팝오버** — "?"를 대화형으로: 깨끗한 새 대화처럼 보이나 위저드 세션의 이전 답을 숨은 컨텍스트로 공유, 답을 이끌어 위저드로 되돌림 (Dan). **여기서 `ai:chat` 첫 구현**(구독=CLI spawn `-p --resume` / 키=API)
-- [ ] 나머지 설문 인코딩: Play(콘텐츠 등급 IARC·데이터 보안·타깃 연령) / ASC(앱 개인정보). Android 설정 노드에도 버튼
+- [x] **질문별 AI 팝오버** (2026-07-23) — "?" → 대화 팝오버(`QuestionHelp`): 숨은 컨텍스트(설문·현재 질문·선택지·이미 답한 것)를 첫 턴에 주입, resume로 이어감, 답변 끝 `추천: <옵션id>` 파싱 → "이 답으로 설정" 한 번에 위저드 반영. 실측 앱 실검증(도트 SRPG 설명 → INFREQUENT_OR_MILD 추천 → 반영)
+- [x] Play 콘텐츠 등급(IARC) 설문 + Android 설정 노드 버튼 (2026-07-23)
+- [ ] 나머지 설문 인코딩: Play 데이터 보안·타깃 연령 / ASC 앱 개인정보
+- [ ] codex(ChatGPT 구독)·API 키 경로의 `ai:chat`
 
 ### 3. 적용 실제 API 연결 (P2 편집 — 메타부터)
 - [ ] `launch:applyEdits` 실제 write: Play는 한 edit에 묶어 `listings.patch`→`commit`(원자적) / ASC는 `appStoreVersionLocalizations`·`appInfoLocalizations` PATCH(개별). 결과 항목별 보고 → 성공분 재-pull

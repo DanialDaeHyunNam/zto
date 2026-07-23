@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AccessLogEntry,
   Account,
+  AiChatResult,
   AiMode,
   AiProviderId,
   AiStatus,
@@ -35,7 +36,9 @@ const api = {
     setMode: (provider: AiProviderId, mode: AiMode): Promise<void> =>
       ipcRenderer.invoke('ai:setMode', provider, mode),
     setKey: (provider: AiProviderId, key: string): Promise<boolean> =>
-      ipcRenderer.invoke('ai:setKey', provider, key)
+      ipcRenderer.invoke('ai:setKey', provider, key),
+    chat: (prompt: string, opts?: { resume?: string }): Promise<AiChatResult> =>
+      ipcRenderer.invoke('ai:chat', prompt, opts)
   },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),

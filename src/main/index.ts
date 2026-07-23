@@ -18,6 +18,7 @@ import {
   PLATFORM_DOMAINS,
   type AccessLogEntry,
   type Account,
+  type AiChatResult,
   type AiMode,
   type AiModel,
   type AiProviderId,
@@ -999,6 +1000,42 @@ app.whenReady().then(() => {
   // 키 저장/삭제 — 첫 저장 무인증(등록 마찰↓), 값 비우면 삭제. 화면 표시는 없음(저장 여부만)
   ipcMain.handle('ai:setKey', (_e, provider: AiProviderId, key: string): boolean =>
     setAiKey(provider, key)
+  )
+  // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
+  ipcMain.handle(
+    'ai:chat',
+    async (_e, prompt: string, opts?: { resume?: string }): Promise<AiChatResult> => {
+      const cfg = readAiConfig()
+      const provider = cfg.active
+      const mode = cfg.modes[provider]
+      if (mode === 'subscription' && provider === 'claude') {
+        const info = cliInfo('claude')
+        if (!info.available || !info.bin) return { ok: false, text: '', error: 'claude-cli-missing' }
+        const args = ['-p', prompt, '--output-format', 'json', '--model', cfg.model]
+        if (opts?.resume) args.push('--resume', opts.resume)
+        return await new Promise<AiChatResult>((resolve) => {
+          execFile(
+            info.bin as string,
+            args,
+            { cwd: app.getPath('userData'), timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
+            (err, stdout) => {
+              try {
+                const j = JSON.parse(stdout) as {
+                  result?: string
+                  session_id?: string
+                  is_error?: boolean
+                }
+                resolve({ ok: !j.is_error, text: j.result ?? '', sessionId: j.session_id })
+              } catch {
+                resolve({ ok: false, text: '', error: err ? String(err).slice(0, 300) : 'parse' })
+              }
+            }
+          )
+        })
+      }
+      // codex 구독·API 키 경로는 다음 슬라이스
+      return { ok: false, text: '', error: `${provider}:${mode}:not-wired` }
+    }
   )
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))

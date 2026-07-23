@@ -147,6 +147,14 @@ export interface AiStatus {
   providers: AiProviderStatus[]
 }
 
+// AI 한 턴 실행 결과 — 구독(CLI spawn)/키(API) 공통. session_id로 대화 이어가기.
+export interface AiChatResult {
+  ok: boolean
+  text: string
+  sessionId?: string
+  error?: string
+}
+
 // ---------- 앱 콘텐츠 설문 (ROADMAP #2) — 콘솔 전용 설정을 결정형 위저드로 ----------
 // 질문 세트는 버전 관리 JSON(launch/questionnaires/). 콘솔이 개정되면 그 파일만 갱신.
 export type QuestionType = 'level' | 'bool'
