@@ -7,8 +7,10 @@ import type {
   AiStatus,
   ApiStatus,
   ApplyResult,
+  ConsoleAnswers,
   CredentialStatus,
   DashboardData,
+  Questionnaire,
   DevAccounts,
   DevAccountState,
   LockState,
@@ -64,6 +66,12 @@ const api = {
       ipcRenderer.invoke('launch:dashboardCached', file),
     snapshots: (file: string): Promise<StoreSnapshotEntry[]> =>
       ipcRenderer.invoke('launch:snapshots', file),
+    questionnaire: (id: string): Promise<Questionnaire | null> =>
+      ipcRenderer.invoke('launch:questionnaire', id),
+    getConsoleAnswers: (file: string, id: string): Promise<ConsoleAnswers | null> =>
+      ipcRenderer.invoke('launch:getConsoleAnswers', file, id),
+    setConsoleAnswers: (file: string, id: string, data: ConsoleAnswers): Promise<void> =>
+      ipcRenderer.invoke('launch:setConsoleAnswers', file, id, data),
     applyEdits: (file: string, edits: PendingEdit[]): Promise<ApplyResult[]> =>
       ipcRenderer.invoke('launch:applyEdits', file, edits),
     listAscApps: (): Promise<{ name: string; bundleId: string }[]> =>

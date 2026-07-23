@@ -26,11 +26,12 @@
 - [x] API 키 모드 = 키체인(safeStorage) 저장 `zto-ai-keys.json`(암호문만)·삭제. `ai:setKey`/`hasKey`. 실측 앱 환경서 저장·삭제 검증
 - [ ] `ai:chat` — provider 추상화한 한 턴 실행(구독=CLI spawn `-p --resume` / 키=Anthropic·OpenAI API). **#2 팝오버에서 첫 소비 → 거기서 구현**
 
-### 2. 앱 콘텐츠 설문 위저드 (콘솔 전용 L2 설정)
-- [ ] 결정형 스텝 위저드 — 질문 세트는 **버전 관리 JSON**(콘솔 개정 대비). 파일럿 1종부터 정확히 인코딩
-- [ ] 답 → 시트 `console_answers` 저장(이미 스텁 존재), 설정 노드 "작성됨" + 콘솔 딥링크·입력 안내
-- [ ] **질문별 AI 팝오버** — "잘 모르겠어요" → 깨끗한 새 대화처럼 보이나 위저드 세션의 이전 답을 숨은 컨텍스트로 공유, 답을 이끌어 위저드로 되돌림 (Dan 2026-07-23). #1의 `ai:chat` 사용
-- [ ] 플랫폼별: Play(콘텐츠 등급·데이터 보안·타깃 연령) / ASC(연령 등급·앱 개인정보)
+### 2. 앱 콘텐츠 설문 위저드 (콘솔 전용 L2 설정) — 🔨 결정형 코어 완료
+- [x] 결정형 위저드 — 질문 세트 **버전 관리 JSON**(`launch/questionnaires/`). 파일럿 = ASC 연령 등급(14문항, ageRatingDeclaration 필드명 그대로 → 후에 API 자동 적용까지). `launch:questionnaire`/`getConsoleAnswers`/`setConsoleAnswers` (2026-07-23)
+- [x] 답 → 시트 `console_answers[id]`(version·answers·completedAt) 저장, iOS 설정 노드에 "앱 콘텐츠 설문 ✓ 작성됨" + 콘솔 딥링크. 실측 앱 검증(14문항 저장·완료·재로드)
+- [x] 질문별 "?" 도움(현재 help 텍스트) — 팝오버 자리 마련됨
+- [ ] **질문별 AI 팝오버** — "?"를 대화형으로: 깨끗한 새 대화처럼 보이나 위저드 세션의 이전 답을 숨은 컨텍스트로 공유, 답을 이끌어 위저드로 되돌림 (Dan). **여기서 `ai:chat` 첫 구현**(구독=CLI spawn `-p --resume` / 키=API)
+- [ ] 나머지 설문 인코딩: Play(콘텐츠 등급 IARC·데이터 보안·타깃 연령) / ASC(앱 개인정보). Android 설정 노드에도 버튼
 
 ### 3. 적용 실제 API 연결 (P2 편집 — 메타부터)
 - [ ] `launch:applyEdits` 실제 write: Play는 한 edit에 묶어 `listings.patch`→`commit`(원자적) / ASC는 `appStoreVersionLocalizations`·`appInfoLocalizations` PATCH(개별). 결과 항목별 보고 → 성공분 재-pull

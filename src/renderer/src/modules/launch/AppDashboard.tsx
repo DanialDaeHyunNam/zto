@@ -17,6 +17,9 @@ import type {
 } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
+import ContentSurveyWizard from './ContentSurveyWizard'
+
+const ASC_SURVEY_ID = 'asc-age-rating'
 
 // §4.5 앱 대시보드 (P1 읽기 전용) — 플랫폼 탭(Android|iOS) + 전체 폭 상태 트리.
 // 불은 수동 체크가 아니라 스토어 pull로 자동 점등. API가 없는 노드만 🟡 + 콘솔 링크.
@@ -812,14 +815,18 @@ function IosTree({
   a,
   file,
   metaDirty,
+  surveyDone,
   onImage,
-  onOpenMeta
+  onOpenMeta,
+  onOpenSurvey
 }: {
   a: DashApple
   file: string
   metaDirty: boolean
+  surveyDone: boolean
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
+  onOpenSurvey: () => void
 }): React.JSX.Element {
   const { m } = useI18n()
   // 카테고리·등급 둘 다 있어야 완료(🟢) — 일부만 있으면 미설정(⚪) + 콘솔 링크
@@ -838,6 +845,14 @@ function IosTree({
       >
         {configVal}
       </Node>
+      <div className="dash-sub">
+        <div>
+          <button className="ghost-btn mini" onClick={onOpenSurvey}>
+            {m.launch.surveyBtn}
+            {surveyDone && <span className="survey-badge">✓ {m.launch.surveyDone}</span>}
+          </button>
+        </div>
+      </div>
       <Node light={metaDirty ? 'y' : a.meta.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={a.meta.map((l) => l.locale)} />
       </Node>
@@ -923,7 +938,16 @@ export default function AppDashboard({
   const [tab, setTab] = useState<Platform | null>(null) // null = 데이터 보고 자동 선택
   const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
+  const [surveyOpen, setSurveyOpen] = useState(false)
+  const [surveyDone, setSurveyDone] = useState(false)
   const [edits, setEdits] = useState<Record<string, PendingEdit>>({})
+
+  const refreshSurvey = useCallback(() => {
+    window.zto.launch.getConsoleAnswers(file, ASC_SURVEY_ID).then((a) => {
+      setSurveyDone(!!a?.completedAt)
+    })
+  }, [file])
+  useEffect(refreshSurvey, [refreshSurvey])
 
   // 대기 diff에 쌓거나(값이 다르면), 스토어 값과 같아지면 제거
   const stage = useCallback((e: PendingEdit) => {
@@ -1034,8 +1058,10 @@ export default function AppDashboard({
                 a={data.apple}
                 file={file}
                 metaDirty={metaDirty('ios')}
+                surveyDone={surveyDone}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}
+                onOpenSurvey={() => setSurveyOpen(true)}
               />
             ) : (
               <PlatformError error={data.appleError} store="asc" />
@@ -1053,6 +1079,15 @@ export default function AppDashboard({
       )}
       {metaOpen && data && (
         <MetaModal data={data} edits={edits} stage={stage} onClose={() => setMetaOpen(false)} />
+      )}
+      {surveyOpen && (
+        <ContentSurveyWizard
+          file={file}
+          questionnaireId={ASC_SURVEY_ID}
+          ascAppId={data?.apple?.appId}
+          onClose={() => setSurveyOpen(false)}
+          onSaved={refreshSurvey}
+        />
       )}
       <ApplyBar
         file={file}

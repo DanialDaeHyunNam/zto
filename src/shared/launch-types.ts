@@ -147,6 +147,34 @@ export interface AiStatus {
   providers: AiProviderStatus[]
 }
 
+// ---------- 앱 콘텐츠 설문 (ROADMAP #2) — 콘솔 전용 설정을 결정형 위저드로 ----------
+// 질문 세트는 버전 관리 JSON(launch/questionnaires/). 콘솔이 개정되면 그 파일만 갱신.
+export type QuestionType = 'level' | 'bool'
+
+export interface QuestionDef {
+  id: string
+  type: QuestionType
+  label: string
+  labelEn?: string
+  help?: string
+}
+
+export interface Questionnaire {
+  id: string
+  platform: EditPlatform
+  version: string
+  title: string
+  titleEn?: string
+  questions: QuestionDef[]
+}
+
+// 답: level → NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE, bool → YES|NO
+export interface ConsoleAnswers {
+  version: string
+  answers: Record<string, string>
+  completedAt: string // '' = 미완료
+}
+
 // 전역 API 연결 상태 — 자격증명은 앱이 아니라 브랜드/계정 단위(플랫폼당 하나)
 export interface ApiStatus {
   play: { connected: boolean; detail: string }

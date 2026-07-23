@@ -26,6 +26,8 @@ import {
   type ApiStatus,
   type ApplyResult,
   type AscVersionRow,
+  type ConsoleAnswers,
+  type Questionnaire,
   type DashApple,
   type DashboardData,
   type DashGoogle,
@@ -1153,6 +1155,33 @@ app.whenReady().then(() => {
   ipcMain.handle('launch:snapshots', (_e, file: string): StoreSnapshotEntry[] => {
     return (readStoreSnapshots()[file] ?? []).slice(-50).reverse()
   })
+  // 앱 콘텐츠 설문 — 질문 세트(버전 관리 JSON) 로드 + 답 저장(시트 console_answers)
+  ipcMain.handle('launch:questionnaire', (_e, id: string): Questionnaire | null => {
+    try {
+      const safe = id.replace(/[^a-z0-9-]/g, '')
+      const p = join(app.getAppPath(), 'launch', 'questionnaires', `${safe}.json`)
+      return JSON.parse(readFileSync(p, 'utf8'))
+    } catch {
+      return null
+    }
+  })
+  ipcMain.handle('launch:getConsoleAnswers', (_e, file: string, id: string): ConsoleAnswers | null => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      return sheet.console_answers?.[id] ?? null
+    } catch {
+      return null
+    }
+  })
+  ipcMain.handle(
+    'launch:setConsoleAnswers',
+    (_e, file: string, id: string, data: ConsoleAnswers): void => {
+      const path = join(ANSWERS_DIR, file)
+      const sheet = JSON.parse(readFileSync(path, 'utf8'))
+      sheet.console_answers = { ...(sheet.console_answers ?? {}), [id]: data }
+      writeFileSync(path, JSON.stringify(sheet, null, 2))
+    }
+  )
   // P2 편집 적용 — 대기 diff를 배치로 스토어에 반영. 지금은 라우팅 골격만(실제 write는 다음 단계).
   // Play는 한 edit에 묶어 commit(원자적), ASC는 리소스별 PATCH(부분 실패 가능) 예정.
   ipcMain.handle(
