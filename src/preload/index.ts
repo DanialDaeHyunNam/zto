@@ -2,20 +2,31 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AccessLogEntry,
   Account,
+  AiStatus,
+  ApiStatus,
+  ApplyResult,
   CredentialStatus,
+  DashboardData,
   DevAccounts,
   DevAccountState,
   LockState,
+  PendingEdit,
   RunResult,
   SheetIapInfo,
   SheetSummary,
-  StoreKind
+  StoreKind,
+  StoreSnapshotEntry
 } from '../shared/launch-types'
 
 const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
   setLocale: (locale: 'ko' | 'en'): Promise<void> => ipcRenderer.invoke('app:setLocale', locale),
+  getLocale: (): Promise<'ko' | 'en'> => ipcRenderer.invoke('app:getLocale'),
+  ai: {
+    status: (fresh?: boolean): Promise<AiStatus> => ipcRenderer.invoke('ai:status', fresh),
+    setModel: (model: string): Promise<void> => ipcRenderer.invoke('ai:setModel', model)
+  },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),
     checkCredentials: (file: string): Promise<CredentialStatus> =>
@@ -38,14 +49,15 @@ const api = {
       ipcRenderer.invoke('launch:importApp', name, packageName, saPath),
     lastSa: (): Promise<string> => ipcRenderer.invoke('launch:lastSa'),
     fetchIcon: (file: string): Promise<boolean> => ipcRenderer.invoke('launch:fetchIcon', file),
-    storeIap: (
-      file: string
-    ): Promise<{
-      google: { id: string; title: string; state: string }[] | null
-      googleError?: string
-      apple: { id: string; name: string; state: string }[] | null
-      appleError?: string
-    }> => ipcRenderer.invoke('launch:storeIap', file),
+    dashboard: (file: string): Promise<DashboardData> =>
+      ipcRenderer.invoke('launch:dashboard', file),
+    apiStatus: (): Promise<ApiStatus> => ipcRenderer.invoke('launch:apiStatus'),
+    dashboardCached: (file: string): Promise<DashboardData | null> =>
+      ipcRenderer.invoke('launch:dashboardCached', file),
+    snapshots: (file: string): Promise<StoreSnapshotEntry[]> =>
+      ipcRenderer.invoke('launch:snapshots', file),
+    applyEdits: (file: string, edits: PendingEdit[]): Promise<ApplyResult[]> =>
+      ipcRenderer.invoke('launch:applyEdits', file, edits),
     listAscApps: (): Promise<{ name: string; bundleId: string }[]> =>
       ipcRenderer.invoke('launch:listAscApps'),
     getJourney: (file: string): Promise<{ registered: boolean }> =>

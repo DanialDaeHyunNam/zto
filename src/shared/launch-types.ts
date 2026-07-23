@@ -36,6 +36,134 @@ export interface DevAccounts {
   apple?: DevAccountState
 }
 
+// ---------- §4.5 앱 대시보드 (P1 읽기 전용) — 스토어 실황 pull 결과 ----------
+
+export interface LiveIapProduct {
+  id: string
+  title: string
+  state: string
+  priceLabel?: string
+}
+
+// Play 트랙별 현재 릴리스 — 트랙 안에 살아있는 릴리스만 온다 (과거 버전 이력 API는 없음)
+export interface PlayReleaseRow {
+  track: string
+  status: string
+  name: string
+  versionCodes: string[]
+  notes: { locale: string; text: string }[] // 로케일별 릴리스 노트
+}
+
+// 스토어에 올라가 있는 이미지 자산 묶음 (타입별 URL 목록 — 스토어 CDN 직링크)
+export interface DashImageSet {
+  type: string // Play: icon·featureGraphic·phoneScreenshots / ASC: screenshotDisplayType
+  urls: string[]
+}
+
+// 로케일별 스토어 메타 — Play: title/short/full, ASC: name/subtitle + 버전 로컬라이제이션의 desc/promo/keywords
+export interface MetaListing {
+  locale: string
+  title: string
+  short: string
+  full: string
+  promo: string // iOS 전용 (promotionalText)
+  keywords: string // iOS 전용
+}
+
+export interface DashGoogle {
+  releases: PlayReleaseRow[]
+  listings: MetaListing[]
+  details: { defaultLanguage: string; contactEmail: string; contactWebsite: string }
+  images: DashImageSet[]
+  iap: LiveIapProduct[]
+  closedStarted: boolean // closed 계열 트랙(alpha·커스텀)에 릴리스 존재 여부로 유추
+}
+
+export interface AscVersionRow {
+  version: string
+  state: string
+  createdAt: string
+  note: string
+}
+
+export interface DashApple {
+  appId: string // 콘솔 딥링크용
+  versions: AscVersionRow[]
+  meta: MetaListing[] // appInfoLocalizations(name·subtitle) + 최신 버전 로컬라이제이션(desc·promo·keywords) 병합
+  releaseNotes: { locale: string; text: string }[] // 최신 버전 whatsNew (로케일별)
+  category: string
+  ageRating: string
+  screenshots: DashImageSet[]
+  iap: LiveIapProduct[]
+}
+
+// 스토어 스냅샷 — 스토어에 이력 API가 없어서 ZTO가 pull마다 저장해 이력을 만든다 (SPEC §4.5 ⑧)
+// 메타·자산·IAP 전 섹션을 덮는다. 내용이 같으면 confirmedAt만 갱신, 다르면 새 항목.
+export interface StoreSnapshotEntry {
+  createdAt: string
+  confirmedAt: string
+  google: { listings: MetaListing[]; images: DashImageSet[]; iap: LiveIapProduct[] } | null
+  apple: { meta: MetaListing[]; screenshots: DashImageSet[]; iap: LiveIapProduct[] } | null
+}
+
+export interface IapSnapshotInfo {
+  count: number
+  createdAt: string // 마지막 스냅샷이 처음 기록된 시각
+  confirmedAt: string // 같은 내용이 마지막으로 확인된 시각
+  changed: boolean // 이번 pull에서 직전 스냅샷과 달라졌는지
+}
+
+export interface DashboardData {
+  pulledAt: string
+  google: DashGoogle | null
+  googleError?: string
+  apple: DashApple | null
+  appleError?: string
+  snapshot: IapSnapshotInfo | null
+}
+
+// AI provider — BYO 구독 원칙: 사용자의 로컬 claude CLI를 spawn (키·토큰 미취급). libertas 패턴.
+export interface AiModel {
+  id: string
+  label: string
+}
+
+export interface AiStatus {
+  available: boolean
+  version: string
+  models: AiModel[]
+  model: string // 선택된 기본 모델 id
+}
+
+// 전역 API 연결 상태 — 자격증명은 앱이 아니라 브랜드/계정 단위(플랫폼당 하나)
+export interface ApiStatus {
+  play: { connected: boolean; detail: string }
+  apple: { connected: boolean; detail: string }
+}
+
+// ---------- P2 편집 프레임 — 대기 중 수정(로컬 diff) → "수정 적용하기"로 배치 발사 ----------
+export type EditPlatform = 'android' | 'ios'
+export type EditSection = 'meta' | 'releaseNotes' | 'iap' | 'assets'
+
+// 한 건의 대기 수정. id = `${platform}:${section}:${locale}:${field}` (같은 필드 재수정은 덮어씀)
+export interface PendingEdit {
+  id: string
+  platform: EditPlatform
+  section: EditSection
+  field: string // meta: title·short·full·promo·keywords / releaseNotes: whatsNew ...
+  locale: string
+  label: string // 사람이 읽는 라벨 (적용 바·결과 패널용)
+  oldValue: string
+  newValue: string
+}
+
+// 적용 결과 — 항목별 (ASC는 부분 실패 가능, Play는 원자적)
+export interface ApplyResult {
+  id: string
+  ok: boolean
+  message: string
+}
+
 // 모듈 2 — 계정 인벤토리 항목 (메타데이터만. 비밀번호 필드는 설계상 존재하지 않는다 — SPEC §7.3)
 export interface Account {
   id: string
