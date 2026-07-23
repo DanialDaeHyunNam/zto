@@ -19,7 +19,11 @@ import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
 import ContentSurveyWizard from './ContentSurveyWizard'
 
-const ASC_SURVEY_ID = 'asc-age-rating'
+// 플랫폼별 앱 콘텐츠 설문 (콘솔 전용 설정을 메움)
+const SURVEY = {
+  android: { id: 'play-content-rating', console: 'https://play.google.com/console' },
+  ios: { id: 'asc-age-rating', console: '' } // 콘솔 URL은 appId로 런타임 구성
+} as const
 
 // §4.5 앱 대시보드 (P1 읽기 전용) — 플랫폼 탭(Android|iOS) + 전체 폭 상태 트리.
 // 불은 수동 체크가 아니라 스토어 pull로 자동 점등. API가 없는 노드만 🟡 + 콘솔 링크.
@@ -710,14 +714,18 @@ function AndroidTree({
   g,
   file,
   metaDirty,
+  surveyDone,
   onImage,
-  onOpenMeta
+  onOpenMeta,
+  onOpenSurvey
 }: {
   g: DashGoogle
   file: string
   metaDirty: boolean
+  surveyDone: boolean
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
+  onOpenSurvey: () => void
 }): React.JSX.Element {
   const { m } = useI18n()
   const releases = [...g.releases].sort((a, b) => playRank(a.track) - playRank(b.track))
@@ -730,6 +738,14 @@ function AndroidTree({
       <Node light="y" label={m.launch.dashNodeConfig} url={PLAY_CONSOLE_URL}>
         {[configReadable, m.launch.dashConfigConsole].filter(Boolean).join(' · ')}
       </Node>
+      <div className="dash-sub">
+        <div>
+          <button className="ghost-btn mini" onClick={onOpenSurvey}>
+            {m.launch.surveyBtn}
+            {surveyDone && <span className="survey-badge">✓ {m.launch.surveyDone}</span>}
+          </button>
+        </div>
+      </div>
       <Node light={metaDirty ? 'y' : g.listings.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={g.listings.map((l) => l.locale)} />
       </Node>
@@ -938,13 +954,15 @@ export default function AppDashboard({
   const [tab, setTab] = useState<Platform | null>(null) // null = 데이터 보고 자동 선택
   const [lightbox, setLightbox] = useState<{ urls: string[]; idx: number } | null>(null)
   const [metaOpen, setMetaOpen] = useState(false)
-  const [surveyOpen, setSurveyOpen] = useState(false)
-  const [surveyDone, setSurveyDone] = useState(false)
+  const [surveyOpen, setSurveyOpen] = useState<string | null>(null) // 열린 설문 id
+  const [surveyDone, setSurveyDone] = useState<Record<string, boolean>>({})
   const [edits, setEdits] = useState<Record<string, PendingEdit>>({})
 
   const refreshSurvey = useCallback(() => {
-    window.zto.launch.getConsoleAnswers(file, ASC_SURVEY_ID).then((a) => {
-      setSurveyDone(!!a?.completedAt)
+    ;[SURVEY.android.id, SURVEY.ios.id].forEach((id) => {
+      window.zto.launch.getConsoleAnswers(file, id).then((a) => {
+        setSurveyDone((prev) => ({ ...prev, [id]: !!a?.completedAt }))
+      })
     })
   }, [file])
   useEffect(refreshSurvey, [refreshSurvey])
@@ -1047,8 +1065,10 @@ export default function AppDashboard({
                   g={data.google}
                   file={file}
                   metaDirty={metaDirty('android')}
+                  surveyDone={!!surveyDone[SURVEY.android.id]}
                   onImage={(urls, idx) => setLightbox({ urls, idx })}
                   onOpenMeta={() => setMetaOpen(true)}
+                  onOpenSurvey={() => setSurveyOpen(SURVEY.android.id)}
                 />
               ) : (
                 <PlatformError error={data.googleError} store="play" />
@@ -1058,10 +1078,10 @@ export default function AppDashboard({
                 a={data.apple}
                 file={file}
                 metaDirty={metaDirty('ios')}
-                surveyDone={surveyDone}
+                surveyDone={!!surveyDone[SURVEY.ios.id]}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}
-                onOpenSurvey={() => setSurveyOpen(true)}
+                onOpenSurvey={() => setSurveyOpen(SURVEY.ios.id)}
               />
             ) : (
               <PlatformError error={data.appleError} store="asc" />
@@ -1083,9 +1103,15 @@ export default function AppDashboard({
       {surveyOpen && (
         <ContentSurveyWizard
           file={file}
-          questionnaireId={ASC_SURVEY_ID}
-          ascAppId={data?.apple?.appId}
-          onClose={() => setSurveyOpen(false)}
+          questionnaireId={surveyOpen}
+          consoleUrl={
+            surveyOpen === SURVEY.ios.id
+              ? data?.apple
+                ? `https://appstoreconnect.apple.com/apps/${data.apple.appId}/distribution/info`
+                : undefined
+              : SURVEY.android.console
+          }
+          onClose={() => setSurveyOpen(null)}
           onSaved={refreshSurvey}
         />
       )}

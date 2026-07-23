@@ -1,0 +1,22 @@
+{
+  "id": "play-content-rating",
+  "platform": "android",
+  "version": "2026-07",
+  "title": "Play 콘텐츠 등급 (IARC)",
+  "titleEn": "Play Content Rating (IARC)",
+  "note": "Play 콘솔의 IARC 설문 요지. Play는 이 항목들에 read/write API가 없어(어떤 앱이든) — ZTO가 답을 기록하고 콘솔 입력을 돕는다. IARC는 카테고리·개정에 따라 문항이 더 많을 수 있음 → 이 파일만 갱신. level=NONE/INFREQUENT_OR_MILD/FREQUENT_OR_INTENSE, bool=YES/NO.",
+  "questions": [
+    { "id": "violence", "type": "level", "label": "폭력", "labelEn": "Violence", "help": "캐릭터 간 전투·공격 묘사. 도트 SRPG의 턴제 전투는 대개 '가끔·약함'." },
+    { "id": "bloodGore", "type": "bool", "label": "피·고어", "labelEn": "Blood or Gore", "help": "피나 신체 훼손을 사실적으로 보여주나요?" },
+    { "id": "fear", "type": "bool", "label": "공포·무서움", "labelEn": "Fear", "help": "공포심을 유발하는 연출이 있나요?" },
+    { "id": "sexualContent", "type": "level", "label": "성적 콘텐츠", "labelEn": "Sexual Content", "help": "성적 표현·암시의 정도." },
+    { "id": "nudity", "type": "bool", "label": "노출", "labelEn": "Nudity", "help": "신체 노출이 있나요?" },
+    { "id": "profanity", "type": "level", "label": "비속어", "labelEn": "Profanity", "help": "욕설·저속한 표현의 정도." },
+    { "id": "controlledSubstances", "type": "bool", "label": "주류·담배·약물", "labelEn": "Alcohol, Tobacco, or Drugs", "help": "술·담배·약물의 사용이나 묘사가 있나요?" },
+    { "id": "gambling", "type": "bool", "label": "실제 도박", "labelEn": "Real Gambling", "help": "실제 돈을 걸 수 있나요? 대부분의 게임은 아니오." },
+    { "id": "gamblingSimulated", "type": "bool", "label": "모의 도박", "labelEn": "Simulated Gambling", "help": "실제 돈 없이 도박을 흉내내나요(슬롯·카드 등)?" },
+    { "id": "userInteraction", "type": "bool", "label": "이용자 간 상호작용", "labelEn": "Users Interact", "help": "채팅·메시지 등 이용자끼리 소통하나요? (싱글플레이면 아니오)" },
+    { "id": "sharesLocation", "type": "bool", "label": "위치 공유", "labelEn": "Shares Location", "help": "이용자 위치를 다른 사람과 공유하나요?" },
+    { "id": "digitalPurchases", "type": "bool", "label": "디지털 구매", "labelEn": "Digital Purchases", "help": "앱 안에서 디지털 상품을 구매할 수 있나요? IAP가 있으면 예." }
+  ]
+}

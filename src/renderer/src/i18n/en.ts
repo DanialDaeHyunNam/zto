@@ -198,7 +198,7 @@ export const en = {
     levelIntense: 'Frequent/Intense',
     boolYes: 'Yes',
     boolNo: 'No',
-    surveyOpenConsole: 'Open in App Store Connect ↗',
+    surveyOpenConsole: 'Open in console ↗',
     ascPickLabel: 'Apps in your Apple account — click to fill',
     stepIap: 'Add in-app purchases (IAP)?',
     iapYes: 'Add them',

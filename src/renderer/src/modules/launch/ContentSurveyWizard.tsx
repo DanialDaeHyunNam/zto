@@ -11,13 +11,13 @@ const BOOL_OPTS = ['YES', 'NO'] as const
 export default function ContentSurveyWizard({
   file,
   questionnaireId,
-  ascAppId,
+  consoleUrl,
   onClose,
   onSaved
 }: {
   file: string
   questionnaireId: string
-  ascAppId?: string
+  consoleUrl?: string
   onClose: () => void
   onSaved: () => void
 }): React.JSX.Element {
@@ -124,15 +124,8 @@ export default function ContentSurveyWizard({
           <div className="survey-list">{q.questions.map(questionRow)}</div>
         )}
         <div className="survey-foot">
-          {ascAppId && (
-            <button
-              className="link-btn"
-              onClick={() =>
-                window.zto.launch.openExternal(
-                  `https://appstoreconnect.apple.com/apps/${ascAppId}/distribution/info`
-                )
-              }
-            >
+          {consoleUrl && (
+            <button className="link-btn" onClick={() => window.zto.launch.openExternal(consoleUrl)}>
               {m.launch.surveyOpenConsole}
             </button>
           )}

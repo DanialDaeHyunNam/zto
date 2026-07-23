@@ -200,7 +200,7 @@ export const ko: Messages = {
     levelIntense: '자주·강함',
     boolYes: '예',
     boolNo: '아니오',
-    surveyOpenConsole: 'App Store Connect에서 열기 ↗',
+    surveyOpenConsole: '콘솔에서 열기 ↗',
     ascPickLabel: 'Apple 계정의 앱 — 클릭해서 채우기',
     stepIap: '인앱결제(IAP)를 넣을까요?',
     iapYes: '넣는다',
