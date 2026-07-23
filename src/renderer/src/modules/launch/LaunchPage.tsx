@@ -352,7 +352,10 @@ function ImportSheetForm({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const [ascApps, setAscApps] = useState<{ name: string; bundleId: string }[]>([])
+  // null = 아직 불러오는 중 (Apple 계정 앱 목록)
+  const [ascApps, setAscApps] = useState<{ name: string; bundleId: string }[] | null>(null)
+  // 선택 전엔 폼을 숨긴다: null=미선택 / 'manual'=직접 추가 / bundleId=ASC 앱 선택
+  const [chosen, setChosen] = useState<string | null>(null)
 
   useEffect(() => {
     window.zto.launch.lastSa().then(setSaPath)
@@ -382,61 +385,85 @@ function ImportSheetForm({
   return (
     <div className="form-card slim">
       <div className="form-card-title">{m.launch.importTitle}</div>
-      {ascApps.length > 0 && (
-        <div className="form-field">
-          <span className="form-label">{m.launch.ascPickLabel}</span>
+      <div className="form-field">
+        <span className="form-label">{m.launch.ascPickLabel}</span>
+        {ascApps === null ? (
+          <span className="no-apps">{m.launch.ascLoading}</span>
+        ) : (
           <div className="app-picker">
             {ascApps.map((a) => (
               <button
                 key={a.bundleId}
                 type="button"
-                className={`app-chip ${pkg === a.bundleId ? 'active' : ''}`}
+                className={`app-chip ${chosen === a.bundleId ? 'active' : ''}`}
                 onClick={() => {
                   setName(a.name)
                   setPkg(a.bundleId)
+                  setErr('')
+                  setChosen(a.bundleId)
                 }}
               >
                 <PlatformIcon id="app-store-connect" />
                 {a.name}
               </button>
             ))}
+            <button
+              type="button"
+              className={`app-chip ${chosen === 'manual' ? 'active' : ''}`}
+              onClick={() => {
+                setName('')
+                setPkg('')
+                setErr('')
+                setChosen('manual')
+              }}
+            >
+              + {m.launch.manualAdd}
+            </button>
           </div>
-        </div>
+        )}
+      </div>
+      {chosen !== null && (
+        <>
+          <label className="form-field">
+            <span className="form-label">{m.launch.packageLabel}</span>
+            <input
+              className="email-input"
+              value={pkg}
+              placeholder={m.launch.packagePlaceholder}
+              onChange={(e) => setPkg(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <label className="form-field">
+            <span className="form-label">{m.launch.appNameLabel}</span>
+            <input
+              className="email-input"
+              value={name}
+              placeholder={m.launch.appNamePlaceholder}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            <span className="form-label">{m.launch.saPathLabel}</span>
+            <input
+              className="email-input"
+              value={saPath}
+              placeholder={m.launch.saPathPlaceholder}
+              onChange={(e) => setSaPath(e.target.value)}
+            />
+          </label>
+        </>
       )}
-      <label className="form-field">
-        <span className="form-label">{m.launch.packageLabel}</span>
-        <input
-          className="email-input"
-          value={pkg}
-          placeholder={m.launch.packagePlaceholder}
-          onChange={(e) => setPkg(e.target.value)}
-          autoFocus
-        />
-      </label>
-      <label className="form-field">
-        <span className="form-label">{m.launch.appNameLabel}</span>
-        <input
-          className="email-input"
-          value={name}
-          placeholder={m.launch.appNamePlaceholder}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
-      <label className="form-field">
-        <span className="form-label">{m.launch.saPathLabel}</span>
-        <input
-          className="email-input"
-          value={saPath}
-          placeholder={m.launch.saPathPlaceholder}
-          onChange={(e) => setSaPath(e.target.value)}
-        />
-      </label>
       {err && <p className="field-err no-indent">{err}</p>}
       <div className="form-actions">
         <button className="choice small" onClick={onCancel} disabled={busy}>
           {m.accounts.cancel}
         </button>
-        <button className="choice small active" onClick={doImport} disabled={busy || !pkg.trim()}>
+        <button
+          className="choice small active"
+          onClick={doImport}
+          disabled={busy || chosen === null || !pkg.trim()}
+        >
           {busy ? m.launch.verifying : m.launch.importBtn}
         </button>
       </div>
