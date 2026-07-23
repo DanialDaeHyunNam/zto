@@ -2,6 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type {
   AccessLogEntry,
   Account,
+  AiMode,
+  AiProviderId,
   AiStatus,
   ApiStatus,
   ApplyResult,
@@ -25,7 +27,13 @@ const api = {
   getLocale: (): Promise<'ko' | 'en'> => ipcRenderer.invoke('app:getLocale'),
   ai: {
     status: (fresh?: boolean): Promise<AiStatus> => ipcRenderer.invoke('ai:status', fresh),
-    setModel: (model: string): Promise<void> => ipcRenderer.invoke('ai:setModel', model)
+    setModel: (model: string): Promise<void> => ipcRenderer.invoke('ai:setModel', model),
+    setActive: (provider: AiProviderId): Promise<void> =>
+      ipcRenderer.invoke('ai:setActive', provider),
+    setMode: (provider: AiProviderId, mode: AiMode): Promise<void> =>
+      ipcRenderer.invoke('ai:setMode', provider, mode),
+    setKey: (provider: AiProviderId, key: string): Promise<boolean> =>
+      ipcRenderer.invoke('ai:setKey', provider, key)
   },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),

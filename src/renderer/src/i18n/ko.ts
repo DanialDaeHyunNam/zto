@@ -29,7 +29,19 @@ export const ko: Messages = {
     geminiSoon: '곧 지원 — 키는 이 컴퓨터에만 암호화 저장돼요',
     apiKeyPlaceholder: 'API 키 (곧 지원)',
     langTitle: '언어',
-    langSub: '앱 전체에 적용됩니다.'
+    langSub: '앱 전체에 적용됩니다.',
+    modeSub: '구독',
+    modeKey: 'API 키',
+    use: '사용',
+    inUse: '사용 중',
+    subVia: '내 {p} 구독으로',
+    keyVia: 'API 키로',
+    cliMissing: 'CLI 미감지 — 터미널에서 {c} 설치/로그인 후 다시 열어주세요',
+    keyStored: '키 저장됨 — 이 컴퓨터에만 암호화 저장',
+    keyEnter: 'API 키를 붙여넣고 저장하세요',
+    keySave: '저장',
+    keyClear: '삭제',
+    keyPlaceholder: 'API 키'
   },
   ipc: {
     checking: '연결 확인 중…',
@@ -48,6 +60,7 @@ export const ko: Messages = {
     apiConnected: '연결됨',
     apiDisconnected: '미연결',
     apiConnect: '연결',
+    apiChecking: '확인중',
     stepDevAccounts: '스토어 개발자 계정',
     stepDevAccountsNote: '한쪽만 있어도 해당 스토어부터 진행할 수 있습니다. 상태는 저장돼요.',
     have: '있음',

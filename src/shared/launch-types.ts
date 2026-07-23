@@ -122,17 +122,29 @@ export interface DashboardData {
   snapshot: IapSnapshotInfo | null
 }
 
-// AI provider — BYO 구독 원칙: 사용자의 로컬 claude CLI를 spawn (키·토큰 미취급). libertas 패턴.
+// AI provider — BYO 2방식: 구독(로컬 CLI spawn: claude/codex) 또는 API 키(키체인 저장). ROADMAP #1.
 export interface AiModel {
   id: string
   label: string
 }
 
+export type AiProviderId = 'claude' | 'chatgpt' | 'gemini'
+export type AiMode = 'subscription' | 'apikey'
+
+export interface AiProviderStatus {
+  id: AiProviderId
+  supportsSubscription: boolean // gemini는 CLI 구독 개념 없음 → API 키 전용
+  subscriptionAvailable: boolean // 로컬 CLI 감지됨 (claude/codex)
+  subscriptionVersion: string
+  hasKey: boolean // API 키가 키체인에 저장됨
+  mode: AiMode // 사용자가 고른 연결 방식
+}
+
 export interface AiStatus {
-  available: boolean
-  version: string
-  models: AiModel[]
-  model: string // 선택된 기본 모델 id
+  active: AiProviderId // 두뇌로 쓸 provider
+  model: string // active provider의 기본 모델 id
+  models: AiModel[] // active provider가 제공하는 모델 (지금은 claude만)
+  providers: AiProviderStatus[]
 }
 
 // 전역 API 연결 상태 — 자격증명은 앱이 아니라 브랜드/계정 단위(플랫폼당 하나)

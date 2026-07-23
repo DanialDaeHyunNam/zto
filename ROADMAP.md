@@ -18,13 +18,13 @@
 
 ## 실행 순서 (순차)
 
-### 1. AI provider 설정 — 🔨 진행 중
+### 1. AI provider 설정 — 🔨 거의 완료 (ai:chat만 남음, #2와 함께)
 - [x] 설정 페이지 + 사이드바 하단 "설정" 진입 + 언어 이동 (2026-07-23)
-- [x] Claude 구독 방식 — 로컬 `claude` CLI 감지(`--version`)·모델 선택(Fable/Opus/Sonnet/Haiku), `ai:status`/`ai:setModel`
-- [ ] **provider 토글 `[구독 | API 키]`** 각 카드에 — Claude/ChatGPT 둘 다 두 방식 제공 (Dan)
-- [ ] ChatGPT 구독 = `codex` CLI 감지(claude와 대칭), Gemini는 API 키만
-- [ ] API 키 모드 = 키체인(safeStorage) 저장(기존 secrets 인프라 재사용) + 실제 Anthropic/OpenAI 호출
-- [ ] `ai:chat` — provider 추상화한 한 턴 실행(구독=CLI spawn `-p --resume` / 키=API). 팝오버·소셜 공용
+- [x] Claude 구독 방식 — 로컬 `claude` CLI 감지(`--version`)·모델 선택(Fable/Opus/Sonnet/Haiku)
+- [x] **provider 토글 `[구독 | API 키]`** — Claude·ChatGPT 둘 다 (2026-07-23). active provider 선택 + 모델 선택
+- [x] ChatGPT 구독 = `codex` CLI 감지(claude와 대칭, 미감지 안내), Gemini는 API 키 전용
+- [x] API 키 모드 = 키체인(safeStorage) 저장 `zto-ai-keys.json`(암호문만)·삭제. `ai:setKey`/`hasKey`. 실측 앱 환경서 저장·삭제 검증
+- [ ] `ai:chat` — provider 추상화한 한 턴 실행(구독=CLI spawn `-p --resume` / 키=Anthropic·OpenAI API). **#2 팝오버에서 첫 소비 → 거기서 구현**
 
 ### 2. 앱 콘텐츠 설문 위저드 (콘솔 전용 L2 설정)
 - [ ] 결정형 스텝 위저드 — 질문 세트는 **버전 관리 JSON**(콘솔 개정 대비). 파일럿 1종부터 정확히 인코딩

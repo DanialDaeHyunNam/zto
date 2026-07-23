@@ -18,6 +18,10 @@ import {
   PLATFORM_DOMAINS,
   type AccessLogEntry,
   type Account,
+  type AiMode,
+  type AiModel,
+  type AiProviderId,
+  type AiProviderStatus,
   type AiStatus,
   type ApiStatus,
   type ApplyResult,
@@ -124,41 +128,123 @@ function unlinkStoreFromAccount(email: string, storeApp: string): void {
 }
 
 
-// ---------- AI provider (BYO 구독) — 로컬 claude CLI 감지·spawn. libertas 패턴 ----------
+// ---------- AI provider (BYO 2방식) — 구독(로컬 CLI spawn) / API 키(키체인). libertas 패턴 ----------
 // Finder로 띄운 Electron은 셸 PATH를 못 물려받아서 흔한 설치 위치로 폴백한다.
-const AI_MODELS: AiStatus['models'] = [
+const AI_MODELS: AiModel[] = [
   { id: 'claude-fable-5', label: 'Fable 5' },
   { id: 'claude-opus-4-8', label: 'Opus 4.8' },
   { id: 'claude-sonnet-5', label: 'Sonnet 5' },
   { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
 ]
 
-let _claude: { available: boolean; bin: string | null; version: string } | null = null
-function claudeInfo(fresh = false): { available: boolean; bin: string | null; version: string } {
-  if (_claude && !fresh) return _claude
-  const home = homedir()
-  const candidates = [
-    process.env.ZTO_CLAUDE_BIN,
+// provider 구독 = 로컬 CLI (Claude=claude, ChatGPT=codex). 감지 결과 캐시.
+const CLI_CANDIDATES: Record<string, string[]> = {
+  claude: [
+    process.env.ZTO_CLAUDE_BIN ?? '',
     'claude',
-    join(home, '.claude', 'local', 'claude'),
+    join(homedir(), '.claude', 'local', 'claude'),
     '/opt/homebrew/bin/claude',
     '/usr/local/bin/claude',
-    join(home, '.local', 'bin', 'claude')
-  ].filter((x): x is string => !!x)
-  for (const bin of candidates) {
+    join(homedir(), '.local', 'bin', 'claude')
+  ],
+  codex: [
+    process.env.ZTO_CODEX_BIN ?? '',
+    'codex',
+    '/opt/homebrew/bin/codex',
+    '/usr/local/bin/codex',
+    join(homedir(), '.local', 'bin', 'codex')
+  ]
+}
+const _cli: Record<string, { available: boolean; bin: string | null; version: string }> = {}
+function cliInfo(name: 'claude' | 'codex', fresh = false): { available: boolean; bin: string | null; version: string } {
+  if (_cli[name] && !fresh) return _cli[name]
+  for (const bin of (CLI_CANDIDATES[name] ?? []).filter(Boolean)) {
     try {
       const r = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 5000 })
       if (r.status === 0) {
-        const version = String(r.stdout || '').match(/[\d.]+/)?.[0] ?? ''
-        _claude = { available: true, bin, version }
-        return _claude
+        _cli[name] = { available: true, bin, version: String(r.stdout || '').match(/[\d.]+/)?.[0] ?? '' }
+        return _cli[name]
       }
     } catch {
       /* 다음 후보 */
     }
   }
-  _claude = { available: false, bin: null, version: '' }
-  return _claude
+  _cli[name] = { available: false, bin: null, version: '' }
+  return _cli[name]
+}
+
+// AI API 키 — 비밀번호와 같은 키체인(safeStorage) 저장, provider별. 계정 비번 파일과 분리.
+const aiKeysFile = (): string => join(app.getPath('userData'), 'zto-ai-keys.json')
+function readAiKeys(): Record<string, string> {
+  try {
+    return JSON.parse(readFileSync(aiKeysFile(), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+function setAiKey(provider: string, key: string): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const keys = readAiKeys()
+  if (key) keys[provider] = safeStorage.encryptString(key).toString('base64')
+  else delete keys[provider]
+  writeFileSync(aiKeysFile(), JSON.stringify(keys, null, 2))
+  return true
+}
+
+// provider별 연결 방식·active·model 은 전역 상태에 (키 자체는 키체인)
+interface AiConfig {
+  active: AiProviderId
+  model: string
+  modes: Record<AiProviderId, AiMode>
+}
+function readAiConfig(): AiConfig {
+  const c = (readState().aiConfig as Partial<AiConfig>) ?? {}
+  return {
+    active: c.active ?? 'claude',
+    model: AI_MODELS.some((m) => m.id === c.model) ? (c.model as string) : AI_MODELS[0].id,
+    modes: {
+      claude: c.modes?.claude ?? 'subscription',
+      chatgpt: c.modes?.chatgpt ?? 'subscription',
+      gemini: 'apikey'
+    }
+  }
+}
+function writeAiConfig(patch: Partial<AiConfig>): void {
+  writeState({ ...readState(), aiConfig: { ...readAiConfig(), ...patch } })
+}
+
+function aiStatus(fresh = false): AiStatus {
+  const cfg = readAiConfig()
+  const keys = readAiKeys()
+  const claude = cliInfo('claude', fresh)
+  const codex = cliInfo('codex', fresh)
+  const providers: AiProviderStatus[] = [
+    {
+      id: 'claude',
+      supportsSubscription: true,
+      subscriptionAvailable: claude.available,
+      subscriptionVersion: claude.version,
+      hasKey: !!keys.claude,
+      mode: cfg.modes.claude
+    },
+    {
+      id: 'chatgpt',
+      supportsSubscription: true,
+      subscriptionAvailable: codex.available,
+      subscriptionVersion: codex.version,
+      hasKey: !!keys.chatgpt,
+      mode: cfg.modes.chatgpt
+    },
+    {
+      id: 'gemini',
+      supportsSubscription: false,
+      subscriptionAvailable: false,
+      subscriptionVersion: '',
+      hasKey: !!keys.gemini,
+      mode: 'apikey'
+    }
+  ]
+  return { active: cfg.active, model: cfg.model, models: AI_MODELS, providers }
 }
 
 // ---------- 스토어 실황 조회 헬퍼 ----------
@@ -896,16 +982,22 @@ app.whenReady().then(() => {
     writeState({ ...readState(), locale })
   })
   ipcMain.handle('app:getLocale', (): 'ko' | 'en' => (readState().locale as 'ko' | 'en') ?? 'ko')
-  // AI provider 상태 — 로컬 claude CLI 감지 + 선택 모델 (BYO 구독)
-  ipcMain.handle('ai:status', (_e, fresh?: boolean): AiStatus => {
-    const info = claudeInfo(fresh)
-    const saved = readState().aiModel as string
-    const model = AI_MODELS.some((m) => m.id === saved) ? saved : AI_MODELS[0].id
-    return { available: info.available, version: info.version, models: AI_MODELS, model }
-  })
+  // AI provider — 구독(CLI 감지)/API키(키체인) 상태 + active·mode·model 설정
+  ipcMain.handle('ai:status', (_e, fresh?: boolean): AiStatus => aiStatus(fresh))
   ipcMain.handle('ai:setModel', (_e, model: string): void => {
-    if (AI_MODELS.some((m) => m.id === model)) writeState({ ...readState(), aiModel: model })
+    if (AI_MODELS.some((m) => m.id === model)) writeAiConfig({ model })
   })
+  ipcMain.handle('ai:setActive', (_e, provider: AiProviderId): void => {
+    writeAiConfig({ active: provider })
+  })
+  ipcMain.handle('ai:setMode', (_e, provider: AiProviderId, mode: AiMode): void => {
+    if (provider === 'gemini') return // gemini는 API키 전용
+    writeAiConfig({ modes: { ...readAiConfig().modes, [provider]: mode } })
+  })
+  // 키 저장/삭제 — 첫 저장 무인증(등록 마찰↓), 값 비우면 삭제. 화면 표시는 없음(저장 여부만)
+  ipcMain.handle('ai:setKey', (_e, provider: AiProviderId, key: string): boolean =>
+    setAiKey(provider, key)
+  )
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
   // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록

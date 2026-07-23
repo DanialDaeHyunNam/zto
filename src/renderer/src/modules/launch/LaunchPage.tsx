@@ -568,7 +568,10 @@ function ApiStatusBar(): React.JSX.Element {
         <PlatformIcon id={iconId} />
       </span>
       <span className="api-label">{label}</span>
-      {st?.connected ? (
+      {status === null ? (
+        // 아직 조회 중 — "미연결"로 오인되지 않게 확인중 표시
+        <span className="api-checking">{m.launch.apiChecking}</span>
+      ) : st?.connected ? (
         <span className="dash-dot g" />
       ) : (
         <button

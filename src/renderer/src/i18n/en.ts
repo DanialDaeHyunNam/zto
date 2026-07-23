@@ -27,7 +27,19 @@ export const en = {
     geminiSoon: 'Coming soon — the key is encrypted on this computer only',
     apiKeyPlaceholder: 'API key (coming soon)',
     langTitle: 'Language',
-    langSub: 'Applies across the whole app.'
+    langSub: 'Applies across the whole app.',
+    modeSub: 'Subscription',
+    modeKey: 'API key',
+    use: 'Use',
+    inUse: 'In use',
+    subVia: 'via your {p} subscription',
+    keyVia: 'via API key',
+    cliMissing: 'CLI not detected — install/log in to {c} in a terminal, then reopen',
+    keyStored: 'Key stored — encrypted on this computer only',
+    keyEnter: 'Paste API key, then Save',
+    keySave: 'Save',
+    keyClear: 'Remove',
+    keyPlaceholder: 'API key'
   },
   ipc: {
     checking: 'Checking connection…',
@@ -46,6 +58,7 @@ export const en = {
     apiConnected: 'Connected',
     apiDisconnected: 'Not connected',
     apiConnect: 'Connect',
+    apiChecking: 'Checking…',
     stepDevAccounts: 'Store developer accounts',
     stepDevAccountsNote: 'You can proceed with just one store. Your status is saved.',
     have: 'Have it',
