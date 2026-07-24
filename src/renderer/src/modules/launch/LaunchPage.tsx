@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import {
   EMAIL_RE,
   suggestEmailDomain,
+  type ApiStatus,
   type CredentialStatus,
   type DevAccounts,
   type RunResult,
@@ -10,8 +11,10 @@ import {
   type StoreKind
 } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
+import { useBrowserOverlay } from '../../browser-overlay'
 import type { Messages } from '../../i18n/en'
 import { PlatformIcon } from '../../platform-icons'
+import AppDashboard from './AppDashboard'
 
 type IapChoice = 'undecided' | 'yes' | 'no'
 
@@ -226,6 +229,8 @@ function CredRow({
   url: string
 }): React.JSX.Element {
   const { m } = useI18n()
+  // 키 파일 경로는 유저에게 주요 정보가 아님 — 기본 숨김, 필요할 때만 보기
+  const [showPath, setShowPath] = useState(false)
   return (
     <div className="store-block">
       <div className="store-row">
@@ -235,8 +240,13 @@ function CredRow({
             <span className={`status-chip ${ok ? 'ok' : 'warn'}`}>
               {ok ? m.launch.credOk : m.launch.credMissing}
             </span>
+            {ok && detail && (
+              <button className="ghost-btn mini" onClick={() => setShowPath((v) => !v)}>
+                {showPath ? m.launch.hidePath : m.launch.showPath}
+              </button>
+            )}
           </div>
-          {ok && detail && <div className="store-sub">{detail}</div>}
+          {ok && detail && showPath && <div className="store-sub">{detail}</div>}
         </div>
       </div>
       {!ok && (
@@ -343,7 +353,10 @@ function ImportSheetForm({
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
 
-  const [ascApps, setAscApps] = useState<{ name: string; bundleId: string }[]>([])
+  // null = 아직 불러오는 중 (Apple 계정 앱 목록)
+  const [ascApps, setAscApps] = useState<{ name: string; bundleId: string }[] | null>(null)
+  // 선택 전엔 폼을 숨긴다: null=미선택 / 'manual'=직접 추가 / bundleId=ASC 앱 선택
+  const [chosen, setChosen] = useState<string | null>(null)
 
   useEffect(() => {
     window.zto.launch.lastSa().then(setSaPath)
@@ -373,151 +386,88 @@ function ImportSheetForm({
   return (
     <div className="form-card slim">
       <div className="form-card-title">{m.launch.importTitle}</div>
-      {ascApps.length > 0 && (
-        <div className="form-field">
-          <span className="form-label">{m.launch.ascPickLabel}</span>
+      <div className="form-field">
+        <span className="form-label">{m.launch.ascPickLabel}</span>
+        {ascApps === null ? (
+          <span className="no-apps">{m.launch.ascLoading}</span>
+        ) : (
           <div className="app-picker">
             {ascApps.map((a) => (
               <button
                 key={a.bundleId}
                 type="button"
-                className={`app-chip ${pkg === a.bundleId ? 'active' : ''}`}
+                className={`app-chip ${chosen === a.bundleId ? 'active' : ''}`}
                 onClick={() => {
                   setName(a.name)
                   setPkg(a.bundleId)
+                  setErr('')
+                  setChosen(a.bundleId)
                 }}
               >
                 <PlatformIcon id="app-store-connect" />
                 {a.name}
               </button>
             ))}
+            <button
+              type="button"
+              className={`app-chip ${chosen === 'manual' ? 'active' : ''}`}
+              onClick={() => {
+                setName('')
+                setPkg('')
+                setErr('')
+                setChosen('manual')
+              }}
+            >
+              + {m.launch.manualAdd}
+            </button>
           </div>
-        </div>
+        )}
+      </div>
+      {chosen !== null && (
+        <>
+          <label className="form-field">
+            <span className="form-label">{m.launch.packageLabel}</span>
+            <input
+              className="email-input"
+              value={pkg}
+              placeholder={m.launch.packagePlaceholder}
+              onChange={(e) => setPkg(e.target.value)}
+              autoFocus
+            />
+          </label>
+          <label className="form-field">
+            <span className="form-label">{m.launch.appNameLabel}</span>
+            <input
+              className="email-input"
+              value={name}
+              placeholder={m.launch.appNamePlaceholder}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </label>
+          <label className="form-field">
+            <span className="form-label">{m.launch.saPathLabel}</span>
+            <input
+              className="email-input"
+              value={saPath}
+              placeholder={m.launch.saPathPlaceholder}
+              onChange={(e) => setSaPath(e.target.value)}
+            />
+          </label>
+        </>
       )}
-      <label className="form-field">
-        <span className="form-label">{m.launch.packageLabel}</span>
-        <input
-          className="email-input"
-          value={pkg}
-          placeholder={m.launch.packagePlaceholder}
-          onChange={(e) => setPkg(e.target.value)}
-          autoFocus
-        />
-      </label>
-      <label className="form-field">
-        <span className="form-label">{m.launch.appNameLabel}</span>
-        <input
-          className="email-input"
-          value={name}
-          placeholder={m.launch.appNamePlaceholder}
-          onChange={(e) => setName(e.target.value)}
-        />
-      </label>
-      <label className="form-field">
-        <span className="form-label">{m.launch.saPathLabel}</span>
-        <input
-          className="email-input"
-          value={saPath}
-          placeholder={m.launch.saPathPlaceholder}
-          onChange={(e) => setSaPath(e.target.value)}
-        />
-      </label>
       {err && <p className="field-err no-indent">{err}</p>}
       <div className="form-actions">
         <button className="choice small" onClick={onCancel} disabled={busy}>
           {m.accounts.cancel}
         </button>
-        <button className="choice small active" onClick={doImport} disabled={busy || !pkg.trim()}>
+        <button
+          className="choice small active"
+          onClick={doImport}
+          disabled={busy || chosen === null || !pkg.trim()}
+        >
           {busy ? m.launch.verifying : m.launch.importBtn}
         </button>
       </div>
-    </div>
-  )
-}
-
-interface LiveIap {
-  google: { id: string; title: string; state: string }[] | null
-  googleError?: string
-  apple: { id: string; name: string; state: string }[] | null
-  appleError?: string
-}
-
-// 스토어 실황 IAP — 기존 앱은 스토어가 진실. iOS/Android를 따로 보여준다.
-function LiveIapStatus({ file, stepNo }: { file: string; stepNo: number }): React.JSX.Element {
-  const { m } = useI18n()
-  const [live, setLive] = useState<LiveIap | null>(null)
-
-  useEffect(() => {
-    setLive(null)
-    window.zto.launch.storeIap(file).then(setLive)
-  }, [file])
-
-  const errLabel = (e?: string): string =>
-    e === 'no-key' ? m.launch.liveNoCreds : m.launch.liveError.replace('{d}', e ?? '')
-
-  const block = (
-    iconId: string,
-    label: string,
-    items: { id: string; label: string; state: string }[] | null,
-    error?: string
-  ): React.JSX.Element => (
-    <div className="store-block">
-      <div className="store-row">
-        <div className="store-ic">
-          <PlatformIcon id={iconId} />
-        </div>
-        <div className="store-info">
-          <div className="store-name">
-            {label}
-            {items && (
-              <span className="status-chip ok">
-                {items.length}
-              </span>
-            )}
-            {error && <span className="status-chip warn">{errLabel(error)}</span>}
-          </div>
-          {items && items.length === 0 && <div className="store-sub">{m.launch.liveNone}</div>}
-        </div>
-      </div>
-      {items && items.length > 0 && (
-        <div className="product-list live">
-          {items.map((p) => (
-            <div key={p.id} className="product-row">
-              <code>{p.id}</code>
-              <span className="product-title">{p.label}</span>
-              <span className={`status-chip ${p.state.toUpperCase().includes('APPROVED') || p.state === 'ACTIVE' ? 'ok' : 'warn'}`}>
-                {p.state.toLowerCase().replace(/_/g, ' ')}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-
-  return (
-    <div className="step">
-      <div className="step-head">
-        <span className="step-no">{stepNo}</span> {m.launch.stepStoreStatus}
-      </div>
-      {!live ? (
-        <p className="step-empty">{m.launch.liveLoading}</p>
-      ) : (
-        <div className="rows">
-          {block(
-            'play-console',
-            'Google Play',
-            live.google?.map((g) => ({ id: g.id, label: g.title, state: g.state })) ?? null,
-            live.googleError
-          )}
-          {block(
-            'app-store-connect',
-            'App Store',
-            live.apple?.map((a) => ({ id: a.id, label: a.name, state: a.state })) ?? null,
-            live.appleError
-          )}
-        </div>
-      )}
     </div>
   )
 }
@@ -627,11 +577,60 @@ function ApplyStep({
     </div>
   )
 }
+// 전역 API 연결 상태 — 자격증명은 앱이 아니라 계정 단위(플랫폼당 하나). 타이틀 우측 config
+function ApiStatusBar(): React.JSX.Element {
+  const { m } = useI18n()
+  const [status, setStatus] = useState<ApiStatus | null>(null)
+  useEffect(() => {
+    window.zto.launch.apiStatus().then(setStatus)
+  }, [])
+
+  const row = (
+    iconId: string,
+    label: string,
+    st: { connected: boolean; detail: string } | undefined,
+    consoleUrl: string
+  ): React.JSX.Element => (
+    <div className="api-stat" title={st?.detail}>
+      <span className="api-ic">
+        <PlatformIcon id={iconId} />
+      </span>
+      <span className="api-label">{label}</span>
+      {status === null ? (
+        // 아직 조회 중 — "미연결"로 오인되지 않게 확인중 표시
+        <span className="api-checking">{m.launch.apiChecking}</span>
+      ) : st?.connected ? (
+        <span className="dash-dot g" />
+      ) : (
+        <button
+          className="link-btn api-connect"
+          onClick={() => window.zto.launch.openExternal(consoleUrl)}
+        >
+          {m.launch.apiConnect}
+        </button>
+      )}
+    </div>
+  )
+
+  return (
+    <div className="api-status">
+      {row('play-console', m.launch.apiPlay, status?.play, 'https://play.google.com/console')}
+      {row(
+        'app-store-connect',
+        m.launch.apiApple,
+        status?.apple,
+        'https://appstoreconnect.apple.com/access/integrations/api'
+      )}
+    </div>
+  )
+}
 
 export default function LaunchPage(): React.JSX.Element {
   const { m } = useI18n()
-  const [mode, setModeState] = useState<'none' | 'new' | 'existing'>(
-    () => (localStorage.getItem('zto-launch-mode') as 'none' | 'new' | 'existing') ?? 'none'
+  const { open: openBrowser } = useBrowserOverlay()
+  // '앱 스토어 관리'가 홈 — 신규 여정은 [+ 앱 추가 → 신규 앱 출시]로만 진입 (2026-07-22 Dan)
+  const [view, setViewState] = useState<'manage' | 'new'>(
+    () => (localStorage.getItem('zto-launch-view') as 'manage' | 'new') ?? 'manage'
   )
   const [devAccounts, setDevAccounts] = useState<DevAccounts>({})
   const [sheets, setSheets] = useState<SheetSummary[]>([])
@@ -639,25 +638,8 @@ export default function LaunchPage(): React.JSX.Element {
   const [iapChoice, setIapChoice] = useState<IapChoice>('undecided')
   const [creds, setCreds] = useState<CredentialStatus | null>(null)
   const [sheetForm, setSheetForm] = useState<'none' | 'new' | 'import'>('none')
+  const [addOpen, setAddOpen] = useState(false)
   const [registered, setRegistered] = useState(false)
-
-  useEffect(() => {
-    window.zto.launch.getDevAccounts().then(setDevAccounts)
-    window.zto.launch.listSheets().then(setSheets)
-  }, [])
-
-  const setMode = (next: 'none' | 'new' | 'existing'): void => {
-    localStorage.setItem('zto-launch-mode', next)
-    setModeState(next)
-    setSelected(null)
-    setIapChoice('undecided')
-    setCreds(null)
-    setSheetForm('none')
-  }
-
-  const setDevAccount = useCallback((store: StoreKind, status: 'yes' | 'no', email?: string) => {
-    window.zto.launch.setDevAccount(store, { status, email }).then(setDevAccounts)
-  }, [])
 
   const selectSheet = useCallback((file: string) => {
     setSelected(file)
@@ -668,6 +650,30 @@ export default function LaunchPage(): React.JSX.Element {
     window.zto.launch.fetchIcon(file).then((ok) => {
       if (ok) window.zto.launch.listSheets().then(setSheets)
     })
+  }, [])
+
+  useEffect(() => {
+    window.zto.launch.getDevAccounts().then(setDevAccounts)
+    window.zto.launch.listSheets().then((list) => {
+      setSheets(list)
+      // 관리 홈은 첫 앱을 자동 선택 — 진입 즉시 대시보드가 뜬다
+      if (list.length > 0 && localStorage.getItem('zto-launch-view') !== 'new') {
+        selectSheet(list[0].file)
+      }
+    })
+  }, [selectSheet])
+
+  const setView = (next: 'manage' | 'new'): void => {
+    localStorage.setItem('zto-launch-view', next)
+    setViewState(next)
+    setIapChoice('undecided')
+    setCreds(null)
+    setSheetForm('none')
+    setAddOpen(false)
+  }
+
+  const setDevAccount = useCallback((store: StoreKind, status: 'yes' | 'no', email?: string) => {
+    window.zto.launch.setDevAccount(store, { status, email }).then(setDevAccounts)
   }, [])
 
   const onSheetCreated = (file: string): void => {
@@ -688,29 +694,80 @@ export default function LaunchPage(): React.JSX.Element {
   }
 
   const bothStoresReady = devAccounts.play?.status === 'yes' && devAccounts.apple?.status === 'yes'
+  const iapUnlocked = view === 'new' && selected !== null && registered
 
-  // 입구 — 신규/기존 모드 선택 (새 앱을 낼 때마다 이 여정을 다시 탄다)
-  if (mode === 'none') {
+  // 관리 홈 — 앱 칩 + 플랫폼 탭 대시보드
+  if (view === 'manage') {
     return (
       <section>
-        <h1>{m.launch.title}</h1>
-        <p className="placeholder">{m.launch.subtitle}</p>
-        <div className="mode-grid">
-          <button className="mode-card" onClick={() => setMode('new')}>
-            <strong>{m.launch.modeNew}</strong>
-            <span>{m.launch.modeNewDesc}</span>
-          </button>
-          <button className="mode-card" onClick={() => setMode('existing')}>
-            <strong>{m.launch.modeExisting}</strong>
-            <span>{m.launch.modeExistingDesc}</span>
-          </button>
+        <div className="page-head wide">
+          <div>
+            <h1>{m.launch.title}</h1>
+            <p className="placeholder">{m.launch.subtitle}</p>
+          </div>
+          <div className="head-actions">
+            <button className="choice small" onClick={() => openBrowser('https://play.google.com/console')}>
+              {m.launch.openBrowser}
+            </button>
+            <ApiStatusBar />
+          </div>
+        </div>
+        <div className="wizard wide">
+          <div className="app-picker">
+            {sheets.map((s) => (
+              <button
+                key={s.file}
+                className={`app-chip big ${selected === s.file ? 'active' : ''}`}
+                onClick={() => selectSheet(s.file)}
+              >
+                {s.icon && <img className="chip-app-icon" src={s.icon} alt="" />}
+                {s.appName}
+              </button>
+            ))}
+            <button
+              className={`app-chip big add ${addOpen || sheetForm === 'import' ? 'open' : ''}`}
+              onClick={() => {
+                setAddOpen((v) => !v)
+                setSheetForm('none')
+              }}
+            >
+              + {m.launch.addApp}
+            </button>
+          </div>
+          {addOpen && (
+            <div className="mode-grid slim">
+              <button className="mode-card" onClick={() => setView('new')}>
+                <strong>{m.launch.modeNew}</strong>
+                <span>{m.launch.modeNewDesc}</span>
+              </button>
+              <button
+                className="mode-card"
+                onClick={() => {
+                  setAddOpen(false)
+                  setSheetForm('import')
+                }}
+              >
+                <strong>{m.launch.importApp}</strong>
+                <span>{m.launch.importDesc}</span>
+              </button>
+            </div>
+          )}
+          {sheetForm === 'import' && (
+            <ImportSheetForm onCreated={onSheetCreated} onCancel={() => setSheetForm('none')} />
+          )}
+          {selected && (
+            <AppDashboard
+              file={selected}
+              summary={sheets.find((s) => s.file === selected)}
+              onPulled={() => window.zto.launch.listSheets().then(setSheets)}
+            />
+          )}
         </div>
       </section>
     )
   }
 
-  const isNew = mode === 'new'
-  const iapUnlocked = selected !== null && (!isNew || registered)
+  // 신규 앱 출시 여정 (스텝 위저드)
   let stepNo = 0
   const n = (): number => ++stepNo
 
@@ -718,32 +775,29 @@ export default function LaunchPage(): React.JSX.Element {
     <section>
       <div className="page-head">
         <div>
-          <h1>{isNew ? m.launch.modeNew : m.launch.modeExisting}</h1>
-          <p className="placeholder">{isNew ? m.launch.modeNewDesc : m.launch.modeExistingDesc}</p>
+          <h1>{m.launch.modeNew}</h1>
+          <p className="placeholder">{m.launch.modeNewDesc}</p>
         </div>
-        <button className="choice small nowrap" onClick={() => setMode('none')}>
-          {m.launch.changeMode}
+        <button className="ghost-btn" onClick={() => setView('manage')}>
+          ← {m.launch.title}
         </button>
       </div>
 
       <div className="wizard">
-        {isNew && (
-          <div className="step">
-            <div className="step-head">
-              <span className="step-no">{n()}</span> {m.launch.stepDevAccounts}
-            </div>
-            <div className="rows">
-              <DevAccountRow store="play" state={devAccounts.play} onSet={setDevAccount} />
-              <DevAccountRow store="apple" state={devAccounts.apple} onSet={setDevAccount} />
-            </div>
-            {!bothStoresReady && <p className="step-note">{m.launch.stepDevAccountsNote}</p>}
+        <div className="step">
+          <div className="step-head">
+            <span className="step-no">{n()}</span> {m.launch.stepDevAccounts}
           </div>
-        )}
+          <div className="rows">
+            <DevAccountRow store="play" state={devAccounts.play} onSet={setDevAccount} />
+            <DevAccountRow store="apple" state={devAccounts.apple} onSet={setDevAccount} />
+          </div>
+          {!bothStoresReady && <p className="step-note">{m.launch.stepDevAccountsNote}</p>}
+        </div>
 
         <div className="step">
           <div className="step-head">
-            <span className="step-no">{n()}</span>{' '}
-            {isNew ? m.launch.stepDefineApp : m.launch.stepSelectApp}
+            <span className="step-no">{n()}</span> {m.launch.stepDefineApp}
           </div>
           <div className="sheet-list">
             {sheets.map((s) => (
@@ -760,28 +814,18 @@ export default function LaunchPage(): React.JSX.Element {
                 <span>{m.launch.iapDefined.replace('{n}', String(s.iapCount))}</span>
               </button>
             ))}
-            {sheetForm === 'none' &&
-              (isNew ? (
-                <button className="sheet-card new" onClick={() => setSheetForm('new')}>
-                  <strong>{m.launch.newApp}</strong>
-                </button>
-              ) : (
-                <button className="sheet-card new" onClick={() => setSheetForm('import')}>
-                  <strong>{m.launch.importApp}</strong>
-                </button>
-              ))}
+            {sheetForm === 'none' && (
+              <button className="sheet-card new" onClick={() => setSheetForm('new')}>
+                <strong>{m.launch.newApp}</strong>
+              </button>
+            )}
           </div>
           {sheetForm === 'new' && (
             <NewSheetForm onCreated={onSheetCreated} onCancel={() => setSheetForm('none')} />
           )}
-          {sheetForm === 'import' && (
-            <ImportSheetForm onCreated={onSheetCreated} onCancel={() => setSheetForm('none')} />
-          )}
         </div>
 
-        {!isNew && selected && <LiveIapStatus file={selected} stepNo={n()} />}
-
-        {isNew && selected && (
+        {selected && (
           <div className="step">
             <div className="step-head">
               <span className="step-no">{n()}</span> {m.launch.stepRegister}
@@ -885,8 +929,8 @@ export default function LaunchPage(): React.JSX.Element {
               <span className="step-no">{n()}</span> {m.launch.stepNext}
             </div>
             <ul className="todo-list">
-              {isNew && <li>{m.launch.todoForms}</li>}
-              {isNew && <li>{m.launch.todoBuild}</li>}
+              <li>{m.launch.todoForms}</li>
+              <li>{m.launch.todoBuild}</li>
               <li>{m.launch.todoListing}</li>
               <li>{m.launch.todoChecklist}</li>
             </ul>

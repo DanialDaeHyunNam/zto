@@ -1,0 +1,16 @@
+{
+  "id": "play-target-audience",
+  "platform": "android",
+  "version": "2026-07",
+  "title": "Play 타깃 연령·콘텐츠",
+  "titleEn": "Play Target Audience & Content",
+  "note": "Play 콘솔 '타깃 대상 및 콘텐츠' 섹션 요지. Play는 read/write API가 없어 — ZTO가 답을 기록하고 콘솔 입력을 돕는다. 어린이 대상이면 Families 정책·추가 요건이 붙는다(콘솔 개정 시 이 파일만 갱신). bool=YES/NO.",
+  "questions": [
+    { "id": "targetsChildrenUnder13", "type": "bool", "label": "13세 미만을 타깃으로 하나요?", "labelEn": "Target children under 13?", "help": "어린이를 주 대상으로 설계했다면 예 → Families 정책 적용." },
+    { "id": "targetsTeens", "type": "bool", "label": "청소년(13~17세)을 타깃으로 하나요?", "labelEn": "Target teens (13-17)?", "help": "청소년 연령대를 대상 연령에 포함하나요?" },
+    { "id": "targetsAdults", "type": "bool", "label": "성인(18세 이상)을 타깃으로 하나요?", "labelEn": "Target adults (18+)?", "help": "성인 연령대를 대상 연령에 포함하나요?" },
+    { "id": "appealsToChildren", "type": "bool", "label": "어린이에게 매력적인 요소가 있나요?", "labelEn": "Could appeal to children?", "help": "성인 대상이라도 캐릭터·색감·주제가 어린이를 끌 수 있으면 예(구글이 별도 확인)." },
+    { "id": "containsAds", "type": "bool", "label": "광고를 포함하나요?", "labelEn": "Contains ads?", "help": "앱에 광고가 표시되나요? 어린이 대상이면 광고 SDK도 Families 요건을 지켜야 해요." },
+    { "id": "hasStoreListingForFamilies", "type": "bool", "label": "Google Play 어린이 탭 노출을 원하나요?", "labelEn": "Opt into the 'Kids' tab?", "help": "어린이 대상 앱을 'Google Play에서 어린이 대상' 프로그램에 넣을지." }
+  ]
+}

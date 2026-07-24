@@ -11,18 +11,41 @@ import {
 import { join } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { execFile } from 'child_process'
+import { execFile, spawn, spawnSync } from 'child_process'
+import { homedir } from 'os'
+import { registerBrowserIpc } from './browser'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
   type AccessLogEntry,
   type Account,
+  type AiChatResult,
+  type AiMode,
+  type AiModel,
+  type AiProviderId,
+  type AiProviderStatus,
+  type AiStatus,
+  type ApiStatus,
+  type ApplyResult,
+  type AscVersionRow,
+  type ConsoleAnswers,
+  type Questionnaire,
+  type QuestionnaireMeta,
+  type DashApple,
+  type DashboardData,
+  type DashGoogle,
   type DevAccounts,
   type DevAccountState,
+  type IapSnapshotInfo,
+  type LiveIapProduct,
   type LockState,
+  type MetaListing,
+  type PendingEdit,
+  type PlayReleaseRow,
   type RunResult,
   type SheetIapInfo,
-  type StoreKind
+  type StoreKind,
+  type StoreSnapshotEntry
 } from '../shared/launch-types'
 
 const ANSWERS_DIR = join(app.getAppPath(), 'launch', 'answers')
@@ -110,8 +133,132 @@ function unlinkStoreFromAccount(email: string, storeApp: string): void {
 }
 
 
+// ---------- AI provider (BYO 2방식) — 구독(로컬 CLI spawn) / API 키(키체인). libertas 패턴 ----------
+// Finder로 띄운 Electron은 셸 PATH를 못 물려받아서 흔한 설치 위치로 폴백한다.
+const AI_MODELS: AiModel[] = [
+  { id: 'claude-fable-5', label: 'Fable 5' },
+  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
+]
+
+// provider 구독 = 로컬 CLI (Claude=claude, ChatGPT=codex). 감지 결과 캐시.
+const CLI_CANDIDATES: Record<string, string[]> = {
+  claude: [
+    process.env.ZTO_CLAUDE_BIN ?? '',
+    'claude',
+    join(homedir(), '.claude', 'local', 'claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+    join(homedir(), '.local', 'bin', 'claude')
+  ],
+  codex: [
+    process.env.ZTO_CODEX_BIN ?? '',
+    'codex',
+    '/opt/homebrew/bin/codex',
+    '/usr/local/bin/codex',
+    join(homedir(), '.local', 'bin', 'codex')
+  ]
+}
+const _cli: Record<string, { available: boolean; bin: string | null; version: string }> = {}
+function cliInfo(name: 'claude' | 'codex', fresh = false): { available: boolean; bin: string | null; version: string } {
+  if (_cli[name] && !fresh) return _cli[name]
+  for (const bin of (CLI_CANDIDATES[name] ?? []).filter(Boolean)) {
+    try {
+      const r = spawnSync(bin, ['--version'], { encoding: 'utf8', timeout: 5000 })
+      if (r.status === 0) {
+        _cli[name] = { available: true, bin, version: String(r.stdout || '').match(/[\d.]+/)?.[0] ?? '' }
+        return _cli[name]
+      }
+    } catch {
+      /* 다음 후보 */
+    }
+  }
+  _cli[name] = { available: false, bin: null, version: '' }
+  return _cli[name]
+}
+
+// AI API 키 — 비밀번호와 같은 키체인(safeStorage) 저장, provider별. 계정 비번 파일과 분리.
+const aiKeysFile = (): string => join(app.getPath('userData'), 'zto-ai-keys.json')
+function readAiKeys(): Record<string, string> {
+  try {
+    return JSON.parse(readFileSync(aiKeysFile(), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+function setAiKey(provider: string, key: string): boolean {
+  if (!safeStorage.isEncryptionAvailable()) return false
+  const keys = readAiKeys()
+  if (key) keys[provider] = safeStorage.encryptString(key).toString('base64')
+  else delete keys[provider]
+  writeFileSync(aiKeysFile(), JSON.stringify(keys, null, 2))
+  return true
+}
+
+// provider별 연결 방식·active·model 은 전역 상태에 (키 자체는 키체인)
+interface AiConfig {
+  active: AiProviderId
+  model: string
+  modes: Record<AiProviderId, AiMode>
+}
+function readAiConfig(): AiConfig {
+  const c = (readState().aiConfig as Partial<AiConfig>) ?? {}
+  return {
+    active: c.active ?? 'claude',
+    model: AI_MODELS.some((m) => m.id === c.model) ? (c.model as string) : AI_MODELS[0].id,
+    modes: {
+      claude: c.modes?.claude ?? 'subscription',
+      chatgpt: c.modes?.chatgpt ?? 'subscription',
+      gemini: 'apikey'
+    }
+  }
+}
+function writeAiConfig(patch: Partial<AiConfig>): void {
+  writeState({ ...readState(), aiConfig: { ...readAiConfig(), ...patch } })
+}
+
+function aiStatus(fresh = false): AiStatus {
+  const cfg = readAiConfig()
+  const keys = readAiKeys()
+  const claude = cliInfo('claude', fresh)
+  const codex = cliInfo('codex', fresh)
+  const providers: AiProviderStatus[] = [
+    {
+      id: 'claude',
+      supportsSubscription: true,
+      subscriptionAvailable: claude.available,
+      subscriptionVersion: claude.version,
+      hasKey: !!keys.claude,
+      mode: cfg.modes.claude
+    },
+    {
+      id: 'chatgpt',
+      supportsSubscription: true,
+      subscriptionAvailable: codex.available,
+      subscriptionVersion: codex.version,
+      hasKey: !!keys.chatgpt,
+      mode: cfg.modes.chatgpt
+    },
+    {
+      id: 'gemini',
+      supportsSubscription: false,
+      subscriptionAvailable: false,
+      subscriptionVersion: '',
+      hasKey: !!keys.gemini,
+      mode: 'apikey'
+    }
+  ]
+  return { active: cfg.active, model: cfg.model, models: AI_MODELS, providers }
+}
+
 // ---------- 스토어 실황 조회 헬퍼 ----------
+// 토큰 캐시 — 조회마다 스크립트 스폰(각 ~1초+)을 피한다. 실제 만료(Google 60분·ASC 20분)보다 짧게 잡는다.
+const tokenCache = new Map<string, { tok: string; exp: number }>()
+
 async function googleTokenFor(saPath: string): Promise<string | null> {
+  const hit = tokenCache.get('g:' + saPath)
+  if (hit && Date.now() < hit.exp) return hit.tok
   const tokenScript = join(app.getAppPath(), 'launch', 'scripts', 'google', 'token.js')
   return await new Promise((resolve) => {
     execFile(
@@ -121,6 +268,7 @@ async function googleTokenFor(saPath: string): Promise<string | null> {
       (_err, stdout) => {
         try {
           const j = JSON.parse(stdout)
+          if (j.ok) tokenCache.set('g:' + saPath, { tok: j.access_token, exp: Date.now() + 45 * 60_000 })
           resolve(j.ok ? j.access_token : null)
         } catch {
           resolve(null)
@@ -131,6 +279,8 @@ async function googleTokenFor(saPath: string): Promise<string | null> {
 }
 
 async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: string }): Promise<string | null> {
+  const hit = tokenCache.get('a:' + asc.keyId)
+  if (hit && Date.now() < hit.exp) return hit.tok
   const script = join(app.getAppPath(), 'launch', 'scripts', 'apple', 'asc-token.js')
   return await new Promise((resolve) => {
     execFile(
@@ -140,6 +290,7 @@ async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: stri
       (_err, stdout) => {
         try {
           const j = JSON.parse(stdout)
+          if (j.ok) tokenCache.set('a:' + asc.keyId, { tok: j.token, exp: Date.now() + 15 * 60_000 })
           resolve(j.ok ? j.token : null)
         } catch {
           resolve(null)
@@ -147,6 +298,719 @@ async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: stri
       }
     )
   })
+}
+
+// 200인데 빈 본문을 주는 스토어 API 대응 (예: one-time product 없는 앱의 oneTimeProducts, 없는 이미지 타입)
+async function jsonOrEmpty(r: Response): Promise<Record<string, unknown>> {
+  const t = await r.text()
+  if (!t) return {}
+  try {
+    return JSON.parse(t)
+  } catch {
+    return {}
+  }
+}
+
+// ---------- §4.5 앱 대시보드 pull (P1 읽기 전용) ----------
+
+// Play — 트랙·릴리스·국가별 메타는 edit 트랜잭션 안에서만 읽힌다: 생성→읽기→삭제 패턴
+async function pullGoogleDashboard(sheet: {
+  app: { packageName: string }
+  credentials?: { googleSa?: string }
+}): Promise<{ data: DashGoogle | null; error?: string }> {
+  const saPath = resolveGoogleSa(sheet)
+  if (!saPath) return { data: null, error: 'no-key' }
+  const tok = await googleTokenFor(saPath)
+  if (!tok) return { data: null, error: 'token' }
+  const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
+  const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  const editR = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
+  if (!editR.ok) return { data: null, error: `HTTP ${editR.status}` }
+  const editId = ((await editR.json()) as { id?: string }).id
+  if (!editId) return { data: null, error: 'edit' }
+
+  const releases: PlayReleaseRow[] = []
+  let listings: MetaListing[] = []
+  let details = { defaultLanguage: '', contactEmail: '', contactWebsite: '' }
+  let closedStarted = false
+  const images: { type: string; urls: string[] }[] = []
+  try {
+    const [tracksR, listingsR, detailsR] = await Promise.all([
+      fetch(`${base}/edits/${editId}/tracks`, { headers }),
+      fetch(`${base}/edits/${editId}/listings`, { headers }),
+      fetch(`${base}/edits/${editId}/details`, { headers })
+    ])
+    if (tracksR.ok) {
+      interface GRelease {
+        status?: string
+        name?: string
+        versionCodes?: string[]
+        releaseNotes?: { language?: string; text?: string }[]
+      }
+      const tracksJ = (await jsonOrEmpty(tracksR)) as {
+        tracks?: { track?: string; releases?: GRelease[] }[]
+      }
+      for (const t of tracksJ.tracks ?? []) {
+        const track = t.track ?? ''
+        for (const r of t.releases ?? []) {
+          releases.push({
+            track,
+            status: r.status ?? '',
+            name: r.name ?? '',
+            versionCodes: r.versionCodes ?? [],
+            notes: (r.releaseNotes ?? [])
+              .map((x) => ({ locale: x.language ?? '', text: x.text ?? '' }))
+              .filter((x) => x.locale)
+          })
+        }
+        // 클로즈드 테스트 "시작" = closed 계열 트랙(internal·beta·production이 아닌 전부)에 릴리스 존재 (SPEC §4.5 ⑨)
+        if (!['internal', 'beta', 'production'].includes(track) && (t.releases ?? []).length > 0) {
+          closedStarted = true
+        }
+      }
+    }
+    if (listingsR.ok) {
+      const lJ = (await jsonOrEmpty(listingsR)) as {
+        listings?: {
+          language?: string
+          title?: string
+          shortDescription?: string
+          fullDescription?: string
+        }[]
+      }
+      listings = (lJ.listings ?? [])
+        .map((l) => ({
+          locale: l.language ?? '',
+          title: l.title ?? '',
+          short: l.shortDescription ?? '',
+          full: l.fullDescription ?? '',
+          promo: '',
+          keywords: ''
+        }))
+        .filter((l) => l.locale)
+    }
+    if (detailsR.ok) {
+      const dJ = (await jsonOrEmpty(detailsR)) as {
+        defaultLanguage?: string
+        contactEmail?: string
+        contactWebsite?: string
+      }
+      details = {
+        defaultLanguage: dJ.defaultLanguage ?? '',
+        contactEmail: dJ.contactEmail ?? '',
+        contactWebsite: dJ.contactWebsite ?? ''
+      }
+    }
+    // 자산(아이콘·피처그래픽·스크린샷) — 대표 로케일 1개만, edit 트랜잭션 안에서만 읽힌다
+    const lang = (listings.find((l) => l.locale.startsWith('ko')) ?? listings[0])?.locale
+    if (lang) {
+      const types = ['icon', 'featureGraphic', 'phoneScreenshots']
+      const imgRs = await Promise.all(
+        types.map((t) => fetch(`${base}/edits/${editId}/listings/${lang}/${t}`, { headers }))
+      )
+      for (let i = 0; i < types.length; i++) {
+        if (!imgRs[i].ok) continue
+        const j = (await jsonOrEmpty(imgRs[i])) as { images?: { url?: string }[] }
+        const urls = (j.images ?? []).map((im) => im.url ?? '').filter(Boolean)
+        if (urls.length > 0) images.push({ type: types[i], urls })
+      }
+    }
+  } finally {
+    fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+  }
+
+  const iap: LiveIapProduct[] = []
+  const iapR = await fetch(`${base}/oneTimeProducts`, { headers })
+  if (iapR.ok) {
+    interface GConfig {
+      regionCode?: string
+      price?: { units?: string; currencyCode?: string }
+    }
+    interface GProduct {
+      productId?: string
+      listings?: { title?: string }[]
+      purchaseOptions?: { state?: string; regionalPricingAndAvailabilityConfigs?: GConfig[] }[]
+    }
+    const j = (await jsonOrEmpty(iapR)) as { oneTimeProducts?: GProduct[] }
+    for (const p of j.oneTimeProducts ?? []) {
+      const opt = p.purchaseOptions?.[0]
+      const cfgs = opt?.regionalPricingAndAvailabilityConfigs ?? []
+      const cfg = cfgs.find((c) => c.regionCode === 'KR') ?? cfgs[0]
+      iap.push({
+        id: p.productId ?? '',
+        title: p.listings?.[0]?.title ?? '',
+        state: opt?.state ?? '',
+        priceLabel: cfg?.price?.units
+          ? `${cfg.price.units} ${cfg.price.currencyCode ?? ''} · ${cfg.regionCode ?? ''}`
+          : undefined
+      })
+    }
+  }
+  return { data: { releases, listings, details, images, iap, closedStarted } }
+}
+
+// ASC — 버전 이력·릴리스 노트·로케일·카테고리·등급·IAP
+async function pullAppleDashboard(sheet: {
+  app: { bundleId: string }
+  credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+}): Promise<{ data: DashApple | null; error?: string }> {
+  const asc = resolveAsc(sheet)
+  if (!asc) return { data: null, error: 'no-key' }
+  const tok = await ascTokenFor(asc)
+  if (!tok) return { data: null, error: 'token' }
+  const A = 'https://api.appstoreconnect.apple.com/v1'
+  const headers = { Authorization: 'Bearer ' + tok }
+
+  const appsR = await fetch(
+    `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+    { headers }
+  )
+  if (!appsR.ok) return { data: null, error: `HTTP ${appsR.status}` }
+  const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+  if (!appId) return { data: null, error: 'app-not-found' }
+
+  const [versR, infoR, iapR] = await Promise.all([
+    fetch(
+      `${A}/apps/${appId}/appStoreVersions?limit=10&fields%5BappStoreVersions%5D=versionString,appStoreState,createdDate`,
+      { headers }
+    ),
+    fetch(`${A}/apps/${appId}/appInfos?include=primaryCategory`, { headers }),
+    fetch(`${A}/apps/${appId}/inAppPurchasesV2?limit=50`, { headers })
+  ])
+
+  const versions: AscVersionRow[] = []
+  const screenshots: { type: string; urls: string[] }[] = []
+  // 최신 버전의 로케일별 설명·프로모션·키워드·릴리스 노트 (메타 병합용)
+  const verLocs: { locale: string; whatsNew: string; full: string; promo: string; keywords: string }[] = []
+  if (versR.ok) {
+    const vJ = (await versR.json()) as {
+      data?: {
+        id: string
+        attributes?: { versionString?: string; appStoreState?: string; createdDate?: string }
+      }[]
+    }
+    const rows = (vJ.data ?? []).map((d) => ({
+      id: d.id,
+      version: d.attributes?.versionString ?? '',
+      state: d.attributes?.appStoreState ?? '',
+      createdAt: d.attributes?.createdDate ?? ''
+    }))
+    rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    // 릴리스 노트·로케일은 최근 3개 버전만 조회 (요청 수 절약) — 최신 버전만 설명·키워드까지
+    const withNotes = await Promise.all(
+      rows.slice(0, 3).map(async (row, i) => {
+        const fields =
+          i === 0 ? 'locale,whatsNew,description,promotionalText,keywords' : 'locale,whatsNew'
+        const locR = await fetch(
+          `${A}/appStoreVersions/${row.id}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=${fields}`,
+          { headers }
+        )
+        if (!locR.ok) return { ...row, note: '', repLocId: '' }
+        const locJ = (await locR.json()) as {
+          data?: {
+            id: string
+            attributes?: {
+              locale?: string
+              whatsNew?: string
+              description?: string
+              promotionalText?: string
+              keywords?: string
+            }
+          }[]
+        }
+        const items = locJ.data ?? []
+        if (i === 0) {
+          for (const l of items) {
+            if (l.attributes?.locale) {
+              verLocs.push({
+                locale: l.attributes.locale,
+                whatsNew: l.attributes.whatsNew ?? '',
+                full: l.attributes.description ?? '',
+                promo: l.attributes.promotionalText ?? '',
+                keywords: l.attributes.keywords ?? ''
+              })
+            }
+          }
+        }
+        const rep = items.find((l) => l.attributes?.locale?.startsWith('ko')) ?? items[0]
+        return { ...row, note: rep?.attributes?.whatsNew ?? '', repLocId: rep?.id ?? '' }
+      })
+    )
+    // 스크린샷 — 최신 버전의 대표 로케일에 올라간 세트(디스플레이 타입별)
+    const repLocId = withNotes[0]?.repLocId
+    if (repLocId) {
+      const setsR = await fetch(
+        `${A}/appStoreVersionLocalizations/${repLocId}/appScreenshotSets?include=appScreenshots`,
+        { headers }
+      )
+      if (setsR.ok) {
+        interface ShotAsset {
+          templateUrl?: string
+          width?: number
+          height?: number
+        }
+        const setsJ = (await setsR.json()) as {
+          data?: {
+            attributes?: { screenshotDisplayType?: string }
+            relationships?: { appScreenshots?: { data?: { id: string }[] } }
+          }[]
+          included?: { id: string; attributes?: { imageAsset?: ShotAsset } }[]
+        }
+        const assetById = new Map(
+          (setsJ.included ?? []).map((inc) => [inc.id, inc.attributes?.imageAsset])
+        )
+        const thumbUrl = (asset?: ShotAsset): string => {
+          if (!asset?.templateUrl || !asset.width || !asset.height) return ''
+          const h = 400
+          const w = Math.round((asset.width * h) / asset.height)
+          return asset.templateUrl
+            .replace('{w}', String(w))
+            .replace('{h}', String(h))
+            .replace('{f}', 'png')
+        }
+        for (const set of setsJ.data ?? []) {
+          const urls = (set.relationships?.appScreenshots?.data ?? [])
+            .map((s) => thumbUrl(assetById.get(s.id)))
+            .filter(Boolean)
+          if (urls.length > 0) {
+            screenshots.push({ type: set.attributes?.screenshotDisplayType ?? '', urls })
+          }
+        }
+      }
+    }
+    for (const r of withNotes) {
+      versions.push({ version: r.version, state: r.state, createdAt: r.createdAt, note: r.note })
+    }
+    for (const r of rows.slice(3)) {
+      versions.push({ version: r.version, state: r.state, createdAt: r.createdAt, note: '' })
+    }
+  }
+
+  let category = ''
+  let ageRating = ''
+  const meta: MetaListing[] = []
+  if (infoR.ok) {
+    const iJ = (await infoR.json()) as {
+      data?: {
+        id: string
+        attributes?: { appStoreAgeRating?: string }
+        relationships?: { primaryCategory?: { data?: { id?: string } } }
+      }[]
+    }
+    const infos = iJ.data ?? []
+    const info = infos.find((d) => d.relationships?.primaryCategory?.data?.id) ?? infos[0]
+    category = info?.relationships?.primaryCategory?.data?.id ?? ''
+    ageRating = info?.attributes?.appStoreAgeRating ?? ''
+    // 앱 이름·부제 — appInfoLocalizations (로케일별)
+    if (info?.id) {
+      const metaR = await fetch(
+        `${A}/appInfos/${info.id}/appInfoLocalizations?fields%5BappInfoLocalizations%5D=locale,name,subtitle`,
+        { headers }
+      )
+      if (metaR.ok) {
+        const mJ = (await metaR.json()) as {
+          data?: { attributes?: { locale?: string; name?: string; subtitle?: string } }[]
+        }
+        for (const d of mJ.data ?? []) {
+          if (d.attributes?.locale) {
+            meta.push({
+              locale: d.attributes.locale,
+              title: d.attributes.name ?? '',
+              short: d.attributes.subtitle ?? '',
+              full: '',
+              promo: '',
+              keywords: ''
+            })
+          }
+        }
+      }
+    }
+  }
+
+  const iap: LiveIapProduct[] = []
+  if (iapR.ok) {
+    const j = (await iapR.json()) as {
+      data?: { attributes?: { productId?: string; name?: string; state?: string } }[]
+    }
+    for (const d of j.data ?? []) {
+      iap.push({
+        id: d.attributes?.productId ?? '',
+        title: d.attributes?.name ?? '',
+        state: d.attributes?.state ?? ''
+      })
+    }
+  }
+  // 최신 버전 로컬라이제이션(설명·프로모션·키워드)을 로케일별로 병합
+  for (const v of verLocs) {
+    const row = meta.find((l) => l.locale === v.locale)
+    if (row) {
+      row.full = v.full
+      row.promo = v.promo
+      row.keywords = v.keywords
+    } else {
+      meta.push({
+        locale: v.locale,
+        title: '',
+        short: '',
+        full: v.full,
+        promo: v.promo,
+        keywords: v.keywords
+      })
+    }
+  }
+  const releaseNotes = verLocs
+    .map((v) => ({ locale: v.locale, text: v.whatsNew }))
+    .filter((v) => v.text)
+
+  return { data: { appId, versions, meta, releaseNotes, category, ageRating, screenshots, iap } }
+}
+
+// ---------- §4.5 P2 편집 적용 (실제 스토어 write) ----------
+// Play는 한 edit 트랜잭션에 리스팅 변경을 모아 :commit(원자적) / ASC는 리소스별 PATCH(부분 성공 가능)
+
+// Play 스토어 리스팅 메타(title·short·full)를 한 edit에 모아 원자적으로 반영.
+// 릴리스 노트는 라이브 트랙 릴리스를 수정해야 해(심사·롤아웃 위험) 이번 단계 제외 — 콘솔 안내.
+async function applyPlayEdits(
+  sheet: { app: { packageName: string }; credentials?: { googleSa?: string } },
+  edits: PendingEdit[]
+): Promise<ApplyResult[]> {
+  const ko = appLocale === 'ko'
+  const applied = (list: PendingEdit[]): ApplyResult[] =>
+    list.map((e) => ({ id: e.id, ok: true, message: ko ? '반영됨' : 'Applied' }))
+  const errored = (list: PendingEdit[], msg: string): ApplyResult[] =>
+    list.map((e) => ({ id: e.id, ok: false, message: msg }))
+
+  // 릴리스 노트는 라이브 트랙을 건드리므로 보류 (iOS는 초안 버전만 편집해 안전 — 비대칭 의도됨)
+  const noteResults: ApplyResult[] = errored(
+    edits.filter((e) => e.section === 'releaseNotes'),
+    ko ? '릴리스 노트는 콘솔에서 (트랙 릴리스 편집)' : 'Release notes: use console (track release)'
+  )
+  const metaEdits = edits.filter((e) => e.section === 'meta')
+  if (metaEdits.length === 0) return noteResults
+
+  const saPath = resolveGoogleSa(sheet)
+  if (!saPath) return [...noteResults, ...errored(metaEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
+  const tok = await googleTokenFor(saPath)
+  if (!tok) return [...noteResults, ...errored(metaEdits, ko ? '토큰 발급 실패' : 'Token failed')]
+  const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
+  const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  const editR = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
+  if (!editR.ok) return [...noteResults, ...errored(metaEdits, `HTTP ${editR.status}`)]
+  const editId = ((await editR.json()) as { id?: string }).id
+  if (!editId) return [...noteResults, ...errored(metaEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
+
+  // 로케일별로 현재 리스팅을 읽어 변경 필드만 병합 후 전체 PUT — 다른 필드 유실 방지
+  const byLocale = new Map<string, PendingEdit[]>()
+  for (const e of metaEdits) {
+    const arr = byLocale.get(e.locale) ?? []
+    arr.push(e)
+    byLocale.set(e.locale, arr)
+  }
+  const writeErr = new Map<string, string>() // id → 실패 사유 (없으면 성공)
+  try {
+    for (const [locale, group] of byLocale) {
+      const curR = await fetch(`${base}/edits/${editId}/listings/${locale}`, { headers })
+      const cur = curR.ok ? await jsonOrEmpty(curR) : {}
+      const body: Record<string, unknown> = {
+        language: locale,
+        title: (cur.title as string) ?? '',
+        shortDescription: (cur.shortDescription as string) ?? '',
+        fullDescription: (cur.fullDescription as string) ?? ''
+      }
+      if (cur.video) body.video = cur.video
+      for (const e of group) {
+        if (e.field === 'title') body.title = e.newValue
+        else if (e.field === 'short') body.shortDescription = e.newValue
+        else if (e.field === 'full') body.fullDescription = e.newValue
+      }
+      const putR = await fetch(`${base}/edits/${editId}/listings/${locale}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body)
+      })
+      if (!putR.ok) for (const e of group) writeErr.set(e.id, `HTTP ${putR.status}`)
+    }
+
+    if (writeErr.size > 0) {
+      // 원자적 — 하나라도 실패하면 edit 폐기(전체 롤백)
+      await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+      return [
+        ...noteResults,
+        ...metaEdits.map((e) => ({
+          id: e.id,
+          ok: false,
+          message: writeErr.get(e.id) ?? (ko ? '다른 항목 실패로 함께 롤백됨' : 'Rolled back (atomic)')
+        }))
+      ]
+    }
+    const commitR = await fetch(`${base}/edits/${editId}:commit`, { method: 'POST', headers })
+    if (!commitR.ok) {
+      return [...noteResults, ...errored(metaEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
+    }
+    return [...noteResults, ...applied(metaEdits)]
+  } catch (err) {
+    await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+    return [...noteResults, ...errored(metaEdits, String(err).slice(0, 120))]
+  }
+}
+
+// ASC 에러 본문(JSON:API)에서 사람이 읽을 사유 뽑기
+async function ascErrorMsg(r: Response): Promise<string> {
+  try {
+    const j = (await r.json()) as { errors?: { detail?: string; title?: string }[] }
+    const first = j.errors?.[0]
+    if (first?.detail) return `${r.status}: ${first.detail}`.slice(0, 160)
+    if (first?.title) return `${r.status}: ${first.title}`.slice(0, 160)
+  } catch {
+    /* 본문 없음 */
+  }
+  return `HTTP ${r.status}`
+}
+
+// ASC 버전을 편집할 수 있는 상태(라이브 READY_FOR_SALE 등은 제외)
+const ASC_EDITABLE_VERSION_STATES = [
+  'PREPARE_FOR_SUBMISSION',
+  'DEVELOPER_REJECTED',
+  'REJECTED',
+  'METADATA_REJECTED',
+  'INVALID_BINARY'
+]
+
+// ASC 메타를 리소스별 PATCH(부분 성공 가능). name·subtitle → appInfoLocalizations,
+// description·promotionalText·keywords·whatsNew → 편집 가능한 최신 버전의 appStoreVersionLocalizations.
+// 라이브 버전은 건드리지 않는다(편집 가능한 상태의 버전만 대상).
+async function applyAscEdits(
+  sheet: {
+    app: { bundleId: string }
+    credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+  },
+  edits: PendingEdit[]
+): Promise<ApplyResult[]> {
+  const ko = appLocale === 'ko'
+  const fail = (msg: string): ApplyResult[] => edits.map((e) => ({ id: e.id, ok: false, message: msg }))
+  const asc = resolveAsc(sheet)
+  if (!asc) return fail(ko ? 'ASC 인증 키 없음' : 'No ASC key')
+  const tok = await ascTokenFor(asc)
+  if (!tok) return fail(ko ? '토큰 발급 실패' : 'Token failed')
+  const A = 'https://api.appstoreconnect.apple.com/v1'
+  const headers = { Authorization: 'Bearer ' + tok }
+  const jsonHeaders = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  const appsR = await fetch(
+    `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+    { headers }
+  )
+  if (!appsR.ok) return fail(`HTTP ${appsR.status}`)
+  const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+  if (!appId) return fail(ko ? '앱 없음' : 'App not found')
+
+  const APP_INFO_FIELDS: Record<string, string> = { name: 'name', subtitle: 'subtitle' }
+  const VERSION_FIELDS: Record<string, string> = {
+    description: 'description',
+    promotionalText: 'promotionalText',
+    keywords: 'keywords',
+    whatsNew: 'whatsNew'
+  }
+  const results: ApplyResult[] = []
+  const appInfoEdits = edits.filter((e) => e.field in APP_INFO_FIELDS)
+  const versionEdits = edits.filter((e) => e.field in VERSION_FIELDS)
+  for (const e of edits) {
+    if (!(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
+      results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
+    }
+  }
+
+  // 로케일별 리소스 id로 묶어 한 로케일당 PATCH 한 번(같은 로케일 여러 필드 병합)
+  const applyLocalized = async (
+    group: PendingEdit[],
+    localeToId: Map<string, string>,
+    resourceType: string,
+    fieldMap: Record<string, string>,
+    missingMsg: string
+  ): Promise<void> => {
+    const byLocale = new Map<string, PendingEdit[]>()
+    for (const e of group) {
+      const arr = byLocale.get(e.locale) ?? []
+      arr.push(e)
+      byLocale.set(e.locale, arr)
+    }
+    for (const [locale, es] of byLocale) {
+      const id = localeToId.get(locale)
+      if (!id) {
+        for (const e of es) results.push({ id: e.id, ok: false, message: missingMsg })
+        continue
+      }
+      const attributes: Record<string, string> = {}
+      for (const e of es) attributes[fieldMap[e.field]] = e.newValue
+      const r = await fetch(`${A}/${resourceType}/${id}`, {
+        method: 'PATCH',
+        headers: jsonHeaders,
+        body: JSON.stringify({ data: { type: resourceType, id, attributes } })
+      })
+      const message = r.ok ? (ko ? '반영됨' : 'Applied') : await ascErrorMsg(r)
+      for (const e of es) results.push({ id: e.id, ok: r.ok, message })
+    }
+  }
+
+  // ---- appInfo 레벨 (name·subtitle) ----
+  if (appInfoEdits.length) {
+    const infoR = await fetch(
+      `${A}/apps/${appId}/appInfos?fields%5BappInfos%5D=appStoreState,state`,
+      { headers }
+    )
+    if (!infoR.ok) {
+      for (const e of appInfoEdits) results.push({ id: e.id, ok: false, message: `HTTP ${infoR.status}` })
+    } else {
+      const iJ = (await infoR.json()) as {
+        data?: { id: string; attributes?: { appStoreState?: string; state?: string } }[]
+      }
+      const infos = iJ.data ?? []
+      // 편집 가능한 appInfo — 라이브(READY_FOR_SALE)가 아닌 것 우선, 없으면 첫 항목
+      const editable =
+        infos.find((d) => {
+          const s = d.attributes?.state ?? d.attributes?.appStoreState ?? ''
+          return s && s !== 'READY_FOR_SALE'
+        }) ?? infos[0]
+      if (!editable) {
+        for (const e of appInfoEdits)
+          results.push({ id: e.id, ok: false, message: ko ? '편집 가능한 앱 정보 없음' : 'No editable app info' })
+      } else {
+        const locMap = new Map<string, string>()
+        const locR = await fetch(
+          `${A}/appInfos/${editable.id}/appInfoLocalizations?fields%5BappInfoLocalizations%5D=locale&limit=50`,
+          { headers }
+        )
+        if (locR.ok) {
+          const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
+          for (const d of lJ.data ?? []) if (d.attributes?.locale) locMap.set(d.attributes.locale, d.id)
+        }
+        await applyLocalized(
+          appInfoEdits,
+          locMap,
+          'appInfoLocalizations',
+          APP_INFO_FIELDS,
+          ko ? '해당 로케일 없음' : 'No such locale'
+        )
+      }
+    }
+  }
+
+  // ---- version 레벨 (description·promotionalText·keywords·whatsNew) ----
+  if (versionEdits.length) {
+    const versR = await fetch(
+      `${A}/apps/${appId}/appStoreVersions?limit=10&fields%5BappStoreVersions%5D=versionString,appStoreState,createdDate`,
+      { headers }
+    )
+    if (!versR.ok) {
+      for (const e of versionEdits) results.push({ id: e.id, ok: false, message: `HTTP ${versR.status}` })
+    } else {
+      const vJ = (await versR.json()) as {
+        data?: { id: string; attributes?: { appStoreState?: string; createdDate?: string } }[]
+      }
+      const rows = (vJ.data ?? []).map((d) => ({
+        id: d.id,
+        state: d.attributes?.appStoreState ?? '',
+        createdAt: d.attributes?.createdDate ?? ''
+      }))
+      rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const editable = rows.find((r) => ASC_EDITABLE_VERSION_STATES.includes(r.state))
+      if (!editable) {
+        for (const e of versionEdits)
+          results.push({
+            id: e.id,
+            ok: false,
+            message: ko ? '편집 가능한 버전 없음 (콘솔에서 새 버전 준비)' : 'No editable version (prepare one in console)'
+          })
+      } else {
+        const locMap = new Map<string, string>()
+        const locR = await fetch(
+          `${A}/appStoreVersions/${editable.id}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=locale&limit=50`,
+          { headers }
+        )
+        if (locR.ok) {
+          const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
+          for (const d of lJ.data ?? []) if (d.attributes?.locale) locMap.set(d.attributes.locale, d.id)
+        }
+        await applyLocalized(
+          versionEdits,
+          locMap,
+          'appStoreVersionLocalizations',
+          VERSION_FIELDS,
+          ko ? '해당 로케일 없음' : 'No such locale'
+        )
+      }
+    }
+  }
+
+  return results
+}
+
+// 대시보드 결과 캐시 — 진입 즉시 마지막 실황을 보여주고 백그라운드로 갱신한다
+const dashCacheFile = (): string => join(app.getPath('userData'), 'zto-dashboard-cache.json')
+
+function readDashCache(): Record<string, DashboardData> {
+  try {
+    return JSON.parse(readFileSync(dashCacheFile(), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+// 스토어 스냅샷 히스토리 — 메타·자산·IAP 전 섹션. 내용이 같으면 confirmedAt만 갱신, 다르면 새 항목 (이력 생성)
+const storeSnapshotsFile = (): string => join(app.getPath('userData'), 'zto-store-snapshots.json')
+
+function readStoreSnapshots(): Record<string, StoreSnapshotEntry[]> {
+  try {
+    return JSON.parse(readFileSync(storeSnapshotsFile(), 'utf8'))
+  } catch {
+    return {}
+  }
+}
+
+function recordStoreSnapshot(
+  file: string,
+  google: StoreSnapshotEntry['google'],
+  apple: StoreSnapshotEntry['apple']
+): IapSnapshotInfo | null {
+  const all = readStoreSnapshots()
+  const entries = all[file] ?? []
+  const last = entries[entries.length - 1]
+  if (!google && !apple) {
+    // 양쪽 다 조회 실패 — 히스토리는 건드리지 않고 마지막 정보만 반환
+    return last
+      ? { count: entries.length, createdAt: last.createdAt, confirmedAt: last.confirmedAt, changed: false }
+      : null
+  }
+  const sortIap = (iap: LiveIapProduct[]): LiveIapProduct[] =>
+    [...iap].sort((a, b) => a.id.localeCompare(b.id))
+  const sortMeta = (meta: MetaListing[]): MetaListing[] =>
+    [...meta].sort((a, b) => a.locale.localeCompare(b.locale))
+  const data = {
+    google: google && {
+      listings: sortMeta(google.listings),
+      images: google.images,
+      iap: sortIap(google.iap)
+    },
+    apple: apple && {
+      meta: sortMeta(apple.meta),
+      screenshots: apple.screenshots,
+      iap: sortIap(apple.iap)
+    }
+  }
+  const now = new Date().toISOString()
+  let changed = false
+  if (last && JSON.stringify({ google: last.google, apple: last.apple }) === JSON.stringify(data)) {
+    last.confirmedAt = now
+  } else {
+    changed = !!last
+    entries.push({ createdAt: now, confirmedAt: now, ...data })
+  }
+  all[file] = entries.slice(-100)
+  writeFileSync(storeSnapshotsFile(), JSON.stringify(all, null, 2))
+  const cur = entries[entries.length - 1]
+  return { count: entries.length, createdAt: cur.createdAt, confirmedAt: cur.confirmedAt, changed }
 }
 
 function firstAscCreds(): { keyPath: string; keyId: string; issuerId: string } | null {
@@ -161,6 +1025,39 @@ function firstAscCreds(): { keyPath: string; keyId: string; issuerId: string } |
     }
   }
   return null
+}
+
+// 자격증명은 앱이 아니라 브랜드/계정 단위로 하나 — 마지막 사용 SA, 없으면 시트에서 첫 유효 SA
+function firstGoogleSa(): string | null {
+  const last = readState().lastGoogleSa as string
+  if (last && existsSync(last)) return last
+  if (!existsSync(ANSWERS_DIR)) return null
+  for (const f of readdirSync(ANSWERS_DIR).filter((x) => x.endsWith('.json') && !x.startsWith('_'))) {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, f), 'utf8'))
+      const sa = sheet.credentials?.googleSa
+      if (sa && existsSync(sa)) return sa
+    } catch {
+      /* skip */
+    }
+  }
+  return null
+}
+
+// 자격증명은 앱이 아니라 계정(브랜드) 단위 하나 — 시트에 자기 것이 있으면 우선, 없으면 계정의 것을 쓴다.
+// (Play SA·ASC 키의 접근 범위가 어떤 앱을 볼 수 있는지 결정한다. 예: ASC로 가져온 앱은 그 ASC 키로 조회)
+function resolveGoogleSa(sheet: { credentials?: { googleSa?: string } }): string | null {
+  const own = sheet.credentials?.googleSa
+  if (own && existsSync(own)) return own
+  return firstGoogleSa()
+}
+function resolveAsc(sheet: {
+  credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+}): { keyPath: string; keyId: string; issuerId: string } | null {
+  const a = sheet.credentials?.asc
+  if (a?.keyPath && existsSync(a.keyPath) && a.keyId && a.issuerId)
+    return { keyPath: a.keyPath, keyId: a.keyId, issuerId: a.issuerId }
+  return firstAscCreds()
 }
 
 interface SheetSummary {
@@ -341,6 +1238,9 @@ function decryptSecret(email: string, appId: string): string | null {
   return safeStorage.decryptString(Buffer.from(record.v, 'base64'))
 }
 
+// ZTO 브라우저(WebContentsView)를 붙일 호스트 창 — IPC 핸들러가 참조 (모듈 스코프)
+let browserHostWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   // 지난 실행의 창 크기·위치 복원
   const saved = readState().windowBounds as
@@ -360,6 +1260,11 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  browserHostWindow = mainWindow
+  mainWindow.on('closed', () => {
+    browserHostWindow = null
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -393,9 +1298,146 @@ app.whenReady().then(() => {
   powerMonitor.on('suspend', lockSecrets)
 
   ipcMain.handle('ping', () => 'pong')
+  // #4 ZTO 자체 브라우저 — WebContentsView 임베드·네비게이트·eval/CDP 제어 (browser.ts)
+  registerBrowserIpc(() => browserHostWindow)
   ipcMain.handle('app:setLocale', (_e, locale: 'ko' | 'en'): void => {
     appLocale = locale
+    writeState({ ...readState(), locale })
   })
+  ipcMain.handle('app:getLocale', (): 'ko' | 'en' => (readState().locale as 'ko' | 'en') ?? 'ko')
+  // AI provider — 구독(CLI 감지)/API키(키체인) 상태 + active·mode·model 설정
+  ipcMain.handle('ai:status', (_e, fresh?: boolean): AiStatus => aiStatus(fresh))
+  ipcMain.handle('ai:setModel', (_e, model: string): void => {
+    if (AI_MODELS.some((m) => m.id === model)) writeAiConfig({ model })
+  })
+  ipcMain.handle('ai:setActive', (_e, provider: AiProviderId): void => {
+    writeAiConfig({ active: provider })
+  })
+  ipcMain.handle('ai:setMode', (_e, provider: AiProviderId, mode: AiMode): void => {
+    if (provider === 'gemini') return // gemini는 API키 전용
+    writeAiConfig({ modes: { ...readAiConfig().modes, [provider]: mode } })
+  })
+  // 키 저장/삭제 — 첫 저장 무인증(등록 마찰↓), 값 비우면 삭제. 화면 표시는 없음(저장 여부만)
+  ipcMain.handle('ai:setKey', (_e, provider: AiProviderId, key: string): boolean =>
+    setAiKey(provider, key)
+  )
+  // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
+  // 이미지가 있으면 stream-json 입력으로 멀티모달(실증 확인) — 없으면 가벼운 --output-format json.
+  ipcMain.handle(
+    'ai:chat',
+    async (
+      _e,
+      prompt: string,
+      opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
+    ): Promise<AiChatResult> => {
+      const cfg = readAiConfig()
+      const provider = cfg.active
+      const mode = cfg.modes[provider]
+      if (mode === 'subscription' && provider === 'claude') {
+        const info = cliInfo('claude')
+        if (!info.available || !info.bin) return { ok: false, text: '', error: 'claude-cli-missing' }
+        const bin = info.bin
+        const images = opts?.images ?? []
+
+        // 텍스트만 — 검증된 가벼운 경로
+        if (images.length === 0) {
+          const args = ['-p', prompt, '--output-format', 'json', '--model', cfg.model]
+          if (opts?.resume) args.push('--resume', opts.resume)
+          return await new Promise<AiChatResult>((resolve) => {
+            execFile(
+              bin,
+              args,
+              { cwd: app.getPath('userData'), timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
+              (err, stdout) => {
+                try {
+                  const j = JSON.parse(stdout) as {
+                    result?: string
+                    session_id?: string
+                    is_error?: boolean
+                  }
+                  resolve({ ok: !j.is_error, text: j.result ?? '', sessionId: j.session_id })
+                } catch {
+                  resolve({ ok: false, text: '', error: err ? String(err).slice(0, 300) : 'parse' })
+                }
+              }
+            )
+          })
+        }
+
+        // 멀티모달 — stream-json 입력으로 이미지 content 블록을 stdin에 넣는다 (--verbose 필수)
+        const content = [
+          { type: 'text', text: prompt },
+          ...images.map((im) => ({
+            type: 'image',
+            source: { type: 'base64', media_type: im.mediaType, data: im.data }
+          }))
+        ]
+        const msg = JSON.stringify({ type: 'user', message: { role: 'user', content } })
+        const args = [
+          '-p',
+          '--input-format',
+          'stream-json',
+          '--output-format',
+          'stream-json',
+          '--verbose',
+          '--model',
+          cfg.model
+        ]
+        if (opts?.resume) args.push('--resume', opts.resume)
+        return await new Promise<AiChatResult>((resolve) => {
+          const child = spawn(bin, args, { cwd: app.getPath('userData') })
+          let out = ''
+          let done = false
+          const finish = (r: AiChatResult): void => {
+            if (done) return
+            done = true
+            resolve(r)
+          }
+          const timer = setTimeout(() => {
+            child.kill()
+            finish({ ok: false, text: '', error: 'timeout' })
+          }, 180_000)
+          child.stdout.on('data', (d) => (out += d))
+          child.on('error', (e) => {
+            clearTimeout(timer)
+            finish({ ok: false, text: '', error: String(e).slice(0, 300) })
+          })
+          child.on('close', () => {
+            clearTimeout(timer)
+            let text = ''
+            let sessionId: string | undefined
+            let isErr = false
+            let found = false
+            for (const line of out.split('\n')) {
+              const s = line.trim()
+              if (!s.startsWith('{')) continue
+              try {
+                const e = JSON.parse(s) as {
+                  type?: string
+                  result?: string
+                  session_id?: string
+                  is_error?: boolean
+                }
+                if (e.type === 'result') {
+                  text = e.result ?? ''
+                  sessionId = e.session_id
+                  isErr = !!e.is_error
+                  found = true
+                }
+              } catch {
+                /* 부분 라인 무시 */
+              }
+            }
+            finish(found ? { ok: !isErr, text, sessionId } : { ok: false, text: '', error: 'parse' })
+          })
+          child.stdin.write(msg + '\n')
+          child.stdin.end()
+        })
+      }
+      // codex 구독·API 키 경로는 다음 슬라이스
+      return { ok: false, text: '', error: `${provider}:${mode}:not-wired` }
+    }
+  )
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
   // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록
@@ -483,89 +1525,234 @@ app.whenReady().then(() => {
       return { ok: true, file, verified }
     }
   )
-  // 스토어 실황 IAP — 기존 앱은 스토어가 진실 (iOS/Android 별도)
+  // §4.5 앱 대시보드 — 양대 스토어 실황 pull + IAP 스냅샷 이력 축적 (읽기 전용)
+  ipcMain.handle('launch:dashboard', async (_e, file: string): Promise<DashboardData> => {
+    const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+    // pull이 던져도 loading이 영원히 안 풀리지 않게 — 예외를 에러 결과로 전환
+    const [g, a] = await Promise.all([
+      pullGoogleDashboard(sheet).catch((e) => ({ data: null, error: `err:${String(e).slice(0, 80)}` })),
+      pullAppleDashboard(sheet).catch((e) => ({ data: null, error: `err:${String(e).slice(0, 80)}` }))
+    ])
+    const snapshot = recordStoreSnapshot(
+      file,
+      g.data ? { listings: g.data.listings, images: g.data.images, iap: g.data.iap } : null,
+      a.data ? { meta: a.data.meta, screenshots: a.data.screenshots, iap: a.data.iap } : null
+    )
+    const result: DashboardData = {
+      pulledAt: new Date().toISOString(),
+      google: g.data,
+      googleError: g.error,
+      apple: a.data,
+      appleError: a.error,
+      snapshot
+    }
+    // 마지막 결과를 저장 — 다음 진입 시 즉시 표시(백그라운드 갱신)용
+    const cache = readDashCache()
+    cache[file] = result
+    writeFileSync(dashCacheFile(), JSON.stringify(cache, null, 2))
+    // 앱 아이콘 캐시 — 공개 스토어 페이지 조회가 실패하는 미출시 앱은 Play 리스팅 아이콘으로 채운다
+    if (!existsSync(iconPathFor(file))) {
+      const iconUrl = g.data?.images.find((im) => im.type === 'icon')?.urls[0]
+      if (iconUrl) {
+        try {
+          const r = await fetch(iconUrl)
+          if (r.ok) {
+            mkdirSync(iconsDir(), { recursive: true })
+            writeFileSync(iconPathFor(file), Buffer.from(await r.arrayBuffer()))
+          }
+        } catch {
+          /* 아이콘 없어도 앱은 동작 */
+        }
+      }
+    }
+    return result
+  })
+  // 전역 API 연결 상태 — 자격증명은 앱이 아니라 계정 단위(플랫폼당 하나). 타이틀 우측 config용
+  ipcMain.handle('launch:apiStatus', async (): Promise<ApiStatus> => {
+    const saPath = firstGoogleSa()
+    let play: ApiStatus['play'] = { connected: false, detail: '' }
+    if (saPath) {
+      const tok = await googleTokenFor(saPath)
+      play = { connected: !!tok, detail: saPath.split('/').pop() ?? '' }
+    }
+    const asc = firstAscCreds()
+    let apple: ApiStatus['apple'] = { connected: false, detail: '' }
+    if (asc) {
+      const tok = await ascTokenFor(asc)
+      apple = { connected: !!tok, detail: `Key ${asc.keyId}` }
+    }
+    return { play, apple }
+  })
+  ipcMain.handle('launch:dashboardCached', (_e, file: string): DashboardData | null => {
+    const d = readDashCache()[file]
+    if (!d) return null
+    // 구버전 캐시(스키마 다름)는 무시 — 새 pull로 채운다
+    if (d.google && (!Array.isArray(d.google.listings) || !d.google.details)) return null
+    if (d.google?.listings[0] && d.google.listings[0].full === undefined) return null
+    if (d.apple && (!Array.isArray(d.apple.meta) || !Array.isArray(d.apple.releaseNotes)))
+      return null
+    return d
+  })
+  // 스냅샷 이력 — 노드별 "기록 보기"용 (최신순)
+  ipcMain.handle('launch:snapshots', (_e, file: string): StoreSnapshotEntry[] => {
+    return (readStoreSnapshots()[file] ?? []).slice(-50).reverse()
+  })
+  // 앱 콘텐츠 설문 — 질문 세트(버전 관리 JSON) 로드 + 답 저장(시트 console_answers)
+  ipcMain.handle('launch:questionnaire', (_e, id: string): Questionnaire | null => {
+    try {
+      const safe = id.replace(/[^a-z0-9-]/g, '')
+      const p = join(app.getAppPath(), 'launch', 'questionnaires', `${safe}.json`)
+      return JSON.parse(readFileSync(p, 'utf8'))
+    } catch {
+      return null
+    }
+  })
+  // 설문 목록 — 설정 노드가 플랫폼별로 여러 설문 버튼을 라벨과 함께 그리도록 (질문은 안 실음)
+  ipcMain.handle('launch:questionnaireList', (): QuestionnaireMeta[] => {
+    const dir = join(app.getAppPath(), 'launch', 'questionnaires')
+    if (!existsSync(dir)) return []
+    const out: QuestionnaireMeta[] = []
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+      try {
+        const q = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Questionnaire
+        if (q.id && q.platform) {
+          out.push({ id: q.id, platform: q.platform, title: q.title, titleEn: q.titleEn ?? q.title })
+        }
+      } catch {
+        /* 깨진 파일 건너뜀 */
+      }
+    }
+    return out
+  })
+  ipcMain.handle('launch:getConsoleAnswers', (_e, file: string, id: string): ConsoleAnswers | null => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      return sheet.console_answers?.[id] ?? null
+    } catch {
+      return null
+    }
+  })
   ipcMain.handle(
-    'launch:storeIap',
+    'launch:setConsoleAnswers',
+    (_e, file: string, id: string, data: ConsoleAnswers): void => {
+      const path = join(ANSWERS_DIR, file)
+      const sheet = JSON.parse(readFileSync(path, 'utf8'))
+      sheet.console_answers = { ...(sheet.console_answers ?? {}), [id]: data }
+      writeFileSync(path, JSON.stringify(sheet, null, 2))
+    }
+  )
+  // iOS 연령 등급은 스토어에서 읽힌다(ageRatingDeclaration) → 기존 앱 설문 프리필용.
+  // Play(콘텐츠 등급·데이터 안전·타깃 연령)는 read API 자체가 없어 프리필 불가 — 콘솔 확인만.
+  ipcMain.handle(
+    'launch:ageRatingDeclaration',
+    async (_e, file: string): Promise<Record<string, string> | null> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const asc = resolveAsc(sheet)
+      if (!asc) return null
+      const tok = await ascTokenFor(asc)
+      if (!tok) return null
+      const A = 'https://api.appstoreconnect.apple.com/v1'
+      const headers = { Authorization: 'Bearer ' + tok }
+      const appsR = await fetch(
+        `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+        { headers }
+      )
+      if (!appsR.ok) return null
+      const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+      if (!appId) return null
+      const r = await fetch(`${A}/apps/${appId}/appInfos?include=ageRatingDeclaration`, { headers })
+      if (!r.ok) return null
+      const j = (await r.json()) as {
+        included?: { type: string; attributes?: Record<string, unknown> }[]
+      }
+      const decl = (j.included ?? []).find((x) => x.type === 'ageRatingDeclarations')?.attributes
+      if (!decl) return null
+      const LV = ['NONE', 'INFREQUENT_OR_MILD', 'FREQUENT_OR_INTENSE']
+      const out: Record<string, string> = {}
+      for (const [k, v] of Object.entries(decl)) {
+        if (typeof v === 'boolean') out[k] = v ? 'YES' : 'NO'
+        else if (typeof v === 'string' && LV.includes(v)) out[k] = v
+      }
+      return out
+    }
+  )
+  // P2 편집 적용 — 대기 diff를 스토어에 반영. Play(android)는 한 edit에 묶어 commit(원자적),
+  // ASC(ios)는 리소스별 PATCH(부분 실패 가능). 성공분은 렌더러가 재-pull로 확인.
+  ipcMain.handle(
+    'launch:applyEdits',
+    async (_e, file: string, edits: PendingEdit[]): Promise<ApplyResult[]> => {
+      let sheet: {
+        app: { packageName: string; bundleId: string }
+        credentials?: {
+          googleSa?: string
+          asc?: { keyPath?: string; keyId?: string; issuerId?: string }
+        }
+      }
+      try {
+        sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      } catch {
+        return edits.map((e) => ({
+          id: e.id,
+          ok: false,
+          message: appLocale === 'ko' ? '시트를 읽을 수 없음' : 'Cannot read sheet'
+        }))
+      }
+      const android = edits.filter((e) => e.platform === 'android')
+      const ios = edits.filter((e) => e.platform === 'ios')
+      const [aRes, iRes] = await Promise.all([
+        android.length ? applyPlayEdits(sheet, android) : Promise.resolve([]),
+        ios.length ? applyAscEdits(sheet, ios) : Promise.resolve([])
+      ])
+      return [...aRes, ...iRes]
+    }
+  )
+  // iOS 새 버전 생성 — 이름 등 '버전 종속 메타'는 라이브 버전에 못 대고 편집 가능한 버전이 있어야 한다.
+  // 버전 번호는 라이브보다 높아야 애플이 받는다. 생성 후 그 버전이 편집 가능해져 메타 반영이 열린다.
+  // (제출·심사는 빌드 업로드 후 사람이 — 비가역이라 자동 안 함, SPEC §3)
+  ipcMain.handle(
+    'launch:createIosVersion',
     async (
       _e,
-      file: string
-    ): Promise<{
-      google: { id: string; title: string; state: string }[] | null
-      googleError?: string
-      apple: { id: string; name: string; state: string }[] | null
-      appleError?: string
-    }> => {
-      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
-      const result: {
-        google: { id: string; title: string; state: string }[] | null
-        googleError?: string
-        apple: { id: string; name: string; state: string }[] | null
-        appleError?: string
-      } = { google: null, apple: null }
-
-      const saPath = sheet.credentials?.googleSa
-      if (saPath && existsSync(saPath)) {
-        const tok = await googleTokenFor(saPath)
-        if (!tok) result.googleError = 'token'
-        else {
-          const r = await fetch(
-            `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}/oneTimeProducts`,
-            { headers: { Authorization: 'Bearer ' + tok } }
-          )
-          if (!r.ok) result.googleError = `HTTP ${r.status}`
-          else {
-            interface GProduct {
-              productId?: string
-              listings?: { title?: string }[]
-              purchaseOptions?: { state?: string }[]
-            }
-            const j = (await r.json()) as { oneTimeProducts?: GProduct[] }
-            result.google = (j.oneTimeProducts ?? []).map((prod) => ({
-              id: prod.productId ?? '',
-              title: prod.listings?.[0]?.title ?? '',
-              state: prod.purchaseOptions?.[0]?.state ?? ''
-            }))
+      file: string,
+      versionString: string
+    ): Promise<{ ok: boolean; error?: string; versionId?: string }> => {
+      const ko = appLocale === 'ko'
+      let sheet: {
+        app: { bundleId: string }
+        credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+      }
+      try {
+        sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      } catch {
+        return { ok: false, error: ko ? '시트를 읽을 수 없음' : 'Cannot read sheet' }
+      }
+      const asc = resolveAsc(sheet)
+      if (!asc) return { ok: false, error: ko ? 'ASC 인증 키 없음' : 'No ASC key' }
+      const tok = await ascTokenFor(asc)
+      if (!tok) return { ok: false, error: ko ? '토큰 발급 실패' : 'Token failed' }
+      const A = 'https://api.appstoreconnect.apple.com/v1'
+      const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+      const appsR = await fetch(
+        `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+        { headers: { Authorization: 'Bearer ' + tok } }
+      )
+      if (!appsR.ok) return { ok: false, error: `HTTP ${appsR.status}` }
+      const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+      if (!appId) return { ok: false, error: ko ? '앱 없음' : 'App not found' }
+      const r = await fetch(`${A}/appStoreVersions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'appStoreVersions',
+            attributes: { platform: 'IOS', versionString },
+            relationships: { app: { data: { type: 'apps', id: appId } } }
           }
-        }
-      } else result.googleError = 'no-key'
-
-      const asc = sheet.credentials?.asc
-      if (asc?.keyPath && existsSync(asc.keyPath) && asc.keyId && asc.issuerId) {
-        const tok = await ascTokenFor(asc)
-        if (!tok) result.appleError = 'token'
-        else {
-          const headers = { Authorization: 'Bearer ' + tok }
-          const appsR = await fetch(
-            `https://api.appstoreconnect.apple.com/v1/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
-            { headers }
-          )
-          if (!appsR.ok) result.appleError = `HTTP ${appsR.status}`
-          else {
-            const appsJ = (await appsR.json()) as { data?: { id: string }[] }
-            const appId = appsJ.data?.[0]?.id
-            if (!appId) result.appleError = 'app-not-found'
-            else {
-              const iapR = await fetch(
-                `https://api.appstoreconnect.apple.com/v1/apps/${appId}/inAppPurchasesV2?limit=50`,
-                { headers }
-              )
-              if (!iapR.ok) result.appleError = `HTTP ${iapR.status}`
-              else {
-                const iapJ = (await iapR.json()) as {
-                  data?: { attributes?: { productId?: string; name?: string; state?: string } }[]
-                }
-                result.apple = (iapJ.data ?? []).map((d) => ({
-                  id: d.attributes?.productId ?? '',
-                  name: d.attributes?.name ?? '',
-                  state: d.attributes?.state ?? ''
-                }))
-              }
-            }
-          }
-        }
-      } else result.appleError = 'no-key'
-
-      return result
+        })
+      })
+      if (!r.ok) return { ok: false, error: await ascErrorMsg(r) }
+      const j = (await r.json()) as { data?: { id?: string } }
+      return { ok: true, versionId: j.data?.id }
     }
   )
   // Apple 계정의 앱 목록 — 가져오기에서 클릭 선택용 (Play는 목록 API가 없음)
@@ -636,8 +1823,8 @@ app.whenReady().then(() => {
     'launch:runIap',
     async (_e, file: string, action: 'upsert' | 'activate'): Promise<RunResult> => {
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
-      const saPath: string = sheet.credentials?.googleSa ?? ''
-      if (!saPath || !existsSync(saPath)) return { ok: false, output: 'google-sa-missing' }
+      const saPath = resolveGoogleSa(sheet)
+      if (!saPath) return { ok: false, output: 'google-sa-missing' }
       const script = join(
         app.getAppPath(),
         'launch',

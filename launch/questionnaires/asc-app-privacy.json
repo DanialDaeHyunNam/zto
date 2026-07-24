@@ -1,0 +1,22 @@
+{
+  "id": "asc-app-privacy",
+  "platform": "ios",
+  "version": "2026-07",
+  "title": "App Store 앱 개인정보",
+  "titleEn": "App Store App Privacy",
+  "note": "App Store Connect '앱 개인정보(Privacy Nutrition Label)' 요지. ASC는 이 항목에 read API가 없어 프리필 불가 — ZTO가 답을 기록하고 콘솔 입력을 돕는다. 실제 폼은 데이터 유형별로 '추적/연결/비연결·목적'을 더 세분한다(애플 개정 시 이 파일만 갱신). bool=YES/NO.",
+  "questions": [
+    { "id": "collectsAnyData", "type": "bool", "label": "사용자 데이터를 수집하나요?", "labelEn": "Collect any data?", "help": "앱이나 제3자 SDK가 데이터를 수집하면 예. 아니오면 'Data Not Collected'." },
+    { "id": "usedForTracking", "type": "bool", "label": "추적(트래킹)에 사용하나요?", "labelEn": "Used to track you?", "help": "다른 회사의 앱·웹 데이터와 연결해 광고·측정에 쓰면 예 → ATT 필요." },
+    { "id": "linkedToUser", "type": "bool", "label": "사용자 신원에 연결되나요?", "labelEn": "Linked to the user?", "help": "수집 데이터가 계정·기기 등으로 특정 사용자와 연결되나요?" },
+    { "id": "dataContactInfo", "type": "bool", "label": "연락처 정보(이름·이메일·전화)", "labelEn": "Contact info", "help": "이름, 이메일, 전화번호, 주소 등." },
+    { "id": "dataIdentifiers", "type": "bool", "label": "식별자(사용자 ID·기기 ID)", "labelEn": "Identifiers", "help": "사용자 ID, 기기 ID, 광고 식별자 등." },
+    { "id": "dataUsageData", "type": "bool", "label": "사용 데이터", "labelEn": "Usage data", "help": "제품 상호작용, 광고 노출, 앱 사용 기록 등." },
+    { "id": "dataDiagnostics", "type": "bool", "label": "진단(크래시·성능)", "labelEn": "Diagnostics", "help": "크래시 로그, 성능 데이터 등." },
+    { "id": "dataLocation", "type": "bool", "label": "위치", "labelEn": "Location", "help": "대략적·정확한 위치를 수집하나요?" },
+    { "id": "dataPurchases", "type": "bool", "label": "구매 내역", "labelEn": "Purchases", "help": "구매·결제 이력을 수집하나요?" },
+    { "id": "dataUserContent", "type": "bool", "label": "사용자 콘텐츠(사진·메시지 등)", "labelEn": "User content", "help": "사진, 동영상, 메시지, 기타 사용자 생성 콘텐츠." },
+    { "id": "dataContacts", "type": "bool", "label": "연락처", "labelEn": "Contacts", "help": "주소록·연락처를 수집하나요?" },
+    { "id": "dataBrowsingHistory", "type": "bool", "label": "검색·방문 기록", "labelEn": "Browsing/search history", "help": "앱 밖 웹 검색·방문 기록 또는 앱 내 검색 기록." }
+  ]
+}

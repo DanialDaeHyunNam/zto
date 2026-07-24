@@ -1,0 +1,24 @@
+{
+  "id": "play-data-safety",
+  "platform": "android",
+  "version": "2026-07",
+  "title": "Play 데이터 보안",
+  "titleEn": "Play Data Safety",
+  "note": "Play 콘솔 '데이터 보안' 섹션 요지. Play는 이 항목에 read/write API가 없어 — ZTO가 답을 기록하고 콘솔 입력을 돕는다. 실제 폼은 데이터 유형별로 '수집/공유·목적·필수여부'를 더 세분한다(콘솔 개정 시 이 파일만 갱신). 여기선 수집 여부 위주 bool. bool=YES/NO.",
+  "questions": [
+    { "id": "collectsAnyData", "type": "bool", "label": "사용자 데이터를 수집하나요?", "labelEn": "Collect any user data?", "help": "앱이 어떤 형태로든 개인·기기 데이터를 수집하면 예. 이후 유형별로 답해요." },
+    { "id": "sharesAnyData", "type": "bool", "label": "제3자와 데이터를 공유하나요?", "labelEn": "Share data with third parties?", "help": "분석·광고 SDK 등 외부로 데이터가 나가면 예." },
+    { "id": "dataLocation", "type": "bool", "label": "위치 정보", "labelEn": "Location", "help": "대략적·정확한 위치를 수집하나요?" },
+    { "id": "dataPersonalInfo", "type": "bool", "label": "개인 정보(이름·이메일·전화 등)", "labelEn": "Personal info", "help": "이름, 이메일 주소, 전화번호, 주소, 사용자 ID 등." },
+    { "id": "dataFinancial", "type": "bool", "label": "금융 정보", "labelEn": "Financial info", "help": "결제 정보·구매 내역 등. IAP 결제는 스토어가 처리하니 앱이 직접 다루지 않으면 아니오일 수 있어요." },
+    { "id": "dataMessages", "type": "bool", "label": "메시지", "labelEn": "Messages", "help": "이메일·SMS·인앱 메시지 등 사용자 메시지." },
+    { "id": "dataPhotosVideos", "type": "bool", "label": "사진·동영상", "labelEn": "Photos or videos", "help": "사용자의 사진·동영상에 접근·수집하나요?" },
+    { "id": "dataFiles", "type": "bool", "label": "파일·문서", "labelEn": "Files and docs", "help": "사용자 파일·문서에 접근·수집하나요?" },
+    { "id": "dataContacts", "type": "bool", "label": "연락처", "labelEn": "Contacts", "help": "주소록·연락처를 수집하나요?" },
+    { "id": "dataAppActivity", "type": "bool", "label": "앱 활동", "labelEn": "App activity", "help": "앱 내 상호작용, 검색 기록, 설치된 앱 등." },
+    { "id": "dataDeviceIds", "type": "bool", "label": "기기 또는 기타 ID", "labelEn": "Device or other IDs", "help": "광고 ID, 기기 ID 등 식별자를 수집하나요?" },
+    { "id": "dataDiagnostics", "type": "bool", "label": "앱 정보·성능(진단)", "labelEn": "App info and performance", "help": "크래시 로그, 진단, 성능 데이터 등." },
+    { "id": "encryptedInTransit", "type": "bool", "label": "전송 중 암호화하나요?", "labelEn": "Encrypted in transit?", "help": "데이터를 HTTPS 등으로 암호화해 전송하면 예." },
+    { "id": "userCanRequestDeletion", "type": "bool", "label": "삭제 요청 수단을 제공하나요?", "labelEn": "Users can request deletion?", "help": "사용자가 데이터 삭제를 요청할 수 있는 방법을 제공하나요?" }
+  ]
+}
