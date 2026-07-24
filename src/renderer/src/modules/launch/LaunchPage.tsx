@@ -11,6 +11,7 @@ import {
   type StoreKind
 } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
+import { useBrowserOverlay } from '../../browser-overlay'
 import type { Messages } from '../../i18n/en'
 import { PlatformIcon } from '../../platform-icons'
 import AppDashboard from './AppDashboard'
@@ -626,6 +627,7 @@ function ApiStatusBar(): React.JSX.Element {
 
 export default function LaunchPage(): React.JSX.Element {
   const { m } = useI18n()
+  const { open: openBrowser } = useBrowserOverlay()
   // '앱 스토어 관리'가 홈 — 신규 여정은 [+ 앱 추가 → 신규 앱 출시]로만 진입 (2026-07-22 Dan)
   const [view, setViewState] = useState<'manage' | 'new'>(
     () => (localStorage.getItem('zto-launch-view') as 'manage' | 'new') ?? 'manage'
@@ -703,7 +705,12 @@ export default function LaunchPage(): React.JSX.Element {
             <h1>{m.launch.title}</h1>
             <p className="placeholder">{m.launch.subtitle}</p>
           </div>
-          <ApiStatusBar />
+          <div className="head-actions">
+            <button className="choice small" onClick={() => openBrowser('https://play.google.com/console')}>
+              {m.launch.openBrowser}
+            </button>
+            <ApiStatusBar />
+          </div>
         </div>
         <div className="wizard wide">
           <div className="app-picker">

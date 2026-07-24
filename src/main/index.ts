@@ -11,8 +11,9 @@ import {
 import { join } from 'path'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
 import { randomUUID } from 'crypto'
-import { execFile, spawnSync } from 'child_process'
+import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
+import { registerBrowserIpc } from './browser'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
@@ -29,6 +30,7 @@ import {
   type AscVersionRow,
   type ConsoleAnswers,
   type Questionnaire,
+  type QuestionnaireMeta,
   type DashApple,
   type DashboardData,
   type DashGoogle,
@@ -664,6 +666,287 @@ async function pullAppleDashboard(sheet: {
   return { data: { appId, versions, meta, releaseNotes, category, ageRating, screenshots, iap } }
 }
 
+// ---------- §4.5 P2 편집 적용 (실제 스토어 write) ----------
+// Play는 한 edit 트랜잭션에 리스팅 변경을 모아 :commit(원자적) / ASC는 리소스별 PATCH(부분 성공 가능)
+
+// Play 스토어 리스팅 메타(title·short·full)를 한 edit에 모아 원자적으로 반영.
+// 릴리스 노트는 라이브 트랙 릴리스를 수정해야 해(심사·롤아웃 위험) 이번 단계 제외 — 콘솔 안내.
+async function applyPlayEdits(
+  sheet: { app: { packageName: string }; credentials?: { googleSa?: string } },
+  edits: PendingEdit[]
+): Promise<ApplyResult[]> {
+  const ko = appLocale === 'ko'
+  const applied = (list: PendingEdit[]): ApplyResult[] =>
+    list.map((e) => ({ id: e.id, ok: true, message: ko ? '반영됨' : 'Applied' }))
+  const errored = (list: PendingEdit[], msg: string): ApplyResult[] =>
+    list.map((e) => ({ id: e.id, ok: false, message: msg }))
+
+  // 릴리스 노트는 라이브 트랙을 건드리므로 보류 (iOS는 초안 버전만 편집해 안전 — 비대칭 의도됨)
+  const noteResults: ApplyResult[] = errored(
+    edits.filter((e) => e.section === 'releaseNotes'),
+    ko ? '릴리스 노트는 콘솔에서 (트랙 릴리스 편집)' : 'Release notes: use console (track release)'
+  )
+  const metaEdits = edits.filter((e) => e.section === 'meta')
+  if (metaEdits.length === 0) return noteResults
+
+  const saPath = resolveGoogleSa(sheet)
+  if (!saPath) return [...noteResults, ...errored(metaEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
+  const tok = await googleTokenFor(saPath)
+  if (!tok) return [...noteResults, ...errored(metaEdits, ko ? '토큰 발급 실패' : 'Token failed')]
+  const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
+  const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  const editR = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
+  if (!editR.ok) return [...noteResults, ...errored(metaEdits, `HTTP ${editR.status}`)]
+  const editId = ((await editR.json()) as { id?: string }).id
+  if (!editId) return [...noteResults, ...errored(metaEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
+
+  // 로케일별로 현재 리스팅을 읽어 변경 필드만 병합 후 전체 PUT — 다른 필드 유실 방지
+  const byLocale = new Map<string, PendingEdit[]>()
+  for (const e of metaEdits) {
+    const arr = byLocale.get(e.locale) ?? []
+    arr.push(e)
+    byLocale.set(e.locale, arr)
+  }
+  const writeErr = new Map<string, string>() // id → 실패 사유 (없으면 성공)
+  try {
+    for (const [locale, group] of byLocale) {
+      const curR = await fetch(`${base}/edits/${editId}/listings/${locale}`, { headers })
+      const cur = curR.ok ? await jsonOrEmpty(curR) : {}
+      const body: Record<string, unknown> = {
+        language: locale,
+        title: (cur.title as string) ?? '',
+        shortDescription: (cur.shortDescription as string) ?? '',
+        fullDescription: (cur.fullDescription as string) ?? ''
+      }
+      if (cur.video) body.video = cur.video
+      for (const e of group) {
+        if (e.field === 'title') body.title = e.newValue
+        else if (e.field === 'short') body.shortDescription = e.newValue
+        else if (e.field === 'full') body.fullDescription = e.newValue
+      }
+      const putR = await fetch(`${base}/edits/${editId}/listings/${locale}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify(body)
+      })
+      if (!putR.ok) for (const e of group) writeErr.set(e.id, `HTTP ${putR.status}`)
+    }
+
+    if (writeErr.size > 0) {
+      // 원자적 — 하나라도 실패하면 edit 폐기(전체 롤백)
+      await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+      return [
+        ...noteResults,
+        ...metaEdits.map((e) => ({
+          id: e.id,
+          ok: false,
+          message: writeErr.get(e.id) ?? (ko ? '다른 항목 실패로 함께 롤백됨' : 'Rolled back (atomic)')
+        }))
+      ]
+    }
+    const commitR = await fetch(`${base}/edits/${editId}:commit`, { method: 'POST', headers })
+    if (!commitR.ok) {
+      return [...noteResults, ...errored(metaEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
+    }
+    return [...noteResults, ...applied(metaEdits)]
+  } catch (err) {
+    await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+    return [...noteResults, ...errored(metaEdits, String(err).slice(0, 120))]
+  }
+}
+
+// ASC 에러 본문(JSON:API)에서 사람이 읽을 사유 뽑기
+async function ascErrorMsg(r: Response): Promise<string> {
+  try {
+    const j = (await r.json()) as { errors?: { detail?: string; title?: string }[] }
+    const first = j.errors?.[0]
+    if (first?.detail) return `${r.status}: ${first.detail}`.slice(0, 160)
+    if (first?.title) return `${r.status}: ${first.title}`.slice(0, 160)
+  } catch {
+    /* 본문 없음 */
+  }
+  return `HTTP ${r.status}`
+}
+
+// ASC 버전을 편집할 수 있는 상태(라이브 READY_FOR_SALE 등은 제외)
+const ASC_EDITABLE_VERSION_STATES = [
+  'PREPARE_FOR_SUBMISSION',
+  'DEVELOPER_REJECTED',
+  'REJECTED',
+  'METADATA_REJECTED',
+  'INVALID_BINARY'
+]
+
+// ASC 메타를 리소스별 PATCH(부분 성공 가능). name·subtitle → appInfoLocalizations,
+// description·promotionalText·keywords·whatsNew → 편집 가능한 최신 버전의 appStoreVersionLocalizations.
+// 라이브 버전은 건드리지 않는다(편집 가능한 상태의 버전만 대상).
+async function applyAscEdits(
+  sheet: {
+    app: { bundleId: string }
+    credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+  },
+  edits: PendingEdit[]
+): Promise<ApplyResult[]> {
+  const ko = appLocale === 'ko'
+  const fail = (msg: string): ApplyResult[] => edits.map((e) => ({ id: e.id, ok: false, message: msg }))
+  const asc = resolveAsc(sheet)
+  if (!asc) return fail(ko ? 'ASC 인증 키 없음' : 'No ASC key')
+  const tok = await ascTokenFor(asc)
+  if (!tok) return fail(ko ? '토큰 발급 실패' : 'Token failed')
+  const A = 'https://api.appstoreconnect.apple.com/v1'
+  const headers = { Authorization: 'Bearer ' + tok }
+  const jsonHeaders = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  const appsR = await fetch(
+    `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+    { headers }
+  )
+  if (!appsR.ok) return fail(`HTTP ${appsR.status}`)
+  const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+  if (!appId) return fail(ko ? '앱 없음' : 'App not found')
+
+  const APP_INFO_FIELDS: Record<string, string> = { name: 'name', subtitle: 'subtitle' }
+  const VERSION_FIELDS: Record<string, string> = {
+    description: 'description',
+    promotionalText: 'promotionalText',
+    keywords: 'keywords',
+    whatsNew: 'whatsNew'
+  }
+  const results: ApplyResult[] = []
+  const appInfoEdits = edits.filter((e) => e.field in APP_INFO_FIELDS)
+  const versionEdits = edits.filter((e) => e.field in VERSION_FIELDS)
+  for (const e of edits) {
+    if (!(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
+      results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
+    }
+  }
+
+  // 로케일별 리소스 id로 묶어 한 로케일당 PATCH 한 번(같은 로케일 여러 필드 병합)
+  const applyLocalized = async (
+    group: PendingEdit[],
+    localeToId: Map<string, string>,
+    resourceType: string,
+    fieldMap: Record<string, string>,
+    missingMsg: string
+  ): Promise<void> => {
+    const byLocale = new Map<string, PendingEdit[]>()
+    for (const e of group) {
+      const arr = byLocale.get(e.locale) ?? []
+      arr.push(e)
+      byLocale.set(e.locale, arr)
+    }
+    for (const [locale, es] of byLocale) {
+      const id = localeToId.get(locale)
+      if (!id) {
+        for (const e of es) results.push({ id: e.id, ok: false, message: missingMsg })
+        continue
+      }
+      const attributes: Record<string, string> = {}
+      for (const e of es) attributes[fieldMap[e.field]] = e.newValue
+      const r = await fetch(`${A}/${resourceType}/${id}`, {
+        method: 'PATCH',
+        headers: jsonHeaders,
+        body: JSON.stringify({ data: { type: resourceType, id, attributes } })
+      })
+      const message = r.ok ? (ko ? '반영됨' : 'Applied') : await ascErrorMsg(r)
+      for (const e of es) results.push({ id: e.id, ok: r.ok, message })
+    }
+  }
+
+  // ---- appInfo 레벨 (name·subtitle) ----
+  if (appInfoEdits.length) {
+    const infoR = await fetch(
+      `${A}/apps/${appId}/appInfos?fields%5BappInfos%5D=appStoreState,state`,
+      { headers }
+    )
+    if (!infoR.ok) {
+      for (const e of appInfoEdits) results.push({ id: e.id, ok: false, message: `HTTP ${infoR.status}` })
+    } else {
+      const iJ = (await infoR.json()) as {
+        data?: { id: string; attributes?: { appStoreState?: string; state?: string } }[]
+      }
+      const infos = iJ.data ?? []
+      // 편집 가능한 appInfo — 라이브(READY_FOR_SALE)가 아닌 것 우선, 없으면 첫 항목
+      const editable =
+        infos.find((d) => {
+          const s = d.attributes?.state ?? d.attributes?.appStoreState ?? ''
+          return s && s !== 'READY_FOR_SALE'
+        }) ?? infos[0]
+      if (!editable) {
+        for (const e of appInfoEdits)
+          results.push({ id: e.id, ok: false, message: ko ? '편집 가능한 앱 정보 없음' : 'No editable app info' })
+      } else {
+        const locMap = new Map<string, string>()
+        const locR = await fetch(
+          `${A}/appInfos/${editable.id}/appInfoLocalizations?fields%5BappInfoLocalizations%5D=locale&limit=50`,
+          { headers }
+        )
+        if (locR.ok) {
+          const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
+          for (const d of lJ.data ?? []) if (d.attributes?.locale) locMap.set(d.attributes.locale, d.id)
+        }
+        await applyLocalized(
+          appInfoEdits,
+          locMap,
+          'appInfoLocalizations',
+          APP_INFO_FIELDS,
+          ko ? '해당 로케일 없음' : 'No such locale'
+        )
+      }
+    }
+  }
+
+  // ---- version 레벨 (description·promotionalText·keywords·whatsNew) ----
+  if (versionEdits.length) {
+    const versR = await fetch(
+      `${A}/apps/${appId}/appStoreVersions?limit=10&fields%5BappStoreVersions%5D=versionString,appStoreState,createdDate`,
+      { headers }
+    )
+    if (!versR.ok) {
+      for (const e of versionEdits) results.push({ id: e.id, ok: false, message: `HTTP ${versR.status}` })
+    } else {
+      const vJ = (await versR.json()) as {
+        data?: { id: string; attributes?: { appStoreState?: string; createdDate?: string } }[]
+      }
+      const rows = (vJ.data ?? []).map((d) => ({
+        id: d.id,
+        state: d.attributes?.appStoreState ?? '',
+        createdAt: d.attributes?.createdDate ?? ''
+      }))
+      rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      const editable = rows.find((r) => ASC_EDITABLE_VERSION_STATES.includes(r.state))
+      if (!editable) {
+        for (const e of versionEdits)
+          results.push({
+            id: e.id,
+            ok: false,
+            message: ko ? '편집 가능한 버전 없음 (콘솔에서 새 버전 준비)' : 'No editable version (prepare one in console)'
+          })
+      } else {
+        const locMap = new Map<string, string>()
+        const locR = await fetch(
+          `${A}/appStoreVersions/${editable.id}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=locale&limit=50`,
+          { headers }
+        )
+        if (locR.ok) {
+          const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
+          for (const d of lJ.data ?? []) if (d.attributes?.locale) locMap.set(d.attributes.locale, d.id)
+        }
+        await applyLocalized(
+          versionEdits,
+          locMap,
+          'appStoreVersionLocalizations',
+          VERSION_FIELDS,
+          ko ? '해당 로케일 없음' : 'No such locale'
+        )
+      }
+    }
+  }
+
+  return results
+}
+
 // 대시보드 결과 캐시 — 진입 즉시 마지막 실황을 보여주고 백그라운드로 갱신한다
 const dashCacheFile = (): string => join(app.getPath('userData'), 'zto-dashboard-cache.json')
 
@@ -955,6 +1238,9 @@ function decryptSecret(email: string, appId: string): string | null {
   return safeStorage.decryptString(Buffer.from(record.v, 'base64'))
 }
 
+// ZTO 브라우저(WebContentsView)를 붙일 호스트 창 — IPC 핸들러가 참조 (모듈 스코프)
+let browserHostWindow: BrowserWindow | null = null
+
 function createWindow(): void {
   // 지난 실행의 창 크기·위치 복원
   const saved = readState().windowBounds as
@@ -974,6 +1260,11 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
+  })
+
+  browserHostWindow = mainWindow
+  mainWindow.on('closed', () => {
+    browserHostWindow = null
   })
 
   mainWindow.on('ready-to-show', () => {
@@ -1007,6 +1298,8 @@ app.whenReady().then(() => {
   powerMonitor.on('suspend', lockSecrets)
 
   ipcMain.handle('ping', () => 'pong')
+  // #4 ZTO 자체 브라우저 — WebContentsView 임베드·네비게이트·eval/CDP 제어 (browser.ts)
+  registerBrowserIpc(() => browserHostWindow)
   ipcMain.handle('app:setLocale', (_e, locale: 'ko' | 'en'): void => {
     appLocale = locale
     writeState({ ...readState(), locale })
@@ -1029,35 +1322,116 @@ app.whenReady().then(() => {
     setAiKey(provider, key)
   )
   // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
+  // 이미지가 있으면 stream-json 입력으로 멀티모달(실증 확인) — 없으면 가벼운 --output-format json.
   ipcMain.handle(
     'ai:chat',
-    async (_e, prompt: string, opts?: { resume?: string }): Promise<AiChatResult> => {
+    async (
+      _e,
+      prompt: string,
+      opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
+    ): Promise<AiChatResult> => {
       const cfg = readAiConfig()
       const provider = cfg.active
       const mode = cfg.modes[provider]
       if (mode === 'subscription' && provider === 'claude') {
         const info = cliInfo('claude')
         if (!info.available || !info.bin) return { ok: false, text: '', error: 'claude-cli-missing' }
-        const args = ['-p', prompt, '--output-format', 'json', '--model', cfg.model]
+        const bin = info.bin
+        const images = opts?.images ?? []
+
+        // 텍스트만 — 검증된 가벼운 경로
+        if (images.length === 0) {
+          const args = ['-p', prompt, '--output-format', 'json', '--model', cfg.model]
+          if (opts?.resume) args.push('--resume', opts.resume)
+          return await new Promise<AiChatResult>((resolve) => {
+            execFile(
+              bin,
+              args,
+              { cwd: app.getPath('userData'), timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
+              (err, stdout) => {
+                try {
+                  const j = JSON.parse(stdout) as {
+                    result?: string
+                    session_id?: string
+                    is_error?: boolean
+                  }
+                  resolve({ ok: !j.is_error, text: j.result ?? '', sessionId: j.session_id })
+                } catch {
+                  resolve({ ok: false, text: '', error: err ? String(err).slice(0, 300) : 'parse' })
+                }
+              }
+            )
+          })
+        }
+
+        // 멀티모달 — stream-json 입력으로 이미지 content 블록을 stdin에 넣는다 (--verbose 필수)
+        const content = [
+          { type: 'text', text: prompt },
+          ...images.map((im) => ({
+            type: 'image',
+            source: { type: 'base64', media_type: im.mediaType, data: im.data }
+          }))
+        ]
+        const msg = JSON.stringify({ type: 'user', message: { role: 'user', content } })
+        const args = [
+          '-p',
+          '--input-format',
+          'stream-json',
+          '--output-format',
+          'stream-json',
+          '--verbose',
+          '--model',
+          cfg.model
+        ]
         if (opts?.resume) args.push('--resume', opts.resume)
         return await new Promise<AiChatResult>((resolve) => {
-          execFile(
-            info.bin as string,
-            args,
-            { cwd: app.getPath('userData'), timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
-            (err, stdout) => {
+          const child = spawn(bin, args, { cwd: app.getPath('userData') })
+          let out = ''
+          let done = false
+          const finish = (r: AiChatResult): void => {
+            if (done) return
+            done = true
+            resolve(r)
+          }
+          const timer = setTimeout(() => {
+            child.kill()
+            finish({ ok: false, text: '', error: 'timeout' })
+          }, 180_000)
+          child.stdout.on('data', (d) => (out += d))
+          child.on('error', (e) => {
+            clearTimeout(timer)
+            finish({ ok: false, text: '', error: String(e).slice(0, 300) })
+          })
+          child.on('close', () => {
+            clearTimeout(timer)
+            let text = ''
+            let sessionId: string | undefined
+            let isErr = false
+            let found = false
+            for (const line of out.split('\n')) {
+              const s = line.trim()
+              if (!s.startsWith('{')) continue
               try {
-                const j = JSON.parse(stdout) as {
+                const e = JSON.parse(s) as {
+                  type?: string
                   result?: string
                   session_id?: string
                   is_error?: boolean
                 }
-                resolve({ ok: !j.is_error, text: j.result ?? '', sessionId: j.session_id })
+                if (e.type === 'result') {
+                  text = e.result ?? ''
+                  sessionId = e.session_id
+                  isErr = !!e.is_error
+                  found = true
+                }
               } catch {
-                resolve({ ok: false, text: '', error: err ? String(err).slice(0, 300) : 'parse' })
+                /* 부분 라인 무시 */
               }
             }
-          )
+            finish(found ? { ok: !isErr, text, sessionId } : { ok: false, text: '', error: 'parse' })
+          })
+          child.stdin.write(msg + '\n')
+          child.stdin.end()
         })
       }
       // codex 구독·API 키 경로는 다음 슬라이스
@@ -1233,6 +1607,23 @@ app.whenReady().then(() => {
       return null
     }
   })
+  // 설문 목록 — 설정 노드가 플랫폼별로 여러 설문 버튼을 라벨과 함께 그리도록 (질문은 안 실음)
+  ipcMain.handle('launch:questionnaireList', (): QuestionnaireMeta[] => {
+    const dir = join(app.getAppPath(), 'launch', 'questionnaires')
+    if (!existsSync(dir)) return []
+    const out: QuestionnaireMeta[] = []
+    for (const f of readdirSync(dir).filter((x) => x.endsWith('.json'))) {
+      try {
+        const q = JSON.parse(readFileSync(join(dir, f), 'utf8')) as Questionnaire
+        if (q.id && q.platform) {
+          out.push({ id: q.id, platform: q.platform, title: q.title, titleEn: q.titleEn ?? q.title })
+        }
+      } catch {
+        /* 깨진 파일 건너뜀 */
+      }
+    }
+    return out
+  })
   ipcMain.handle('launch:getConsoleAnswers', (_e, file: string, id: string): ConsoleAnswers | null => {
     try {
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
@@ -1285,16 +1676,83 @@ app.whenReady().then(() => {
       return out
     }
   )
-  // P2 편집 적용 — 대기 diff를 배치로 스토어에 반영. 지금은 라우팅 골격만(실제 write는 다음 단계).
-  // Play는 한 edit에 묶어 commit(원자적), ASC는 리소스별 PATCH(부분 실패 가능) 예정.
+  // P2 편집 적용 — 대기 diff를 스토어에 반영. Play(android)는 한 edit에 묶어 commit(원자적),
+  // ASC(ios)는 리소스별 PATCH(부분 실패 가능). 성공분은 렌더러가 재-pull로 확인.
   ipcMain.handle(
     'launch:applyEdits',
-    async (_e, _file: string, edits: PendingEdit[]): Promise<ApplyResult[]> => {
-      return edits.map((e) => ({
-        id: e.id,
-        ok: false,
-        message: appLocale === 'ko' ? 'API 연결 예정 — 다음 단계' : 'API wiring pending — next step'
-      }))
+    async (_e, file: string, edits: PendingEdit[]): Promise<ApplyResult[]> => {
+      let sheet: {
+        app: { packageName: string; bundleId: string }
+        credentials?: {
+          googleSa?: string
+          asc?: { keyPath?: string; keyId?: string; issuerId?: string }
+        }
+      }
+      try {
+        sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      } catch {
+        return edits.map((e) => ({
+          id: e.id,
+          ok: false,
+          message: appLocale === 'ko' ? '시트를 읽을 수 없음' : 'Cannot read sheet'
+        }))
+      }
+      const android = edits.filter((e) => e.platform === 'android')
+      const ios = edits.filter((e) => e.platform === 'ios')
+      const [aRes, iRes] = await Promise.all([
+        android.length ? applyPlayEdits(sheet, android) : Promise.resolve([]),
+        ios.length ? applyAscEdits(sheet, ios) : Promise.resolve([])
+      ])
+      return [...aRes, ...iRes]
+    }
+  )
+  // iOS 새 버전 생성 — 이름 등 '버전 종속 메타'는 라이브 버전에 못 대고 편집 가능한 버전이 있어야 한다.
+  // 버전 번호는 라이브보다 높아야 애플이 받는다. 생성 후 그 버전이 편집 가능해져 메타 반영이 열린다.
+  // (제출·심사는 빌드 업로드 후 사람이 — 비가역이라 자동 안 함, SPEC §3)
+  ipcMain.handle(
+    'launch:createIosVersion',
+    async (
+      _e,
+      file: string,
+      versionString: string
+    ): Promise<{ ok: boolean; error?: string; versionId?: string }> => {
+      const ko = appLocale === 'ko'
+      let sheet: {
+        app: { bundleId: string }
+        credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
+      }
+      try {
+        sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      } catch {
+        return { ok: false, error: ko ? '시트를 읽을 수 없음' : 'Cannot read sheet' }
+      }
+      const asc = resolveAsc(sheet)
+      if (!asc) return { ok: false, error: ko ? 'ASC 인증 키 없음' : 'No ASC key' }
+      const tok = await ascTokenFor(asc)
+      if (!tok) return { ok: false, error: ko ? '토큰 발급 실패' : 'Token failed' }
+      const A = 'https://api.appstoreconnect.apple.com/v1'
+      const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+      const appsR = await fetch(
+        `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+        { headers: { Authorization: 'Bearer ' + tok } }
+      )
+      if (!appsR.ok) return { ok: false, error: `HTTP ${appsR.status}` }
+      const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
+      if (!appId) return { ok: false, error: ko ? '앱 없음' : 'App not found' }
+      const r = await fetch(`${A}/appStoreVersions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          data: {
+            type: 'appStoreVersions',
+            attributes: { platform: 'IOS', versionString },
+            relationships: { app: { data: { type: 'apps', id: appId } } }
+          }
+        })
+      })
+      if (!r.ok) return { ok: false, error: await ascErrorMsg(r) }
+      const j = (await r.json()) as { data?: { id?: string } }
+      return { ok: true, versionId: j.data?.id }
     }
   )
   // Apple 계정의 앱 목록 — 가져오기에서 클릭 선택용 (Play는 목록 API가 없음)

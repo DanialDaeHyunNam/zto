@@ -10,6 +10,7 @@ import type {
   LiveIapProduct,
   MetaListing,
   PendingEdit,
+  QuestionnaireMeta,
   RunResult,
   SheetIapInfo,
   SheetSummary,
@@ -20,10 +21,20 @@ import type { Messages } from '../../i18n/en'
 import ContentSurveyWizard from './ContentSurveyWizard'
 
 // 플랫폼별 앱 콘텐츠 설문 (콘솔 전용 설정을 메움)
-const SURVEY = {
-  android: { id: 'play-content-rating', console: 'https://play.google.com/console' },
-  ios: { id: 'asc-age-rating', console: '' } // 콘솔 URL은 appId로 런타임 구성
-} as const
+// 설문별 콘솔 딥링크 — Play는 콘솔 홈, ASC는 appId로 런타임 구성(앱 개인정보/연령 등급 페이지 구분)
+function surveyConsoleUrl(
+  id: string,
+  surveys: QuestionnaireMeta[],
+  data: DashboardData | null
+): string | undefined {
+  const q = surveys.find((s) => s.id === id)
+  if (!q) return undefined
+  if (q.platform === 'android') return PLAY_CONSOLE_URL
+  const appId = data?.apple?.appId
+  if (!appId) return undefined
+  const base = `https://appstoreconnect.apple.com/apps/${appId}`
+  return id === 'asc-app-privacy' ? `${base}/distribution/appprivacy` : `${base}/distribution/info`
+}
 
 // §4.5 앱 대시보드 (P1 읽기 전용) — 플랫폼 탭(Android|iOS) + 전체 폭 상태 트리.
 // 불은 수동 체크가 아니라 스토어 pull로 자동 점등. API가 없는 노드만 🟡 + 콘솔 링크.
@@ -64,6 +75,18 @@ const iapStateTone = (state: string): Tone =>
 
 const playRank = (t: string): number =>
   t === 'production' ? 0 : t === 'beta' ? 1 : t === 'internal' ? 3 : 2
+
+// 버전 잠금 해제용 제안 버전 — 기존 최고 버전의 패치를 +1 (애플은 라이브보다 높은 번호만 받음)
+function nextVersion(versions: string[]): string {
+  const parsed = versions
+    .map((v) => v.split('.').map((n) => parseInt(n, 10) || 0))
+    .filter((p) => p.length > 0)
+  parsed.sort((a, b) => b[0] - a[0] || (b[1] ?? 0) - (a[1] ?? 0) || (b[2] ?? 0) - (a[2] ?? 0))
+  const top = parsed[0]
+  if (!top) return '1.0.1'
+  const [maj = 1, min = 0, pat = 0] = top
+  return `${maj}.${min}.${pat + 1}`
+}
 
 // 'ko' 같은 언어 서브태그로 로케일 항목 찾기 (Play ko-KR ↔ ASC ko 매칭)
 const pickByLang = <T extends { locale: string }>(arr: T[], sub: string): T | undefined =>
@@ -625,19 +648,54 @@ function ApplyBar({
   file,
   edits,
   onApplied,
-  onReset
+  onReset,
+  linkFor,
+  suggestedVersion
 }: {
   file: string
   edits: Record<string, PendingEdit>
   onApplied: (okIds: string[]) => void
   onReset: () => void
+  linkFor: (e: PendingEdit) => string | undefined // 실패 항목을 직접 고칠 콘솔 딥링크
+  suggestedVersion: string // 버전 잠금 해제용 제안 버전 번호 (라이브보다 높게)
 }): React.JSX.Element | null {
   const { m } = useI18n()
   const [phase, setPhase] = useState<'idle' | 'confirm' | 'running'>('idle')
   const [results, setResults] = useState<ApplyResult[] | null>(null)
+  const [verInput, setVerInput] = useState(suggestedVersion)
+  const [verBusy, setVerBusy] = useState(false)
+  const [verError, setVerError] = useState<string | null>(null)
   const pending = Object.values(edits)
 
   if (pending.length === 0 && !results) return null
+
+  // 버전 잠금으로 실패한 iOS 항목들 (라이브 이름 등은 새 버전이 있어야 편집 가능)
+  const versionLocked = (results ?? []).filter(
+    (r) =>
+      !r.ok &&
+      edits[r.id]?.platform === 'ios' &&
+      /current state|editable version/i.test(r.message)
+  )
+
+  // 새 버전 생성(컨펌) → 편집 가능해진 뒤 iOS 대기 편집 재반영
+  const createVersionAndApply = async (): Promise<void> => {
+    setVerBusy(true)
+    setVerError(null)
+    const cv = await window.zto.launch.createIosVersion(file, verInput.trim())
+    if (!cv.ok) {
+      setVerBusy(false)
+      setVerError(cv.error ?? 'failed')
+      return
+    }
+    const iosPending = pending.filter((e) => e.platform === 'ios')
+    const newRes = await window.zto.launch.applyEdits(file, iosPending)
+    setResults((prev) => [
+      ...(prev ?? []).filter((r) => edits[r.id]?.platform !== 'ios'),
+      ...newRes
+    ])
+    onApplied(newRes.filter((r) => r.ok).map((r) => r.id))
+    setVerBusy(false)
+  }
 
   const run = (): void => {
     if (phase === 'idle') {
@@ -667,15 +725,45 @@ function ApplyBar({
             <div className="result-list">
               {results.map((r) => {
                 const e = pending.find((p) => p.id === r.id)
+                const url = !r.ok && e ? linkFor(e) : undefined
                 return (
                   <div key={r.id} className="result-row">
                     <span className={`dash-dot ${r.ok ? 'g' : 'y'}`} />
                     <span className="result-label">{e?.label ?? r.id}</span>
                     <span className="result-msg">{r.message}</span>
+                    {url && (
+                      <button
+                        className="result-fix"
+                        onClick={() => window.zto.launch.openExternal(url)}
+                      >
+                        {m.launch.applyFixInConsole}
+                      </button>
+                    )}
                   </div>
                 )
               })}
             </div>
+            {versionLocked.length > 0 && (
+              <div className="version-fix">
+                <p className="version-fix-note">{m.launch.versionNeeded}</p>
+                <div className="version-fix-row">
+                  <input
+                    className="email-input version-input"
+                    value={verInput}
+                    onChange={(e) => setVerInput(e.target.value)}
+                    placeholder={m.launch.versionLabel}
+                  />
+                  <button
+                    className="choice small active"
+                    onClick={createVersionAndApply}
+                    disabled={verBusy || !verInput.trim()}
+                  >
+                    {verBusy ? m.launch.running : m.launch.createVersionApply}
+                  </button>
+                </div>
+                {verError && <p className="version-fix-err">{verError}</p>}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -710,11 +798,36 @@ function ApplyBar({
   )
 }
 
+// 설정 노드 아래 설문 버튼들 — 플랫폼별 여러 설문(등급·데이터안전·타깃연령·앱개인정보)을 라벨과 완료뱃지로
+type SurveyItem = { id: string; title: string; done: boolean }
+function SurveyButtons({
+  surveys,
+  onOpen
+}: {
+  surveys: SurveyItem[]
+  onOpen: (id: string) => void
+}): React.JSX.Element | null {
+  const { m } = useI18n()
+  if (surveys.length === 0) return null
+  return (
+    <div className="dash-sub">
+      <div className="survey-btns">
+        {surveys.map((s) => (
+          <button key={s.id} className="ghost-btn mini" onClick={() => onOpen(s.id)}>
+            {s.title}
+            {s.done && <span className="survey-badge">✓ {m.launch.surveyDone}</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function AndroidTree({
   g,
   file,
   metaDirty,
-  surveyDone,
+  surveys,
   onImage,
   onOpenMeta,
   onOpenSurvey
@@ -722,10 +835,10 @@ function AndroidTree({
   g: DashGoogle
   file: string
   metaDirty: boolean
-  surveyDone: boolean
+  surveys: SurveyItem[]
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
-  onOpenSurvey: () => void
+  onOpenSurvey: (id: string) => void
 }): React.JSX.Element {
   const { m } = useI18n()
   const releases = [...g.releases].sort((a, b) => playRank(a.track) - playRank(b.track))
@@ -738,14 +851,7 @@ function AndroidTree({
       <Node light="y" label={m.launch.dashNodeConfig} url={PLAY_CONSOLE_URL}>
         {[configReadable, m.launch.dashConfigConsole].filter(Boolean).join(' · ')}
       </Node>
-      <div className="dash-sub">
-        <div>
-          <button className="ghost-btn mini" onClick={onOpenSurvey}>
-            {m.launch.surveyBtn}
-            {surveyDone && <span className="survey-badge">✓ {m.launch.surveyDone}</span>}
-          </button>
-        </div>
-      </div>
+      <SurveyButtons surveys={surveys} onOpen={onOpenSurvey} />
       <Node light={metaDirty ? 'y' : g.listings.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={g.listings.map((l) => l.locale)} />
       </Node>
@@ -831,7 +937,7 @@ function IosTree({
   a,
   file,
   metaDirty,
-  surveyDone,
+  surveys,
   onImage,
   onOpenMeta,
   onOpenSurvey
@@ -839,10 +945,10 @@ function IosTree({
   a: DashApple
   file: string
   metaDirty: boolean
-  surveyDone: boolean
+  surveys: SurveyItem[]
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
-  onOpenSurvey: () => void
+  onOpenSurvey: (id: string) => void
 }): React.JSX.Element {
   const { m } = useI18n()
   // 카테고리·등급 둘 다 있어야 완료(🟢) — 일부만 있으면 미설정(⚪) + 콘솔 링크
@@ -861,14 +967,7 @@ function IosTree({
       >
         {configVal}
       </Node>
-      <div className="dash-sub">
-        <div>
-          <button className="ghost-btn mini" onClick={onOpenSurvey}>
-            {m.launch.surveyBtn}
-            {surveyDone && <span className="survey-badge">✓ {m.launch.surveyDone}</span>}
-          </button>
-        </div>
-      </div>
+      <SurveyButtons surveys={surveys} onOpen={onOpenSurvey} />
       <Node light={metaDirty ? 'y' : a.meta.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={a.meta.map((l) => l.locale)} />
       </Node>
@@ -948,7 +1047,7 @@ export default function AppDashboard({
   summary?: SheetSummary
   onPulled?: () => void
 }): React.JSX.Element {
-  const { m } = useI18n()
+  const { m, locale } = useI18n()
   const [data, setData] = useState<DashboardData | null>(null)
   const [loading, setLoading] = useState(false)
   const [tab, setTab] = useState<Platform | null>(null) // null = 데이터 보고 자동 선택
@@ -957,16 +1056,48 @@ export default function AppDashboard({
   const [surveyOpen, setSurveyOpen] = useState<string | null>(null) // 열린 설문 id
   const [surveyPrefill, setSurveyPrefill] = useState<Record<string, string> | null>(null)
   const [surveyDone, setSurveyDone] = useState<Record<string, boolean>>({})
+  const [surveys, setSurveys] = useState<QuestionnaireMeta[]>([]) // 플랫폼별 설문 목록(버전관리 JSON)
   const [edits, setEdits] = useState<Record<string, PendingEdit>>({})
 
+  // 설문 목록은 앱과 무관 — 한 번만 로드
+  useEffect(() => {
+    window.zto.launch.questionnaireList().then(setSurveys)
+  }, [])
+
   const refreshSurvey = useCallback(() => {
-    ;[SURVEY.android.id, SURVEY.ios.id].forEach((id) => {
-      window.zto.launch.getConsoleAnswers(file, id).then((a) => {
-        setSurveyDone((prev) => ({ ...prev, [id]: !!a?.completedAt }))
+    surveys.forEach((s) => {
+      window.zto.launch.getConsoleAnswers(file, s.id).then((a) => {
+        setSurveyDone((prev) => ({ ...prev, [s.id]: !!a?.completedAt }))
       })
     })
-  }, [file])
+  }, [file, surveys])
   useEffect(refreshSurvey, [refreshSurvey])
+
+  // iOS 연령 등급만 스토어에서 읽힘(ageRatingDeclaration) → 프리필 확보 후 연다. 나머지는 바로.
+  const openSurvey = useCallback(
+    (id: string): void => {
+      setSurveyPrefill(null)
+      if (id === 'asc-age-rating') {
+        window.zto.launch.ageRatingDeclaration(file).then((p) => {
+          setSurveyPrefill(p)
+          setSurveyOpen(id)
+        })
+      } else {
+        setSurveyOpen(id)
+      }
+    },
+    [file]
+  )
+
+  // 트리에 넘길 플랫폼별 설문 목록(라벨·완료여부)
+  const surveysFor = (plat: Platform): { id: string; title: string; done: boolean }[] =>
+    surveys
+      .filter((q) => q.platform === plat)
+      .map((q) => ({
+        id: q.id,
+        title: locale === 'ko' ? q.title : q.titleEn,
+        done: !!surveyDone[q.id]
+      }))
 
   // 대기 diff에 쌓거나(값이 다르면), 스토어 값과 같아지면 제거
   const stage = useCallback((e: PendingEdit) => {
@@ -1066,13 +1197,10 @@ export default function AppDashboard({
                   g={data.google}
                   file={file}
                   metaDirty={metaDirty('android')}
-                  surveyDone={!!surveyDone[SURVEY.android.id]}
+                  surveys={surveysFor('android')}
                   onImage={(urls, idx) => setLightbox({ urls, idx })}
                   onOpenMeta={() => setMetaOpen(true)}
-                  onOpenSurvey={() => {
-                    setSurveyPrefill(null) // Play는 프리필 불가
-                    setSurveyOpen(SURVEY.android.id)
-                  }}
+                  onOpenSurvey={openSurvey}
                 />
               ) : (
                 <PlatformError error={data.googleError} store="play" />
@@ -1082,17 +1210,10 @@ export default function AppDashboard({
                 a={data.apple}
                 file={file}
                 metaDirty={metaDirty('ios')}
-                surveyDone={!!surveyDone[SURVEY.ios.id]}
+                surveys={surveysFor('ios')}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}
-                onOpenSurvey={() => {
-                  // iOS 연령 등급은 스토어에서 읽힘 → 프리필 확보 후 연다
-                  setSurveyPrefill(null)
-                  window.zto.launch.ageRatingDeclaration(file).then((p) => {
-                    setSurveyPrefill(p)
-                    setSurveyOpen(SURVEY.ios.id)
-                  })
-                }}
+                onOpenSurvey={openSurvey}
               />
             ) : (
               <PlatformError error={data.appleError} store="asc" />
@@ -1115,15 +1236,10 @@ export default function AppDashboard({
         <ContentSurveyWizard
           file={file}
           questionnaireId={surveyOpen}
-          consoleUrl={
-            surveyOpen === SURVEY.ios.id
-              ? data?.apple
-                ? `https://appstoreconnect.apple.com/apps/${data.apple.appId}/distribution/info`
-                : undefined
-              : SURVEY.android.console
-          }
-          prefill={surveyOpen === SURVEY.ios.id ? surveyPrefill : null}
-          noAutoFetch={surveyOpen === SURVEY.android.id}
+          consoleUrl={surveyConsoleUrl(surveyOpen, surveys, data)}
+          // iOS 연령 등급만 스토어 프리필 가능 — 나머지는 read API 없어 자동 조회 불가 안내
+          prefill={surveyOpen === 'asc-age-rating' ? surveyPrefill : null}
+          noAutoFetch={surveyOpen !== 'asc-age-rating'}
           onClose={() => setSurveyOpen(null)}
           onSaved={refreshSurvey}
         />
@@ -1132,6 +1248,14 @@ export default function AppDashboard({
         file={file}
         edits={edits}
         onReset={() => setEdits({})}
+        linkFor={(e) =>
+          e.platform === 'ios'
+            ? data?.apple
+              ? `https://appstoreconnect.apple.com/apps/${data.apple.appId}/distribution/info`
+              : 'https://appstoreconnect.apple.com'
+            : PLAY_CONSOLE_URL
+        }
+        suggestedVersion={nextVersion((data?.apple?.versions ?? []).map((v) => v.version))}
         onApplied={(okIds) => {
           if (okIds.length === 0) return
           setEdits((prev) => Object.fromEntries(Object.entries(prev).filter(([k]) => !okIds.includes(k))))

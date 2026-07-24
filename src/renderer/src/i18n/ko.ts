@@ -7,8 +7,32 @@ export const ko: Messages = {
     launchDesc: '스토어 실황·출시 자동화',
     accounts: '계정 인벤토리',
     accountsDesc: '모든 계정을 한눈에',
+    social: '소셜미디어 관리',
+    socialDesc: '임베드 브라우저 + AI 코파일럿',
     settings: '설정',
     settingsDesc: 'AI·언어·앱 설정'
+  },
+  browser: {
+    urlPlaceholder: 'URL 또는 검색어 입력…',
+    go: '이동',
+    back: '뒤로',
+    forward: '앞으로',
+    reload: '새로고침',
+    close: '닫기',
+    opening: '여는 중…',
+    newTab: '새 탭',
+    newTabTitle: '새 탭 (⌘T)',
+    noSocial: '아직 연결된 소셜 계정이 없어요 — 계정 인벤토리에서 소셜을 연결하면 여기 바로가기로 떠요.',
+    intro: 'ZTO가 소유한 임베드 브라우저. 로그인은 직접 하시고, ZTO가 페이지를 읽고 제어합니다 — 소셜 코파일럿과 콘솔 폼 싱크의 기반.'
+  },
+  social: {
+    aiTitle: 'AI',
+    aiEmpty: '왼쪽 페이지에 대해 묻거나, 게시글·댓글 초안을 AI와 함께 다듬어 보세요.',
+    aiThinking: '생각 중…',
+    aiPlaceholder: 'AI에게 묻거나, 이미지를 붙여넣거나, 쓸 내용을 말해보세요…',
+    aiSend: '보내기',
+    captureTitle: '현재 브라우저 화면을 캡처해 첨부',
+    imgPrompt: '이 화면을 보고 도와줘.'
   },
   settings: {
     title: '설정',
@@ -54,6 +78,7 @@ export const ko: Messages = {
     subtitle:
       '양대 스토어 실황이 한 화면에 — 이미 된 것엔 불이 들어오고, 손이 필요한 곳만 콘솔로 점프합니다.',
     addApp: '앱 추가',
+    openBrowser: '브라우저',
     importDesc: '이미 스토어에 나가 있는 앱을 대시보드에 연결',
     apiPlay: 'Play API',
     apiApple: 'App Store API',
@@ -189,6 +214,11 @@ export const ko: Messages = {
     applyRun: '적용',
     applyRevertAll: '전체 취소',
     applyResultTitle: '적용 결과',
+    applyFixInConsole: '콘솔에서 수정 →',
+    versionNeeded:
+      '이 변경은 새 App Store 버전이 필요해요 — 라이브 앱 이름은 바로 못 바꿉니다. ZTO가 새 버전을 만들어 반영할 수 있어요 (빌드 업로드·제출은 직접).',
+    createVersionApply: '새 버전 만들어 반영',
+    versionLabel: '버전',
     surveyBtn: '앱 콘텐츠 설문',
     surveyDone: '작성됨',
     surveyProgress: '{a}/{b} 답함',
@@ -197,7 +227,7 @@ export const ko: Messages = {
       'API가 없는 콘솔 전용 설정 — 여기서 답하면 채워드려요. 잘 모르겠으면 물음표를 눌러보세요.',
     surveyPrefilled: '스토어에서 현재 설정을 불러왔어요 — 필요하면 고치세요.',
     surveyNoAutoFetch:
-      'Play는 이 설정을 API로 가져올 수 없어요. 콘솔 → 앱 선택 → 정책 및 프로그램 → 앱 콘텐츠에서 확인·설정하세요.',
+      '이 설정은 API로 가져올 수 없어요 — 아래 콘솔 링크에서 직접 확인·설정하세요.',
     levelNone: '없음',
     levelMild: '가끔·약함',
     levelIntense: '자주·강함',

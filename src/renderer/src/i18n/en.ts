@@ -5,8 +5,32 @@ export const en = {
     launchDesc: 'Live status & launch automation',
     accounts: 'Account Inventory',
     accountsDesc: 'All accounts at a glance',
+    social: 'Social Media',
+    socialDesc: 'Embedded browser + AI copilot',
     settings: 'Settings',
     settingsDesc: 'AI, language & app config'
+  },
+  browser: {
+    urlPlaceholder: 'Enter a URL or search…',
+    go: 'Go',
+    back: 'Back',
+    forward: 'Forward',
+    reload: 'Reload',
+    close: 'Close',
+    opening: 'Opening…',
+    newTab: 'New tab',
+    newTabTitle: 'New tab (⌘T)',
+    noSocial: 'No linked social accounts yet — connect some in Account Inventory and they’ll show up here.',
+    intro: "ZTO's own embedded browser. Log in yourself; ZTO can read and drive the page — the foundation for the social copilot and console form sync."
+  },
+  social: {
+    aiTitle: 'AI',
+    aiEmpty: 'Ask about the page on the left, or have AI help draft a post or reply.',
+    aiThinking: 'Thinking…',
+    aiPlaceholder: 'Ask AI, paste an image, or tell it what to write…',
+    aiSend: 'Send',
+    captureTitle: 'Capture the current browser view and attach it',
+    imgPrompt: 'Take a look at this screen and help.'
   },
   settings: {
     title: 'Settings',
@@ -52,6 +76,7 @@ export const en = {
     subtitle:
       "Both stores at a glance — what's already done lights up, and you jump to the console only where hands are needed.",
     addApp: 'Add app',
+    openBrowser: 'Browser',
     importDesc: 'Connect an app already live on the stores',
     apiPlay: 'Play API',
     apiApple: 'App Store API',
@@ -187,6 +212,11 @@ export const en = {
     applyRun: 'Apply',
     applyRevertAll: 'Discard all',
     applyResultTitle: 'Apply result',
+    applyFixInConsole: 'Fix in console →',
+    versionNeeded:
+      'This change needs a new App Store version — the live app name can’t be edited directly. ZTO can create one and apply your changes (you upload a build & submit).',
+    createVersionApply: 'Create version & apply',
+    versionLabel: 'Version',
     surveyBtn: 'App content survey',
     surveyDone: 'Completed',
     surveyProgress: '{a}/{b} answered',
@@ -195,7 +225,7 @@ export const en = {
       "Console-only settings with no API — answer here and we'll fill it in. Not sure? Tap the question mark.",
     surveyPrefilled: 'Loaded the current settings from the store — edit if needed.',
     surveyNoAutoFetch:
-      "Play can't fetch these via API. Check/set them in the console → your app → Policy → App content.",
+      "This setting can't be fetched via API — open the console link below to review and set it.",
     levelNone: 'None',
     levelMild: 'Infrequent/Mild',
     levelIntense: 'Frequent/Intense',

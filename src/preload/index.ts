@@ -12,6 +12,7 @@ import type {
   CredentialStatus,
   DashboardData,
   Questionnaire,
+  QuestionnaireMeta,
   DevAccounts,
   DevAccountState,
   LockState,
@@ -22,12 +23,38 @@ import type {
   StoreKind,
   StoreSnapshotEntry
 } from '../shared/launch-types'
+import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
 
 const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
   setLocale: (locale: 'ko' | 'en'): Promise<void> => ipcRenderer.invoke('app:setLocale', locale),
   getLocale: (): Promise<'ko' | 'en'> => ipcRenderer.invoke('app:getLocale'),
+  // #4 ZTO 자체 브라우저 — WebContentsView 임베드·네비게이트·eval/CDP 제어
+  browser: {
+    attach: (bounds: BrowserBounds): Promise<boolean> =>
+      ipcRenderer.invoke('browser:attach', bounds),
+    setBounds: (bounds: BrowserBounds): Promise<void> =>
+      ipcRenderer.invoke('browser:setBounds', bounds),
+    detach: (): Promise<void> => ipcRenderer.invoke('browser:detach'),
+    navigate: (url: string): Promise<BrowserResult> => ipcRenderer.invoke('browser:navigate', url),
+    newTab: (url?: string): Promise<void> => ipcRenderer.invoke('browser:newTab', url),
+    closeTab: (id: string): Promise<void> => ipcRenderer.invoke('browser:closeTab', id),
+    selectTab: (id: string): Promise<void> => ipcRenderer.invoke('browser:selectTab', id),
+    back: (): Promise<void> => ipcRenderer.invoke('browser:back'),
+    forward: (): Promise<void> => ipcRenderer.invoke('browser:forward'),
+    reload: (): Promise<void> => ipcRenderer.invoke('browser:reload'),
+    eval: (js: string): Promise<BrowserResult> => ipcRenderer.invoke('browser:eval', js),
+    capture: (): Promise<string | null> => ipcRenderer.invoke('browser:capture'),
+    cdp: (method: string, params?: object): Promise<BrowserResult> =>
+      ipcRenderer.invoke('browser:cdp', method, params),
+    // 네비게이션 상태 구독 — 언구독 함수 반환
+    onState: (cb: (s: BrowserState) => void): (() => void) => {
+      const listener = (_e: unknown, s: BrowserState): void => cb(s)
+      ipcRenderer.on('browser:state', listener)
+      return () => ipcRenderer.removeListener('browser:state', listener)
+    }
+  },
   ai: {
     status: (fresh?: boolean): Promise<AiStatus> => ipcRenderer.invoke('ai:status', fresh),
     setModel: (model: string): Promise<void> => ipcRenderer.invoke('ai:setModel', model),
@@ -37,8 +64,10 @@ const api = {
       ipcRenderer.invoke('ai:setMode', provider, mode),
     setKey: (provider: AiProviderId, key: string): Promise<boolean> =>
       ipcRenderer.invoke('ai:setKey', provider, key),
-    chat: (prompt: string, opts?: { resume?: string }): Promise<AiChatResult> =>
-      ipcRenderer.invoke('ai:chat', prompt, opts)
+    chat: (
+      prompt: string,
+      opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
+    ): Promise<AiChatResult> => ipcRenderer.invoke('ai:chat', prompt, opts)
   },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),
@@ -71,6 +100,8 @@ const api = {
       ipcRenderer.invoke('launch:snapshots', file),
     questionnaire: (id: string): Promise<Questionnaire | null> =>
       ipcRenderer.invoke('launch:questionnaire', id),
+    questionnaireList: (): Promise<QuestionnaireMeta[]> =>
+      ipcRenderer.invoke('launch:questionnaireList'),
     getConsoleAnswers: (file: string, id: string): Promise<ConsoleAnswers | null> =>
       ipcRenderer.invoke('launch:getConsoleAnswers', file, id),
     setConsoleAnswers: (file: string, id: string, data: ConsoleAnswers): Promise<void> =>
@@ -79,6 +110,11 @@ const api = {
       ipcRenderer.invoke('launch:ageRatingDeclaration', file),
     applyEdits: (file: string, edits: PendingEdit[]): Promise<ApplyResult[]> =>
       ipcRenderer.invoke('launch:applyEdits', file, edits),
+    createIosVersion: (
+      file: string,
+      versionString: string
+    ): Promise<{ ok: boolean; error?: string; versionId?: string }> =>
+      ipcRenderer.invoke('launch:createIosVersion', file, versionString),
     listAscApps: (): Promise<{ name: string; bundleId: string }[]> =>
       ipcRenderer.invoke('launch:listAscApps'),
     getJourney: (file: string): Promise<{ registered: boolean }> =>

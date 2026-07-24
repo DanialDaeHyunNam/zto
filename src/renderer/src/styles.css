@@ -412,6 +412,402 @@ button {
   padding: 40px 48px 60px;
 }
 
+/* 브라우저 모듈 — 임베드 뷰가 최대 공간을 쓰도록 패딩·스크롤 제거 */
+.content.flush {
+  padding: 0;
+  overflow: hidden;
+}
+
+/* 소셜미디어 관리 — 좌: 임베드 브라우저, 우: AI 코파일럿 패널 */
+.social-page {
+  display: flex;
+  height: 100vh;
+}
+/* #4 ZTO 자체 브라우저 — 크롬(URL바·버튼) + WebContentsView가 얹힐 구멍(surface) */
+.browser-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+/* 탭 바 — 각 탭이 자체 뷰. ⌘T 새 탭 / ⌘1..9 전환 */
+.browser-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 6px 8px 0;
+  flex: 0 0 auto;
+  overflow-x: auto;
+}
+.br-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 180px;
+  min-width: 90px;
+  padding: 7px 10px;
+  border-radius: 8px 8px 0 0;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted, #a9a9be);
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-bottom: none;
+}
+.br-tab:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.br-tab.active {
+  background: rgba(139, 92, 246, 0.12);
+  border-color: rgba(139, 92, 246, 0.4);
+  color: var(--text, #e8e8ef);
+}
+.br-tab-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.br-tab-close {
+  flex: 0 0 auto;
+  border: none;
+  background: none;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0 2px;
+}
+.br-tab-close:hover {
+  opacity: 1;
+}
+.br-tab-add {
+  flex: 0 0 auto;
+  align-self: center;
+  width: 28px;
+  height: 28px;
+  margin-left: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text, #e8e8ef);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.br-tab-add:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.browser-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  flex: 0 0 auto;
+}
+.br-nav {
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text, #e8e8ef);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+.br-nav:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.br-nav:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.br-url {
+  flex: 1;
+  min-width: 0;
+}
+.browser-readout {
+  flex: 0 0 auto;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-family: ui-monospace, monospace;
+  color: var(--muted, #a9a9be);
+  background: rgba(139, 92, 246, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 임베드 뷰가 이 위에 얹힌다 — 뷰가 로드되기 전/빈 상태의 안내만 보인다 */
+.browser-surface {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d0d12;
+}
+.browser-hint {
+  max-width: 460px;
+  text-align: center;
+  color: var(--muted, #8a8a9e);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 0 24px;
+}
+
+/* 스피드다이얼 — 시작 화면에 내 소셜 계정 바로가기(모바일 홈처럼 아이콘 그리드) */
+.speed-dial {
+  width: 100%;
+  max-width: 640px;
+  padding: 24px;
+}
+.speed-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 20px 12px;
+  justify-items: center;
+}
+.speed-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 84px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text, #e8e8ef);
+  cursor: pointer;
+}
+.speed-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition:
+    transform 0.12s ease,
+    border-color 0.12s ease;
+}
+.speed-tile:hover .speed-icon {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+.speed-name {
+  font-size: 12px;
+  color: var(--muted, #b8b8c8);
+  max-width: 84px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 우측 AI 코파일럿 패널 — 임베드 뷰에 덮이지 않는 렌더러 영역 */
+.ai-panel {
+  flex: 0 0 360px;
+  width: 360px;
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.015);
+}
+.ai-panel-head {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ai-provider {
+  font-size: 11px;
+  color: var(--muted, #8a8a9e);
+  font-family: ui-monospace, monospace;
+}
+/* 모델 드롭다운 — 항상 모델 바꿀 수 있게 */
+.ai-model-select {
+  font-size: 12px;
+  color: var(--text, #e8e8ef);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+}
+.ai-model-select:hover {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+.ai-model-select option {
+  background: #16161c;
+  color: var(--text, #e8e8ef);
+}
+.ai-msgs {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.ai-empty {
+  color: var(--muted, #8a8a9e);
+  font-size: 13px;
+  line-height: 1.6;
+  padding: 8px 4px;
+}
+.ai-msg {
+  padding: 8px 11px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 92%;
+}
+.ai-msg.user {
+  align-self: flex-end;
+  background: var(--gradient, linear-gradient(135deg, #7c3aed, #a855f7));
+  color: #fff;
+}
+.ai-msg.assistant {
+  align-self: flex-start;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text, #e8e8ef);
+}
+.ai-msg.thinking {
+  opacity: 0.6;
+}
+.ai-input-row {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.ai-input {
+  flex: 1;
+  min-width: 0;
+  resize: none;
+  height: 56px;
+}
+/* 첨부 이미지 썸네일 (전송 전) */
+.ai-attachments {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 10px 0;
+}
+.ai-attach {
+  position: relative;
+}
+.ai-attach img {
+  width: 54px;
+  height: 54px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.ai-attach-x {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(20, 20, 28, 0.95);
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+}
+/* 메시지 안 이미지 썸네일 */
+.ai-msg-imgs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.ai-msg-imgs img {
+  max-width: 140px;
+  max-height: 120px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+/* 브라우저 슬라이드-오버 (앱스토어 관리 등) — 사이드바 그대로, 콘텐츠 영역만 덮는다.
+   '문(패널)'이 슬라이드로 열린 뒤 BrowserSurface가 마운트되며 뷰가 켜진다 = 캐비닛 속 TV. */
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.browser-overlay {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  background: #0d0d12;
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+}
+.browser-overlay.opening {
+  animation: br-slide-in 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+.browser-overlay.closing {
+  animation: br-slide-out 0.24s cubic-bezier(0.4, 0, 1, 1) both;
+}
+@keyframes br-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes br-slide-out {
+  from {
+    transform: none;
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+.overlay-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  z-index: 2;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  background: rgba(20, 20, 28, 0.85);
+  color: var(--text, #e8e8ef);
+  font-size: 14px;
+  cursor: pointer;
+}
+.overlay-close:hover {
+  background: rgba(40, 40, 52, 0.95);
+}
+.overlay-curtain {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted, #8a8a9e);
+  font-size: 13px;
+}
+
 /* 스크롤바가 공간을 차지해 콘텐츠 폭이 출렁이는 것 방지 — 숨기되 스크롤은 유지 */
 .content::-webkit-scrollbar {
   width: 0;
@@ -1981,12 +2377,54 @@ button {
 
 .result-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
   gap: 12px;
   padding: 9px 0;
   font-size: 13px;
   border-top: 1px solid rgba(255, 255, 255, 0.045);
+}
+
+/* 버전 잠금 해제 — 새 버전 만들어 반영 */
+.version-fix {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.version-fix-note {
+  font-size: 12px;
+  color: var(--muted, #a9a9be);
+  line-height: 1.6;
+  margin: 0 0 10px;
+}
+.version-fix-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.version-input {
+  width: 120px;
+  flex: 0 0 auto;
+}
+.version-fix-err {
+  margin: 8px 0 0;
+  font-size: 12px;
+  color: #f0a020;
+}
+
+/* 실패 항목을 콘솔에서 직접 고치러 가는 아웃링크 */
+.result-fix {
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  background: rgba(139, 92, 246, 0.1);
+  color: var(--text, #e8e8ef);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.result-fix:hover {
+  background: rgba(139, 92, 246, 0.18);
 }
 
 .result-row:first-child {
@@ -2373,6 +2811,13 @@ button {
   padding-left: 12px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+}
+
+/* 설문 버튼들 — 플랫폼별 여러 설문을 한 줄에 흐르게 (넘치면 줄바꿈) */
+.survey-btns {
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
 }
 

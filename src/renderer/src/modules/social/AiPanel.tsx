@@ -1,0 +1,162 @@
+import { useEffect, useRef, useState } from 'react'
+import type { AiModel } from '../../../../shared/launch-types'
+import { useI18n } from '../../i18n'
+
+// 소셜 코파일럿의 우측 AI 패널 — active provider로 대화(구독 CLI/API 키). resume로 맥락 이어감.
+// 멀티모달 입력: 왼쪽 화면을 [화면 캡처]로 첨부하거나 이미지를 붙여넣으면 AI가 그림으로 본다(stream-json 검증됨).
+interface Msg {
+  role: 'user' | 'assistant'
+  text: string
+  imgs?: string[] // dataURL 썸네일 (표시용)
+}
+
+// data:image/png;base64,XXXX → { mediaType, data }
+function splitDataUrl(dataUrl: string): { mediaType: string; data: string } | null {
+  const m = dataUrl.match(/^data:(.+?);base64,(.*)$/)
+  return m ? { mediaType: m[1], data: m[2] } : null
+}
+
+export default function AiPanel(): React.JSX.Element {
+  const { m } = useI18n()
+  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [input, setInput] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [session, setSession] = useState<string | undefined>(undefined)
+  const [imgs, setImgs] = useState<string[]>([]) // 전송 전 첨부된 이미지 dataURL
+  const [models, setModels] = useState<AiModel[]>([])
+  const [model, setModel] = useState('')
+  const listRef = useRef<HTMLDivElement | null>(null)
+
+  // 모델 목록·현재 모델 — 항상 바꿀 수 있게 헤더 드롭다운에
+  useEffect(() => {
+    window.zto.ai.status().then((s) => {
+      setModels(s.models)
+      setModel(s.model)
+    })
+  }, [])
+  const changeModel = (id: string): void => {
+    setModel(id)
+    window.zto.ai.setModel(id)
+  }
+
+  useEffect(() => {
+    listRef.current?.scrollTo(0, listRef.current.scrollHeight)
+  }, [msgs, busy])
+
+  const addImg = (dataUrl: string): void => setImgs((prev) => [...prev, dataUrl])
+  const removeImg = (i: number): void => setImgs((prev) => prev.filter((_, idx) => idx !== i))
+
+  // 현재 브라우저 화면(활성 탭)을 캡처해 첨부 — "AI가 내가 보는 걸 본다"
+  const capture = async (): Promise<void> => {
+    const d = await window.zto.browser.capture()
+    if (d) addImg(d)
+  }
+
+  // 클립보드 이미지 붙여넣기
+  const onPaste = (e: React.ClipboardEvent): void => {
+    for (const item of e.clipboardData.items) {
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile()
+        if (file) {
+          const reader = new FileReader()
+          reader.onload = () => typeof reader.result === 'string' && addImg(reader.result)
+          reader.readAsDataURL(file)
+        }
+      }
+    }
+  }
+
+  const send = async (): Promise<void> => {
+    const text = input.trim()
+    if ((!text && imgs.length === 0) || busy) return
+    const sending = imgs
+    const prompt = text || (sending.length > 0 ? m.social.imgPrompt : '')
+    setInput('')
+    setImgs([])
+    setMsgs((prev) => [...prev, { role: 'user', text, imgs: sending }])
+    setBusy(true)
+
+    const images = sending.map(splitDataUrl).filter((x): x is { mediaType: string; data: string } => !!x)
+    const r = await window.zto.ai.chat(prompt, {
+      resume: session,
+      images: images.length > 0 ? images : undefined
+    })
+    setBusy(false)
+    if (r.ok) {
+      setMsgs((prev) => [...prev, { role: 'assistant', text: r.text }])
+      if (r.sessionId) setSession(r.sessionId)
+    } else {
+      setMsgs((prev) => [...prev, { role: 'assistant', text: '⚠ ' + (r.error ?? 'failed') }])
+    }
+  }
+
+  return (
+    <aside className="ai-panel">
+      <div className="ai-panel-head">
+        <strong>{m.social.aiTitle}</strong>
+        {models.length > 0 && (
+          <select
+            className="ai-model-select"
+            value={model}
+            onChange={(e) => changeModel(e.target.value)}
+          >
+            {models.map((mo) => (
+              <option key={mo.id} value={mo.id}>
+                {mo.label}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+      <div className="ai-msgs" ref={listRef}>
+        {msgs.length === 0 && <div className="ai-empty">{m.social.aiEmpty}</div>}
+        {msgs.map((mm, i) => (
+          <div key={i} className={`ai-msg ${mm.role}`}>
+            {mm.imgs && mm.imgs.length > 0 && (
+              <div className="ai-msg-imgs">
+                {mm.imgs.map((src, k) => (
+                  <img key={k} src={src} alt="" />
+                ))}
+              </div>
+            )}
+            {mm.text}
+          </div>
+        ))}
+        {busy && <div className="ai-msg assistant thinking">{m.social.aiThinking}</div>}
+      </div>
+      {imgs.length > 0 && (
+        <div className="ai-attachments">
+          {imgs.map((src, i) => (
+            <div key={i} className="ai-attach">
+              <img src={src} alt="" />
+              <button className="ai-attach-x" onClick={() => removeImg(i)}>
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <div className="ai-input-row">
+        <button className="br-nav" onClick={capture} title={m.social.captureTitle}>
+          ▣
+        </button>
+        <textarea
+          className="email-input ai-input"
+          value={input}
+          placeholder={m.social.aiPlaceholder}
+          onChange={(e) => setInput(e.target.value)}
+          onPaste={onPaste}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              send()
+            }
+          }}
+        />
+        <button className="choice small active" onClick={send} disabled={busy}>
+          {m.social.aiSend}
+        </button>
+      </div>
+    </aside>
+  )
+}

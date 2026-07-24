@@ -176,6 +176,14 @@ export interface Questionnaire {
   questions: QuestionDef[]
 }
 
+// 설문 목록 항목 — 설정 노드가 플랫폼별로 여러 설문 버튼을 그릴 때 (질문 세트는 빼고 라벨만)
+export interface QuestionnaireMeta {
+  id: string
+  platform: EditPlatform
+  title: string
+  titleEn: string
+}
+
 // 답: level → NONE|INFREQUENT_OR_MILD|FREQUENT_OR_INTENSE, bool → YES|NO
 export interface ConsoleAnswers {
   version: string
