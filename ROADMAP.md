@@ -8,7 +8,7 @@
 - **AI는 교체 가능한 두뇌, 브라우저는 ZTO 소유의 손.** 둘을 분리한다.
 - **AI provider = BYO 2방식**: ① 구독(로컬 CLI 스폰 — Claude=`claude`, ChatGPT=`codex`) / ② API 키(OS 키체인 암호화 저장 + 직접 호출). 설정에서 provider·방식 선택. 키·글은 네트워크 안 탐(로컬 원칙).
 - **브라우저 자동화 = ZTO 자체 소유.** Electron 자체가 Chromium이므로 `WebContentsView`를 임베드하고(Electron 43, `BrowserView`는 deprecated) `executeJavaScript`·`webContents.debugger`(CDP)로 직접 제어. 외부 Chrome·gstack 플러그인·특정 LLM 환경에 의존하지 않는다 → 포터블. 이 **한 기반이 L2 콘솔 폼 자동입력과 소셜 코파일럿 양쪽**에 쓰인다.
-  - **로그인 = ZTO 안에서 1회, 세션은 ZTO 소유(A안 확정 2026-07-24 Dan).** Chromium이지만 Google Chrome이 아니라 저장소가 격리됨 — 크롬 프로필·쿠키·비번을 승계하지 않는다. 퍼시스턴트 세션이라 서비스당 한 번만 로그인하면 유지. **크롬 쿠키 임포트(B안)는 기각** — Keychain 암호화 복호화·크롬 프로세스 잠금·버전 취약성 + 비번은 SPEC §7.3(타 앱 저장 비번 읽기 불가)와 충돌. 포터블성·보안이 1회 로그인보다 값짐.
+  - **로그인 = ZTO 안에서 1회, 세션은 ZTO 소유(A안 확정 2026-07-24 Dan).** Chromium이지만 Google Chrome이 아니라 저장소가 격리됨 — 크롬 프로필·쿠키·비번을 승계하지 않는다. 퍼시스턴트 세션이라 서비스당 한 번만 로그인하면 유지. **실증 완료(2026-07-27)** — Play 콘솔·ASC 양쪽 실제 로그인 통과. 구글의 임베드 브라우저 차단(`disallowed_useragent`)이 우려됐으나 **강등까지만**이었다: UA에 `Electron/43.1.1`이 실려 나가면 축소 플로우(`flowName=WebLiteSignIn`, 정상 브라우저는 `GlifWebSignIn`)를 받지만 인증 자체는 막히지 않는다. 두 요청의 차이가 이 토큰 하나뿐임을 실측으로 확인 — 즉 **UA에서 Electron 토큰을 지우면 완전 플로우를 받지만, 구글의 임베드 브라우저 정책을 UA로 우회하는 회색지대라 하지 않는다**(막히지 않았으므로 할 이유도 없음). 이 판단은 구글이 정책을 조이면 재검토 대상. **크롬 쿠키 임포트(B안)는 기각** — Keychain 암호화 복호화·크롬 프로세스 잠금·버전 취약성 + 비번은 SPEC §7.3(타 앱 저장 비번 읽기 불가)와 충돌. 포터블성·보안이 1회 로그인보다 값짐.
 - **콘솔 폼은 "미러링"이 아니라 "reverse-sync" (2026-07-23 Dan 확정).** 설문은 JSON으로 두어 depth를 유연하게 관리하되(콘솔 폼 복제가 SSOT가 아님), **진실은 라이브 콘솔 화면**이다. ZTO 브라우저가 실제 폼을 *읽어* 우리 JSON 구조로 거꾸로 싱크한다 → 애플·구글이 폼을 개정해도 우리가 조사·재인코딩으로 쫓는 게 아니라 **화면을 다시 읽어 싱크**하면 흡수된다. 핵심 프리미티브 = `browser:eval`(페이지에서 JS 실행→값 회수)이 곧 싱크의 최소 단위. 손 인코딩 설문(데이터안전·앱개인정보 요지)은 이 싱크 전까지의 얇은 다리.
 - **업데이트 = ZTO 자체 릴리스**(electron-updater + 릴리스 채널). gstack 등 외부를 좇지 않는다. 스토어 설문 등 데이터 변동은 질문 JSON만 갱신(앱 업데이트 또는 데이터-only 페치).
 
@@ -50,7 +50,8 @@
 - [x] **앱스토어 관리의 브라우저 UX = 슬라이드-오버 (2026-07-23 Dan 확정, `browser-overlay.tsx`)** — "슬라이딩 캐비닛 속 TV" 은유. 사이드바는 그대로, **콘텐츠 영역(.content 사각형 측정)만 fixed로 덮으며** 브라우저가 우→좌 슬라이드. 문(패널)이 다 열린 뒤에야 `BrowserSurface` 마운트(뷰 attach=TV on), 닫을 땐 역순(뷰 detach→문 닫힘) — WebContentsView가 CSS로 못 움직이는 걸 마운트 게이팅으로 해결. `BrowserOverlayProvider`(context, `useBrowserOverlay().open(url)`)를 App 루트에 두고 모듈 전환 시 자동 닫힘(`closeKey`). 앱스토어 헤더에 [브라우저] 트리거(→ Play 콘솔). 소셜 모듈과 **같은 뷰·`BrowserSurface` 재사용**
 - [ ] **reverse-sync 엔진** — 콘솔 폼 페이지에서 `eval`로 필드·선택지·현재값을 긁어 설문 JSON 스키마에 매핑(읽어 싱크). 폼 개정 시 다시 읽어 흡수
 - [ ] 폼 채우기 — 설문 답을 콘솔 폼에 입력(CDP 합성 입력으로 사이트 검증 통과). 비가역 제출은 사람 컨펌
-- [ ] 팝업 로그인(OAuth 새 창)·다중 탭 대응, 뷰 상태 영속
+- [x] **로그인 실증 + 임베드 렌더링 규칙 (2026-07-27)** — 콘솔 두 곳 실제 로그인 통과(위 A안 실증 참조), reverse-sync 앞 관문 해제. 함께 잡은 두 규칙: ① **임베드 캔버스는 흰색**(`setBackgroundColor('#ffffff')`) — 앱 셸 색(`#0d0d12`)을 깔았더니 배경을 직접 칠하지 않는 영역에 그게 비쳐 어두운 글자가 사라졌다(ASC 앱 목록에서 앱 이름이 안 보임). 웹 페이지는 흰 캔버스를 전제하고 그린다. ② **임베드 페이지는 라이트 모드 고정** — 뷰 단위 CDP `Emulation.setEmulatedMedia`(`prefers-color-scheme: light`), 탭 생성 시 + `did-navigate`마다 재적용. `nativeTheme.themeSource`는 **쓰지 않는다**(앱 창까지 뒤집혀 다크 전용 원칙과 충돌). 부수 이득 = reverse-sync가 읽을 폼과 AI가 캡처할 화면의 테마가 고정돼 변수가 준다. CDP 디버거 연결은 `ensureDebugger()`로 통일(라이트 모드·합성 입력 공용) — `browser:cdp` 경로가 실사용으로 검증된 셈
+- [ ] 팝업 로그인(OAuth 새 창)·다중 탭 대응, 뷰 상태 영속 — 현재 `setWindowOpenHandler`가 새 창을 **같은 탭 로드로 치환**(deny). 콘솔 로그인 두 곳은 이걸로 통과했으나 `window.opener` 의존 플로는 미검증
 
 ### 5. to-do board (적용 오케스트레이션)
 - [ ] "수정 적용하기" → 대기 항목을 **API 되는 것 / 브라우저 필요한 것**으로 분리해 태스크 보드 렌더

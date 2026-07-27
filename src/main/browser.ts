@@ -84,22 +84,57 @@ function wireShortcuts(wc: WebContents): void {
   })
 }
 
+// CDP 디버거 연결(멱등) — 라이트 모드 강제·합성 입력이 공유한다.
+function ensureDebugger(tab: Tab): boolean {
+  if (debugAttached.has(tab.id)) return true
+  const wc = tab.view.webContents
+  try {
+    wc.debugger.attach('1.3')
+    debugAttached.add(tab.id)
+    wc.debugger.on('detach', () => debugAttached.delete(tab.id))
+    return true
+  } catch {
+    return false
+  }
+}
+
+// 임베드 페이지는 항상 라이트 모드. ZTO 셸(다크 전용)은 건드리지 않는다 —
+// nativeTheme.themeSource는 앱 창까지 뒤집으므로 쓰지 않고, 뷰 단위 CDP 에뮬레이션으로 가둔다.
+// 이유 ① ASC·Play 콘솔의 다크 렌더링이 깨진다(앱 이름이 어두운 배경에 어두운 글자로 뭉갬, 2026-07-24 실측)
+//      ② reverse-sync가 읽을 폼과 AI가 캡처할 화면의 테마가 고정돼 변수가 준다.
+function forceLightMode(tab: Tab): void {
+  if (!ensureDebugger(tab)) return
+  tab.view.webContents.debugger
+    .sendCommand('Emulation.setEmulatedMedia', {
+      features: [{ name: 'prefers-color-scheme', value: 'light' }]
+    })
+    .catch(() => {
+      /* 실패해도 페이지는 뜬다 — 테마만 사이트 기본값 */
+    })
+}
+
 function makeTab(): Tab {
   const id = 'tab' + ++seq
   const view = new WebContentsView()
-  view.setBackgroundColor('#0d0d12')
+  // 캔버스는 흰색 — 웹 페이지는 흰 배경을 전제하고 그린다. 앱 셸 색(#0d0d12)을 깔면
+  // 배경을 직접 칠하지 않는 영역이 그대로 비쳐 어두운 글자가 사라진다(ASC 앱 목록, 2026-07-24 실측).
+  view.setBackgroundColor('#ffffff')
   const wc = view.webContents
   wc.setWindowOpenHandler(({ url }) => {
     wc.loadURL(url)
     return { action: 'deny' }
   })
+  const tab: Tab = { id, view }
+  forceLightMode(tab)
+  // 내비게이션마다 재적용 — 오버라이드가 타깃 교체 시 날아가는 경우 대비(멱등).
+  wc.on('did-navigate', () => forceLightMode(tab))
   wc.on('did-navigate', emit)
   wc.on('did-navigate-in-page', emit)
   wc.on('page-title-updated', emit)
   wc.on('did-start-loading', emit)
   wc.on('did-stop-loading', emit)
   wireShortcuts(wc)
-  return { id, view }
+  return tab
 }
 
 // 활성 탭만 창에 붙인다 — 나머지는 뗀다(한 번에 하나만 보임). 활성 뷰 bounds는 lastBounds(시작이면 0×0).
@@ -281,11 +316,7 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     if (!a) return { ok: false, error: 'no-view' }
     const wc = a.view.webContents
     try {
-      if (!debugAttached.has(a.id)) {
-        wc.debugger.attach('1.3')
-        debugAttached.add(a.id)
-        wc.debugger.on('detach', () => debugAttached.delete(a.id))
-      }
+      if (!ensureDebugger(a)) return { ok: false, error: 'debugger-attach-failed' }
       const result = await wc.debugger.sendCommand(method, params ?? {})
       return { ok: true, result }
     } catch (e) {
