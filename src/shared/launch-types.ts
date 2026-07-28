@@ -142,8 +142,11 @@ export interface AiProviderStatus {
 
 export interface AiStatus {
   active: AiProviderId // 두뇌로 쓸 provider
-  model: string // active provider의 기본 모델 id
-  models: AiModel[] // active provider가 제공하는 모델 (지금은 claude만)
+  model: string // active provider가 지금 쓰는 모델 id (provider별로 따로 기억됨)
+  models: AiModel[] // active provider가 제공하는 모델 — 목록 자체가 provider별로 갈린다
+  // 쓸 수 있는(구독 감지됨 or 키 저장됨) provider의 모델 전부. AI 패널이 한 드롭다운에서
+  // provider까지 바꾸려면 active 것만으론 부족해서 같이 내려준다.
+  providerModels: Partial<Record<AiProviderId, AiModel[]>>
   providers: AiProviderStatus[]
 }
 
@@ -153,6 +156,27 @@ export interface AiChatResult {
   text: string
   sessionId?: string
   error?: string
+}
+
+// AI를 부른 자리 — 대시보드에서 "어디에 썼나"를 가른다.
+export type AiFeature = 'social' | 'survey' | 'other'
+
+// 호출 1건 기록 (userData/zto-ai-usage.json). 설정의 사용량 대시보드가 이걸 집계한다.
+// billed=false(구독)는 실지출이 아니라 API 환산가다 — 합계를 절대 섞지 않는다.
+export interface AiUsageEntry {
+  at: string // ISO
+  provider: AiProviderId
+  mode: AiMode
+  model: string
+  feature: AiFeature
+  inputTokens: number
+  outputTokens: number
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  costUsd: number // 구독이면 CLI가 준 환산가, API 키면 가격표로 계산한 실지출
+  billed: boolean // true = 실제로 청구되는 지출(API 키 경로)
+  durationMs: number
+  ok: boolean
 }
 
 // ---------- 앱 콘텐츠 설문 (ROADMAP #2) — 콘솔 전용 설정을 결정형 위저드로 ----------

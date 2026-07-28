@@ -3,9 +3,11 @@ import type {
   AccessLogEntry,
   Account,
   AiChatResult,
+  AiFeature,
   AiMode,
   AiProviderId,
   AiStatus,
+  AiUsageEntry,
   ApiStatus,
   ApplyResult,
   ConsoleAnswers,
@@ -41,6 +43,8 @@ const api = {
     newTab: (url?: string): Promise<void> => ipcRenderer.invoke('browser:newTab', url),
     closeTab: (id: string): Promise<void> => ipcRenderer.invoke('browser:closeTab', id),
     selectTab: (id: string): Promise<void> => ipcRenderer.invoke('browser:selectTab', id),
+    moveTab: (id: string, toIndex: number): Promise<void> =>
+      ipcRenderer.invoke('browser:moveTab', id, toIndex),
     back: (): Promise<void> => ipcRenderer.invoke('browser:back'),
     forward: (): Promise<void> => ipcRenderer.invoke('browser:forward'),
     reload: (): Promise<void> => ipcRenderer.invoke('browser:reload'),
@@ -66,8 +70,14 @@ const api = {
       ipcRenderer.invoke('ai:setKey', provider, key),
     chat: (
       prompt: string,
-      opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
-    ): Promise<AiChatResult> => ipcRenderer.invoke('ai:chat', prompt, opts)
+      opts?: {
+        resume?: string
+        images?: { mediaType: string; data: string }[]
+        feature?: AiFeature
+      }
+    ): Promise<AiChatResult> => ipcRenderer.invoke('ai:chat', prompt, opts),
+    usage: (): Promise<AiUsageEntry[]> => ipcRenderer.invoke('ai:usage'),
+    usageClear: (): Promise<boolean> => ipcRenderer.invoke('ai:usageClear')
   },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),

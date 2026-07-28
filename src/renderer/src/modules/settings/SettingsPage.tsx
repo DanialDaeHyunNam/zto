@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AiProviderId, AiProviderStatus, AiStatus } from '../../../../shared/launch-types'
 import { useI18n, type Locale } from '../../i18n'
+import AiUsage from './AiUsage'
 
 const LOCALES: Locale[] = ['ko', 'en']
 
@@ -137,8 +138,8 @@ export default function SettingsPage(): React.JSX.Element {
               {m.settings.use}
             </button>
           )}
-          {/* active provider가 모델을 제공하면 모델 선택 */}
-          {isActive && ai && ai.models.length > 0 && p.id === 'claude' && (
+          {/* active provider가 모델을 제공하면 모델 선택 (목록은 main이 provider별로 내려준다) */}
+          {isActive && ai && ai.models.length > 0 && (
             <div className="ai-models">
               {ai.models.map((mod) => (
                 <button
@@ -169,6 +170,8 @@ export default function SettingsPage(): React.JSX.Element {
           <p className="settings-intro">…</p>
         )}
       </div>
+
+      <AiUsage />
 
       <div className="settings-card">
         <h2 className="settings-h2">{m.settings.langTitle}</h2>

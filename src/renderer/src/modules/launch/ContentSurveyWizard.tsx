@@ -63,7 +63,7 @@ function QuestionHelp({
     setBusy(true)
     setSuggestion(null)
     const prompt = session ? text : `${buildContext()}\n\n사용자: ${text}`
-    window.zto.ai.chat(prompt, session ? { resume: session } : undefined).then((r) => {
+    window.zto.ai.chat(prompt, { resume: session, feature: 'survey' }).then((r) => {
       setBusy(false)
       if (r.sessionId) setSession(r.sessionId)
       const body = r.text || (r.error ? m.launch.helpNoAi : '')

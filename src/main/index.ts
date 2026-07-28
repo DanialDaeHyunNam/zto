@@ -20,11 +20,13 @@ import {
   type AccessLogEntry,
   type Account,
   type AiChatResult,
+  type AiFeature,
   type AiMode,
   type AiModel,
   type AiProviderId,
   type AiProviderStatus,
   type AiStatus,
+  type AiUsageEntry,
   type ApiStatus,
   type ApplyResult,
   type AscVersionRow,
@@ -135,12 +137,28 @@ function unlinkStoreFromAccount(email: string, storeApp: string): void {
 
 // ---------- AI provider (BYO 2방식) — 구독(로컬 CLI spawn) / API 키(키체인). libertas 패턴 ----------
 // Finder로 띄운 Electron은 셸 PATH를 못 물려받아서 흔한 설치 위치로 폴백한다.
-const AI_MODELS: AiModel[] = [
-  { id: 'claude-fable-5', label: 'Fable 5' },
-  { id: 'claude-opus-4-8', label: 'Opus 4.8' },
-  { id: 'claude-sonnet-5', label: 'Sonnet 5' },
-  { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
-]
+// 모델은 provider별로 다르다 — active provider의 목록만 렌더러에 내보낸다.
+// (섞어두면 ChatGPT가 active일 때 claude-* 모델 id를 OpenAI로 보내게 된다.)
+// 각 목록의 첫 항목이 그 provider의 기본값.
+const AI_MODELS_BY_PROVIDER: Record<AiProviderId, AiModel[]> = {
+  claude: [
+    { id: 'claude-fable-5', label: 'Fable 5' },
+    { id: 'claude-opus-4-8', label: 'Opus 4.8' },
+    { id: 'claude-sonnet-5', label: 'Sonnet 5' },
+    { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
+  ],
+  // 2026-07-28 확인 — 둘 다 이미지 입력 지원(소셜 패널 첨부에 필수).
+  // mini가 기본: ZTO 사용량에선 nano와의 요금 차이가 월 1달러 수준이라, 그걸 아끼려고
+  // 지시 준수(추천: <옵션id> 파싱)와 한국어 문장 품질을 걸 이유가 없다.
+  // nano는 남긴다 — reverse-sync의 폼 필드→설문 문항 매핑이 nano 공식 용도(추출·랭킹)라 그때 쓴다.
+  // Luna·Terra는 뺐다: Terra의 '고품질' 자리는 Claude Opus·Fable과 중복이고,
+  // Luna는 mini보다 비싸면서 강점(1.05M 컨텍스트)이 이 워크로드에 무의미하다.
+  chatgpt: [
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
+    { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano (최저가)' }
+  ],
+  gemini: []
+}
 
 // provider 구독 = 로컬 CLI (Claude=claude, ChatGPT=codex). 감지 결과 캐시.
 const CLI_CANDIDATES: Record<string, string[]> = {
@@ -187,6 +205,16 @@ function readAiKeys(): Record<string, string> {
     return {}
   }
 }
+// 키는 쓸 때만 복호화하고 들고 있지 않는다 (비밀번호 정책과 같은 원칙 — SPEC §7.3).
+function getAiKey(provider: AiProviderId): string | null {
+  const enc = readAiKeys()[provider]
+  if (!enc) return null
+  try {
+    return safeStorage.decryptString(Buffer.from(enc, 'base64'))
+  } catch {
+    return null
+  }
+}
 function setAiKey(provider: string, key: string): boolean {
   if (!safeStorage.isEncryptionAvailable()) return false
   const keys = readAiKeys()
@@ -197,16 +225,32 @@ function setAiKey(provider: string, key: string): boolean {
 }
 
 // provider별 연결 방식·active·model 은 전역 상태에 (키 자체는 키체인)
+// model은 provider마다 따로 기억한다 — provider를 바꿔 돌아와도 고르던 모델이 남는다.
 interface AiConfig {
   active: AiProviderId
-  model: string
+  models: Partial<Record<AiProviderId, string>>
   modes: Record<AiProviderId, AiMode>
 }
+// ChatGPT 구독(codex)은 모델을 우리가 고르지 않는다 — codex 자체 설정의 기본 모델을 쓴다.
+// API 모델 목록(gpt-5.4-*)을 그대로 보여주면 고를 수 없는 걸 고르게 하는 거짓말이 된다.
+const CODEX_MODELS: AiModel[] = [{ id: 'codex', label: 'Codex' }]
+function modelsFor(cfg: AiConfig, p: AiProviderId): AiModel[] {
+  if (p === 'chatgpt' && cfg.modes.chatgpt === 'subscription') return CODEX_MODELS
+  return AI_MODELS_BY_PROVIDER[p]
+}
+function modelFor(cfg: AiConfig, p: AiProviderId): string {
+  const list = modelsFor(cfg, p)
+  const picked = cfg.models[p]
+  return list.some((m) => m.id === picked) ? (picked as string) : (list[0]?.id ?? '')
+}
 function readAiConfig(): AiConfig {
-  const c = (readState().aiConfig as Partial<AiConfig>) ?? {}
+  const c = (readState().aiConfig as Partial<AiConfig> & { model?: string }) ?? {}
+  // 구 스키마 이관 — 단일 `model`은 claude 것이었다.
+  const models = { ...(c.models ?? {}) }
+  if (!models.claude && c.model) models.claude = c.model
   return {
     active: c.active ?? 'claude',
-    model: AI_MODELS.some((m) => m.id === c.model) ? (c.model as string) : AI_MODELS[0].id,
+    models,
     modes: {
       claude: c.modes?.claude ?? 'subscription',
       chatgpt: c.modes?.chatgpt ?? 'subscription',
@@ -216,6 +260,282 @@ function readAiConfig(): AiConfig {
 }
 function writeAiConfig(patch: Partial<AiConfig>): void {
   writeState({ ...readState(), aiConfig: { ...readAiConfig(), ...patch } })
+}
+
+// claude CLI가 응답에 실어 주는 사용량·비용을 그대로 기록한다(2026-07-29 실측 스키마).
+// 구독이라 한계비용은 0 — total_cost_usd는 "API로 환산하면 얼마"라는 참고값이므로 billed=false.
+interface ClaudeCliUsage {
+  total_cost_usd?: number
+  usage?: {
+    input_tokens?: number
+    output_tokens?: number
+    cache_read_input_tokens?: number
+    cache_creation_input_tokens?: number
+  }
+}
+function recordClaudeUsage(
+  j: ClaudeCliUsage,
+  model: string,
+  feature: AiFeature,
+  startedAt: number,
+  ok: boolean
+): void {
+  const u = j.usage ?? {}
+  appendAiUsage({
+    at: new Date().toISOString(),
+    provider: 'claude',
+    mode: 'subscription',
+    model,
+    feature,
+    inputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    cacheReadTokens: u.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+    costUsd: j.total_cost_usd ?? 0,
+    billed: false,
+    durationMs: Date.now() - startedAt,
+    ok
+  })
+}
+
+// ---------- AI 사용량 기록 (설정 대시보드) ----------
+// 호출 1건씩 로컬 파일에 append. 네트워크 전송 없음(계정 비번 정책과 같은 로컬 원칙).
+const aiUsageFile = (): string => join(app.getPath('userData'), 'zto-ai-usage.json')
+const AI_USAGE_CAP = 2000 // 오래된 것부터 버린다 — 로그가 무한히 자라지 않게
+
+function readAiUsage(): AiUsageEntry[] {
+  try {
+    const j = JSON.parse(readFileSync(aiUsageFile(), 'utf8'))
+    return Array.isArray(j) ? (j as AiUsageEntry[]) : []
+  } catch {
+    return []
+  }
+}
+function appendAiUsage(e: AiUsageEntry): void {
+  try {
+    const all = [...readAiUsage(), e]
+    writeFileSync(aiUsageFile(), JSON.stringify(all.slice(-AI_USAGE_CAP), null, 2))
+  } catch {
+    /* 기록 실패가 대화를 막지는 않는다 */
+  }
+}
+
+// OpenAI 가격표 (1M 토큰당 USD, 2026-07-28 확인). 응답이 토큰만 주므로 여기서 환산한다.
+// 캐시된 입력은 10% — usage에 cached_tokens가 오면 그만큼 할인해 계산.
+const OPENAI_PRICE: Record<string, { in: number; out: number }> = {
+  'gpt-5.4-mini': { in: 0.75, out: 4.5 },
+  'gpt-5.4-nano': { in: 0.2, out: 1.25 }
+}
+function openAiCost(model: string, inTok: number, cachedTok: number, outTok: number): number {
+  const p = OPENAI_PRICE[model]
+  if (!p) return 0 // 모르는 모델은 0 — 틀린 숫자를 지어내지 않는다
+  const fresh = Math.max(0, inTok - cachedTok)
+  return (fresh * p.in + cachedTok * p.in * 0.1 + outTok * p.out) / 1_000_000
+}
+
+// ---------- OpenAI API 키 경로 (ROADMAP #1 잔여) ----------
+// Responses API는 무상태라 대화 이력을 main이 들고 있는다. 구독 경로(claude CLI --resume)의
+// "불투명 sessionId" 계약을 그대로 흉내 내므로 렌더러는 두 경로를 구분하지 않는다.
+// 이력은 메모리에만 — 앱을 끄면 사라진다(대화는 휘발성, 디스크에 남기지 않는다).
+// previous_response_id(서버 보관)를 안 쓰는 이유: 대화가 OpenAI 쪽에 남지 않게 하려고.
+// 대신 매 턴 이력을 재전송하는데, ZTO 대화 길이에선 요금 차이가 무시할 수준이다.
+const openAiSessions = new Map<string, unknown[]>()
+const OPENAI_MAX_MESSAGES = 24 // 이력 폭주 방지 — 오래된 턴부터 버린다
+
+interface OpenAiPart {
+  type: string
+  text?: string
+}
+function openAiText(j: { output_text?: unknown; output?: { content?: OpenAiPart[] }[] }): string {
+  if (typeof j.output_text === 'string' && j.output_text) return j.output_text
+  const parts: string[] = []
+  for (const item of j.output ?? []) {
+    for (const c of item.content ?? []) {
+      if (typeof c.text === 'string') parts.push(c.text)
+    }
+  }
+  return parts.join('')
+}
+
+async function chatOpenAi(
+  prompt: string,
+  model: string,
+  opts?: { resume?: string; images?: { mediaType: string; data: string }[]; feature?: AiFeature }
+): Promise<AiChatResult> {
+  const key = getAiKey('chatgpt')
+  if (!key) return { ok: false, text: '', error: 'openai-key-missing' }
+  const startedAt = Date.now()
+
+  const content: Record<string, unknown>[] = [{ type: 'input_text', text: prompt }]
+  for (const im of opts?.images ?? []) {
+    content.push({ type: 'input_image', image_url: `data:${im.mediaType};base64,${im.data}` })
+  }
+  const history = (opts?.resume ? openAiSessions.get(opts.resume) : null) ?? []
+  const input = [...history, { role: 'user', content }]
+
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), 120_000)
+  try {
+    const r = await fetch('https://api.openai.com/v1/responses', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, input }),
+      signal: ctrl.signal
+    })
+    const j = (await r.json().catch(() => ({}))) as {
+      error?: { message?: string }
+      output_text?: unknown
+      output?: { content?: OpenAiPart[] }[]
+      usage?: {
+        input_tokens?: number
+        output_tokens?: number
+        input_tokens_details?: { cached_tokens?: number }
+      }
+    }
+    const inTok = j.usage?.input_tokens ?? 0
+    const outTok = j.usage?.output_tokens ?? 0
+    const cachedTok = j.usage?.input_tokens_details?.cached_tokens ?? 0
+    // 실패한 호출도 토큰을 태웠으면 기록한다 — 대시보드가 실제 지출을 덜 보여주면 안 된다.
+    appendAiUsage({
+      at: new Date().toISOString(),
+      provider: 'chatgpt',
+      mode: 'apikey',
+      model,
+      feature: opts?.feature ?? 'other',
+      inputTokens: inTok,
+      outputTokens: outTok,
+      cacheReadTokens: cachedTok,
+      cacheWriteTokens: 0,
+      costUsd: openAiCost(model, inTok, cachedTok, outTok),
+      billed: true,
+      durationMs: Date.now() - startedAt,
+      ok: r.ok
+    })
+    // 실패는 그대로 드러낸다 — API 메시지가 있으면 그게 가장 진단에 쓸모 있다.
+    if (!r.ok) {
+      return { ok: false, text: '', error: (j.error?.message ?? `http-${r.status}`).slice(0, 300) }
+    }
+    const text = openAiText(j)
+    if (!text) return { ok: false, text: '', error: 'empty-response' }
+
+    const sid = opts?.resume ?? `oa-${randomUUID()}`
+    const next = [...input, { role: 'assistant', content: [{ type: 'output_text', text }] }]
+    openAiSessions.set(sid, next.slice(-OPENAI_MAX_MESSAGES))
+    return { ok: true, text, sessionId: sid }
+  } catch (e) {
+    const aborted = ctrl.signal.aborted
+    return { ok: false, text: '', error: aborted ? 'timeout' : String(e).slice(0, 300) }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ---------- codex(ChatGPT 구독) 경로 ----------
+// `codex exec --json`은 JSONL 이벤트를 뱉는다. 문서 기준 스키마(2026-07-29):
+//   {"type":"thread.started","thread_id":"..."} — 세션 id (우리의 resume 키)
+//   item 이벤트 중 item.type === 'agent_message' 의 text — 최종 답변
+//   {"type":"turn.completed","usage":{...}} / {"type":"turn.failed",...}
+// 이어가기는 `codex exec resume <SESSION_ID> --json "..."`.
+//
+// ⚠️ **실행 미검증** — 이 기기에 codex가 설치돼 있지 않고 ChatGPT 구독도 없어 로컬에서 돌려볼 수
+// 없었다. 그래서 파서를 관대하게(이벤트 모양이 조금 달라도 agent_message를 찾도록) 쓰고,
+// 실패하면 stderr를 그대로 올린다 — 추측이 틀렸을 때 조용히 빈 답이 나오는 것보다 낫다.
+// 모델은 지정하지 않는다: `--model` 플래그가 문서에서 확인되지 않았고, 구독 모델 id는
+// API 모델 목록(gpt-5.4-*)과 다르다. 검증 못 한 플래그를 넣어 전체를 깨뜨릴 이유가 없다.
+interface CodexEvent {
+  type?: string
+  thread_id?: string
+  text?: string
+  item?: { type?: string; text?: string }
+  usage?: { input_tokens?: number; cached_input_tokens?: number; output_tokens?: number }
+  error?: unknown
+}
+
+async function chatCodex(
+  prompt: string,
+  feature: AiFeature,
+  opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
+): Promise<AiChatResult> {
+  const info = cliInfo('codex')
+  if (!info.available || !info.bin) return { ok: false, text: '', error: 'codex-cli-missing' }
+  // 이미지 입력은 codex exec에 문서화된 방법이 없다. 조용히 버리면 "AI가 화면을 못 봤다"는
+  // 사실이 감춰지므로 명시적으로 거절한다.
+  if (opts?.images?.length) return { ok: false, text: '', error: 'codex-images-unsupported' }
+
+  const startedAt = Date.now()
+  const args = opts?.resume
+    ? ['exec', 'resume', opts.resume, '--json', prompt]
+    : ['exec', '--json', prompt]
+
+  return await new Promise<AiChatResult>((resolve) => {
+    const child = spawn(info.bin as string, args, { cwd: app.getPath('userData') })
+    let out = ''
+    let err = ''
+    let done = false
+    const finish = (r: AiChatResult): void => {
+      if (done) return
+      done = true
+      resolve(r)
+    }
+    const timer = setTimeout(() => {
+      child.kill()
+      finish({ ok: false, text: '', error: 'timeout' })
+    }, 180_000)
+    child.stdout.on('data', (d) => (out += d))
+    child.stderr.on('data', (d) => (err += d))
+    child.on('error', (e) => {
+      clearTimeout(timer)
+      finish({ ok: false, text: '', error: String(e).slice(0, 300) })
+    })
+    child.on('close', () => {
+      clearTimeout(timer)
+      let text = ''
+      let sessionId: string | undefined
+      let failed = false
+      let usage: CodexEvent['usage']
+      for (const line of out.split('\n')) {
+        const s = line.trim()
+        if (!s.startsWith('{')) continue
+        let e: CodexEvent
+        try {
+          e = JSON.parse(s) as CodexEvent
+        } catch {
+          continue // 부분 라인 무시
+        }
+        if (e.thread_id) sessionId = e.thread_id
+        // agent_message가 item 안에 오든 평평하게 오든 둘 다 받는다
+        const msg = e.item?.type === 'agent_message' ? e.item.text : undefined
+        const flat = e.type === 'agent_message' ? e.text : undefined
+        const t = msg ?? flat
+        if (t) text = t // 마지막 것이 최종 답변
+        if (e.type === 'turn.completed' && e.usage) usage = e.usage
+        if (e.type === 'turn.failed') failed = true
+      }
+      const ok = !failed && !!text
+      appendAiUsage({
+        at: new Date().toISOString(),
+        provider: 'chatgpt',
+        mode: 'subscription',
+        model: 'codex',
+        feature,
+        inputTokens: usage?.input_tokens ?? 0,
+        outputTokens: usage?.output_tokens ?? 0,
+        cacheReadTokens: usage?.cached_input_tokens ?? 0,
+        cacheWriteTokens: 0,
+        costUsd: 0, // 구독 — codex는 환산가를 주지 않는다
+        billed: false,
+        durationMs: Date.now() - startedAt,
+        ok
+      })
+      if (ok) return finish({ ok: true, text, sessionId })
+      // 실패 원인을 그대로 노출 — 파서 추측이 틀렸는지, 인증 문제인지 구분돼야 한다
+      finish({
+        ok: false,
+        text: '',
+        error: (err.trim() || (text ? 'turn-failed' : 'no-agent-message')).slice(0, 300)
+      })
+    })
+  })
 }
 
 function aiStatus(fresh = false): AiStatus {
@@ -249,7 +569,21 @@ function aiStatus(fresh = false): AiStatus {
       mode: 'apikey'
     }
   ]
-  return { active: cfg.active, model: cfg.model, models: AI_MODELS, providers }
+  // 쓸 수 있는 provider만 — 구독 방식이면 CLI 감지, API 키 방식이면 키 저장이 조건.
+  const usable = (p: AiProviderStatus): boolean =>
+    p.mode === 'subscription' ? p.subscriptionAvailable : p.hasKey
+  const providerModels: Partial<Record<AiProviderId, AiModel[]>> = {}
+  for (const p of providers) {
+    const list = modelsFor(cfg, p.id)
+    if (usable(p) && list.length > 0) providerModels[p.id] = list
+  }
+  return {
+    active: cfg.active,
+    model: modelFor(cfg, cfg.active),
+    models: modelsFor(cfg, cfg.active),
+    providerModels,
+    providers
+  }
 }
 
 // ---------- 스토어 실황 조회 헬퍼 ----------
@@ -1307,8 +1641,12 @@ app.whenReady().then(() => {
   ipcMain.handle('app:getLocale', (): 'ko' | 'en' => (readState().locale as 'ko' | 'en') ?? 'ko')
   // AI provider — 구독(CLI 감지)/API키(키체인) 상태 + active·mode·model 설정
   ipcMain.handle('ai:status', (_e, fresh?: boolean): AiStatus => aiStatus(fresh))
+  // 모델은 active provider 것으로 저장 — 렌더러는 목록을 그대로 받아 쓰므로 provider를 몰라도 된다.
   ipcMain.handle('ai:setModel', (_e, model: string): void => {
-    if (AI_MODELS.some((m) => m.id === model)) writeAiConfig({ model })
+    const cfg = readAiConfig()
+    if (modelsFor(cfg, cfg.active).some((m) => m.id === model)) {
+      writeAiConfig({ models: { ...cfg.models, [cfg.active]: model } })
+    }
   })
   ipcMain.handle('ai:setActive', (_e, provider: AiProviderId): void => {
     writeAiConfig({ active: provider })
@@ -1321,6 +1659,16 @@ app.whenReady().then(() => {
   ipcMain.handle('ai:setKey', (_e, provider: AiProviderId, key: string): boolean =>
     setAiKey(provider, key)
   )
+  // 사용량 — 집계는 렌더러가 한다(필터·기간이 화면 상태라). 여기선 원본 기록만 넘긴다.
+  ipcMain.handle('ai:usage', (): AiUsageEntry[] => readAiUsage())
+  ipcMain.handle('ai:usageClear', (): boolean => {
+    try {
+      writeFileSync(aiUsageFile(), '[]')
+      return true
+    } catch {
+      return false
+    }
+  })
   // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
   // 이미지가 있으면 stream-json 입력으로 멀티모달(실증 확인) — 없으면 가벼운 --output-format json.
   ipcMain.handle(
@@ -1328,11 +1676,23 @@ app.whenReady().then(() => {
     async (
       _e,
       prompt: string,
-      opts?: { resume?: string; images?: { mediaType: string; data: string }[] }
+      opts?: {
+        resume?: string
+        images?: { mediaType: string; data: string }[]
+        feature?: AiFeature
+      }
     ): Promise<AiChatResult> => {
       const cfg = readAiConfig()
       const provider = cfg.active
       const mode = cfg.modes[provider]
+      const model = modelFor(cfg, provider)
+      const feature: AiFeature = opts?.feature ?? 'other'
+      const startedAt = Date.now()
+      if (provider === 'chatgpt') {
+        return mode === 'apikey'
+          ? await chatOpenAi(prompt, model, { ...opts, feature })
+          : await chatCodex(prompt, feature, opts)
+      }
       if (mode === 'subscription' && provider === 'claude') {
         const info = cliInfo('claude')
         if (!info.available || !info.bin) return { ok: false, text: '', error: 'claude-cli-missing' }
@@ -1341,7 +1701,7 @@ app.whenReady().then(() => {
 
         // 텍스트만 — 검증된 가벼운 경로
         if (images.length === 0) {
-          const args = ['-p', prompt, '--output-format', 'json', '--model', cfg.model]
+          const args = ['-p', prompt, '--output-format', 'json', '--model', model]
           if (opts?.resume) args.push('--resume', opts.resume)
           return await new Promise<AiChatResult>((resolve) => {
             execFile(
@@ -1354,7 +1714,8 @@ app.whenReady().then(() => {
                     result?: string
                     session_id?: string
                     is_error?: boolean
-                  }
+                  } & ClaudeCliUsage
+                  recordClaudeUsage(j, model, feature, startedAt, !j.is_error)
                   resolve({ ok: !j.is_error, text: j.result ?? '', sessionId: j.session_id })
                 } catch {
                   resolve({ ok: false, text: '', error: err ? String(err).slice(0, 300) : 'parse' })
@@ -1381,7 +1742,7 @@ app.whenReady().then(() => {
           'stream-json',
           '--verbose',
           '--model',
-          cfg.model
+          model
         ]
         if (opts?.resume) args.push('--resume', opts.resume)
         return await new Promise<AiChatResult>((resolve) => {
@@ -1417,12 +1778,13 @@ app.whenReady().then(() => {
                   result?: string
                   session_id?: string
                   is_error?: boolean
-                }
+                } & ClaudeCliUsage
                 if (e.type === 'result') {
                   text = e.result ?? ''
                   sessionId = e.session_id
                   isErr = !!e.is_error
                   found = true
+                  recordClaudeUsage(e, model, feature, startedAt, !isErr)
                 }
               } catch {
                 /* 부분 라인 무시 */

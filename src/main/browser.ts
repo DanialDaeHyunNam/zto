@@ -120,9 +120,28 @@ function makeTab(): Tab {
   // 배경을 직접 칠하지 않는 영역이 그대로 비쳐 어두운 글자가 사라진다(ASC 앱 목록, 2026-07-24 실측).
   view.setBackgroundColor('#ffffff')
   const wc = view.webContents
+  // 팝업은 진짜 창으로 연다. 같은 탭에 로드해버리면 두 가지가 동시에 깨진다:
+  // ① window.opener가 없어 결과를 돌려줄 상대가 사라지고 ② 결과를 받을 원래 페이지도 navigate돼 없어진다.
+  // 구글 GSI(accounts.google.com/gsi/select)에서 흰 화면으로 굳는 것으로 실증(2026-07-29).
+  // 콘솔 로그인(Play·ASC)이 통과했던 건 그쪽이 전체 페이지 리다이렉트라 opener가 필요 없어서였다.
   wc.setWindowOpenHandler(({ url }) => {
-    wc.loadURL(url)
-    return { action: 'deny' }
+    if (!/^https?:\/\//i.test(url)) return { action: 'deny' } // 외부 스킴은 열지 않는다
+    const parent = getWin()
+    return {
+      action: 'allow',
+      overrideBrowserWindowOptions: {
+        width: 520,
+        height: 680,
+        // 부모에 물려 스택 순서를 유지 (모달은 아님 — 로그인이 막히면 그냥 닫을 수 있어야 한다)
+        parent: parent && !parent.isDestroyed() ? parent : undefined,
+        autoHideMenuBar: true,
+        backgroundColor: '#ffffff' // 로그인 페이지는 흰 캔버스를 전제한다(탭과 같은 이유)
+      }
+    }
+  })
+  // 세션은 기본 세션을 공유하므로 팝업에서 로그인해도 탭 쪽에 그대로 반영된다.
+  wc.on('did-create-window', (win) => {
+    win.setMenuBarVisibility(false)
   })
   const tab: Tab = { id, view }
   forceLightMode(tab)
@@ -179,6 +198,18 @@ export function selectTab(id: string): void {
 
 export function selectIndex(i: number): void {
   if (i >= 0 && i < tabs.length) selectTab(tabs[i].id)
+}
+
+// 탭 순서 바꾸기 — 배열 자체를 옮긴다. ⌘1..9가 인덱스 기준이라 이래야
+// 화면에 보이는 순서와 단축키 번호가 어긋나지 않는다(뷰는 활성 탭만 붙으므로 순서와 무관).
+export function moveTab(id: string, toIndex: number): void {
+  const from = tabs.findIndex((t) => t.id === id)
+  if (from < 0) return
+  const to = Math.max(0, Math.min(tabs.length - 1, toIndex))
+  if (from === to) return
+  const [moved] = tabs.splice(from, 1)
+  tabs.splice(to, 0, moved)
+  emit()
 }
 
 export function closeTab(id: string): void {
@@ -262,6 +293,7 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
   ipcMain.handle('browser:newTab', (_e, url?: string): void => newTab(url))
   ipcMain.handle('browser:closeTab', (_e, id: string): void => closeTab(id))
   ipcMain.handle('browser:selectTab', (_e, id: string): void => selectTab(id))
+  ipcMain.handle('browser:moveTab', (_e, id: string, toIndex: number): void => moveTab(id, toIndex))
 
   ipcMain.handle('browser:navigate', async (_e, url: string): Promise<BrowserResult> => {
     const wc = activeWc()

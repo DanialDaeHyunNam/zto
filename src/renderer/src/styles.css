@@ -333,6 +333,12 @@ button {
   margin-top: 10px;
 }
 
+/* 상태 칩은 단독 블록용 margin-top을 들고 있는데, 행 안에서는 .ai-key-row가 이미
+   그 간격을 준다. 상쇄하지 않으면 그 아이템만 아래로 밀려 옆 버튼이 떠 보인다. */
+.ai-key-row .ai-provider-status {
+  margin-top: 0;
+}
+
 .ai-provider-foot {
   display: flex;
   align-items: center;
@@ -3182,4 +3188,257 @@ button {
   color: var(--muted);
   font-size: 13px;
   background: rgba(139, 92, 246, 0.04);
+}
+
+/* ---------- AI 사용량 대시보드 (설정) ---------- */
+/* 마크 규격(dataviz): 얇은 마크, 스택 사이 2px 표면 간격, 데이터 끝만 4px 라운드,
+   축·그리드는 뒤로 물린다. 색은 계열(모델)이 들고, 글자는 텍스트 토큰만 쓴다. */
+.usage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.usage-empty {
+  border: 1px dashed var(--border-strong);
+  border-radius: 12px;
+  padding: 22px 18px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.usage-tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.usage-tile {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.02);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.usage-tile strong {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+}
+
+.usage-tile span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* 환산가는 실지출이 아니다 — 시각적으로도 한 단계 뒤로 */
+.usage-tile.muted-tile strong {
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.usage-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 18px;
+}
+
+.usage-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.usage-chip:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--fg);
+}
+
+.usage-chip.on {
+  border-color: var(--accent);
+  background: rgba(139, 92, 246, 0.14);
+  color: var(--fg);
+}
+
+.usage-swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.usage-section-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 4px 0 10px;
+}
+
+.usage-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  margin-bottom: 20px;
+}
+
+.usage-bar-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+
+/* 바닥 기준선에 붙여 아래에서 위로 쌓는다 */
+.usage-bar-stack {
+  width: 100%;
+  height: 96px;
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 1px;
+}
+
+.usage-bar-seg {
+  width: 100%;
+  min-height: 3px;
+  border-radius: 2px;
+}
+
+/* 데이터 끝(스택 맨 위)만 라운드 */
+.usage-bar-stack > .usage-bar-seg:last-child {
+  border-radius: 4px 4px 2px 2px;
+}
+
+.usage-bar-x {
+  font-size: 9.5px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.usage-bar-n {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.usage-rows {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 18px;
+}
+
+.usage-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 2px;
+  font-size: 12px;
+}
+
+.usage-row + .usage-row {
+  border-top: 1px solid var(--border);
+}
+
+.usage-row-name {
+  flex: 0 0 190px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-row-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+  min-width: 40px;
+}
+
+.usage-row-fill {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+}
+
+.usage-row-fill.neutral {
+  background: var(--accent);
+}
+
+.usage-row-num {
+  flex: 0 0 78px;
+  text-align: right;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-row-cost {
+  flex: 0 0 74px;
+  text-align: right;
+  color: var(--fg);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+/* 환산가(구독)는 기울임 + 뒤로 물려 실지출과 구분 */
+.usage-row-cost em {
+  font-style: italic;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+/* 탭 단축키 뱃지 — 어느 탭이 ⌘몇 번인지 한눈에. 순서 변경 시 번호가 따라온다. */
+.br-tab-key {
+  flex-shrink: 0;
+  font-size: 9.5px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 3px 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.br-tab.active .br-tab-key {
+  background: rgba(139, 92, 246, 0.22);
+  color: #cbb8ff;
+}
+
+/* 드래그로 순서 변경 */
+.br-tab[draggable='true'] {
+  user-select: none;
+}
+
+.br-tab.dragging {
+  opacity: 0.4;
+}
+
+/* 놓일 자리 표시 — 왼쪽 모서리에 세로 인디케이터 */
+.br-tab.drop-target {
+  box-shadow: inset 2px 0 0 var(--accent);
 }
