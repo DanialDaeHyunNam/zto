@@ -18,6 +18,8 @@ export default function BrowserSurface(): React.JSX.Element {
   const [state, setState] = useState<BrowserState | null>(null)
   const [addr, setAddr] = useState('')
   const [shortcuts, setShortcuts] = useState<string[]>([])
+  const [dragId, setDragId] = useState<string | null>(null) // 끌고 있는 탭
+  const [overIdx, setOverIdx] = useState<number | null>(null) // 놓일 자리
 
   // 내가 보유한 계정들의 소셜미디어를 모아 바로가기로 (계정 인벤토리 apps 중 social 카테고리, dedupe)
   useEffect(() => {
@@ -80,13 +82,40 @@ export default function BrowserSurface(): React.JSX.Element {
     <div className="browser-col">
       {state && state.tabs.length > 0 && (
         <div className="browser-tabs">
-          {state.tabs.map((t) => (
+          {state.tabs.map((t, i) => (
             <div
               key={t.id}
-              className={`br-tab ${t.id === state.activeId ? 'active' : ''}`}
+              className={`br-tab ${t.id === state.activeId ? 'active' : ''}${
+                dragId === t.id ? ' dragging' : ''
+              }${overIdx === i && dragId && dragId !== t.id ? ' drop-target' : ''}`}
               onClick={() => window.zto.browser.selectTab(t.id)}
               title={tabLabel(t)}
+              draggable
+              onDragStart={(e) => {
+                setDragId(t.id)
+                e.dataTransfer.effectAllowed = 'move'
+                // 파이어폭스 등은 데이터가 없으면 드래그를 시작하지 않는다
+                e.dataTransfer.setData('text/plain', t.id)
+              }}
+              onDragOver={(e) => {
+                if (!dragId) return
+                e.preventDefault() // 기본값은 '드롭 불가' — 막아야 놓을 수 있다
+                e.dataTransfer.dropEffect = 'move'
+                setOverIdx(i)
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragId && dragId !== t.id) window.zto.browser.moveTab(dragId, i)
+                setDragId(null)
+                setOverIdx(null)
+              }}
+              onDragEnd={() => {
+                setDragId(null)
+                setOverIdx(null)
+              }}
             >
+              {/* ⌘1..9 — 어느 탭이 몇 번인지 한눈에. 순서를 바꾸면 번호도 따라온다 */}
+              {i < 9 && <span className="br-tab-key">⌘{i + 1}</span>}
               <span className="br-tab-title">{tabLabel(t)}</span>
               <button
                 className="br-tab-close"
