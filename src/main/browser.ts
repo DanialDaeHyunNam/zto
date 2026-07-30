@@ -4,8 +4,18 @@
 //   ① L2 콘솔 폼 — 라이브 폼을 '읽어' 우리 JSON으로 거꾸로 싱크(reverse-sync) + 답을 폼에 채우기
 //   ② 소셜 코파일럿 — 유저가 직접 로그인한 x·threads 위에서 AI가 글·댓글을 도움
 // 탭: 각 탭이 자체 WebContentsView. 활성 탭만 창에 붙인다. ⌘T 새 탭 / ⌘1..9 전환 / ⌘W 닫기.
-import { WebContentsView, ipcMain, type BrowserWindow, type WebContents } from 'electron'
+import {
+  app,
+  session,
+  WebContentsView,
+  ipcMain,
+  type BrowserWindow,
+  type WebContents
+} from 'electron'
+import { mkdirSync, writeFileSync } from 'fs'
+import { join } from 'path'
 import type { BrowserBounds as Bounds, BrowserState, BrowserResult } from '../shared/browser-types'
+import { EXPAND_JS, FORM_PROBE_JS, type FormProbe } from './form-probe'
 
 interface Tab {
   id: string
@@ -20,6 +30,76 @@ let winWired = false // 메인 창 webContents에 단축키 바인딩했나
 const debugAttached = new Set<string>() // CDP 디버거 연결된 탭 id
 let getWin: () => BrowserWindow | null = () => null
 let seq = 0
+
+// Play 콘솔 앱 레벨 섹션 — 추측이 아니라 사이드바에서 실제로 긁어온 경로들(2026-07-29).
+// 각 섹션에 '들어가야' 하위 메뉴가 렌더되므로, 순회하며 하위 링크를 수확한다.
+//
+// ⚠️ 이 목록을 처음엔 '한 번 본 사이드바'로 만들었다가 "Policy and programs" 섹션을 통째로
+// 놓쳤다. 그 섹션은 접혀 있었고, EXPAND_JS가 페이지 이탈을 막으려고 <a href> 안의 토글을
+// 제외해서 펴지지도 않았다 — 안전장치가 발견을 막은 사례. 앱 콘텐츠 선언(데이터 안전·
+// 콘텐츠 등급 등)이 전부 그 아래 있어서 한참 헤맸다.
+// 또 하나: `app-content` 단독은 존재하지 않는 라우트라 홈으로 조용히 리다이렉트된다.
+// 실제 경로는 `app-content/overview` — 부분 경로를 추측하면 안 된다는 증거.
+const CONSOLE_SECTIONS = [
+  'app-dashboard',
+  'publishing',
+  'test-and-release',
+  'grow-overview',
+  'monetize',
+  'monitor',
+  'protect-with-play',
+  'statistics',
+  // Policy and programs — 앱 콘텐츠 선언이 사는 곳
+  'policy-center',
+  'app-content/overview',
+  'teacher-approved'
+]
+
+// ---------- 다운로드 가로채기 ----------
+// 평소엔 브라우저 기본 동작(사용자 다운로드 폴더)을 건드리지 않는다 — 사용자가 직접 받는 파일까지
+// 우리 폴더로 빼돌리면 "어디 갔지?"가 된다. ZTO가 스스로 받아 읽어야 할 때만(예: 데이터 안전
+// Export to CSV) expectDownload()로 예약해 userData/downloads에 정해진 이름으로 받는다.
+let pendingDownload: {
+  target: string
+  resolve: (p: string) => void
+  reject: (e: Error) => void
+  timer: NodeJS.Timeout
+} | null = null
+
+export function expectDownload(name: string, timeoutMs = 60_000): Promise<string> {
+  const dir = join(app.getPath('userData'), 'downloads')
+  try {
+    mkdirSync(dir, { recursive: true })
+  } catch {
+    /* 이미 있으면 무시 */
+  }
+  const target = join(dir, name)
+  return new Promise<string>((resolve, reject) => {
+    if (pendingDownload) clearTimeout(pendingDownload.timer) // 앞선 예약은 버린다
+    const timer = setTimeout(() => {
+      pendingDownload = null
+      reject(new Error('download-timeout'))
+    }, timeoutMs)
+    pendingDownload = { target, resolve, reject, timer }
+  })
+}
+
+let downloadsWired = false
+function wireDownloads(): void {
+  if (downloadsWired) return
+  downloadsWired = true
+  session.defaultSession.on('will-download', (_e, item) => {
+    const p = pendingDownload
+    if (!p) return // 예약이 없으면 평소대로 (사용자 다운로드 폴더 + 저장 대화상자)
+    pendingDownload = null
+    item.setSavePath(p.target)
+    item.once('done', (_ev, state) => {
+      clearTimeout(p.timer)
+      if (state === 'completed') p.resolve(p.target)
+      else p.reject(new Error('download-' + state))
+    })
+  })
+}
 
 const roundBounds = (b: Bounds): Bounds => ({
   x: Math.round(b.x),
@@ -38,6 +118,9 @@ const normalizeUrl = (raw: string): string => {
 
 const activeTab = (): Tab | null => tabs.find((t) => t.id === activeId) ?? null
 const activeWc = (): WebContents | null => activeTab()?.view.webContents ?? null
+// 오케스트레이션(console-sync)이 쓰는 접근자 — 탭이 없으면 null.
+export const activeWebContents = (): WebContents | null => activeWc()
+
 const isStartWc = (wc: WebContents): boolean => {
   const u = wc.getURL()
   return !u || u === 'about:blank'
@@ -143,6 +226,9 @@ function makeTab(): Tab {
   wc.on('did-create-window', (win) => {
     win.setMenuBarVisibility(false)
   })
+  // 보이지 않는 뷰는 Chromium이 렌더링·타이머를 스로틀해서 무거운 SPA가 부트스트랩을 못 끝낸다
+  // (Play 콘솔이 앵커 0개·본문 49자로 멈춤, 2026-07-30 실측). 자동화가 화면 뒤에서도 돌아야 하므로 끈다.
+  wc.setBackgroundThrottling(false)
   const tab: Tab = { id, view }
   forceLightMode(tab)
   // 내비게이션마다 재적용 — 오버라이드가 타깃 교체 시 날아가는 경우 대비(멱등).
@@ -246,6 +332,7 @@ export function closeTab(id: string): void {
 
 export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void {
   getWin = winGetter
+  wireDownloads()
 
   ipcMain.handle('browser:attach', (_e, bounds: Bounds): boolean => {
     const w = getWin()
@@ -340,6 +427,84 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     } catch (e) {
       return { ok: false, error: String(e).slice(0, 300) }
     }
+  })
+
+  // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 구조화 JSON으로 회수한다(ROADMAP #4).
+  // 결과를 userData/zto-form-probe.json에도 남긴다: 콘솔 폼은 로그인 뒤에 있어 밖에서 볼 수 없고,
+  // 매핑 설계를 하려면 실제 DOM 구조를 파일로 꺼내 봐야 하기 때문.
+  ipcMain.handle('browser:probeForm', async (): Promise<BrowserResult> => {
+    const wc = activeWc()
+    if (!wc) return { ok: false, error: 'no-view' }
+    try {
+      const probe = (await wc.executeJavaScript(FORM_PROBE_JS, true)) as FormProbe
+      try {
+        writeFileSync(
+          join(app.getPath('userData'), 'zto-form-probe.json'),
+          JSON.stringify(probe, null, 2)
+        )
+      } catch {
+        /* 파일 저장 실패가 회수 자체를 막지는 않는다 */
+      }
+      return { ok: true, result: probe }
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 300) }
+    }
+  })
+
+  // reverse-sync '발견' 단계 — Play 콘솔의 앱 레벨 섹션을 순회하며 링크·폼을 수확해 지도를 만든다.
+  // 왜 필요한가: 콘솔은 같은 성격의 설정이 여러 섹션에 흩어져 있고(보안·출시·스토어표기),
+  // 사이드바는 접혀 있으면 하위 링크가 DOM에 없으며, 없는 경로는 404가 아니라 홈으로 조용히
+  // 리다이렉트된다 — 즉 사람이든 AI든 '기억한 경로'로 찾아가면 반드시 틀린다(2026-07-29 실측 4회).
+  // 그래서 한 번 훑어 지도를 만들고, 그 지도의 실제 href로만 이동한다.
+  ipcMain.handle('browser:crawlConsole', async (): Promise<BrowserResult> => {
+    const wc = activeWc()
+    if (!wc) return { ok: false, error: 'no-view' }
+    const start = wc.getURL()
+    const base = start.match(/^(https:\/\/play\.google\.com\/console\/u\/\d+\/developers\/\d+\/app\/\d+)\//)
+    if (!base) return { ok: false, error: 'not-on-play-console-app-page' }
+
+    const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
+    const pages: unknown[] = []
+    for (const section of CONSOLE_SECTIONS) {
+      const url = `${base[1]}/${section}`
+      try {
+        await wc.loadURL(url)
+        await wait(1800) // Angular 렌더 대기 — 로드 완료 직후엔 아직 메뉴가 비어 있다
+        // 접힌 메뉴를 펼친다. 한 번 펼치면 그 안에서 또 접힌 게 드러나므로 반복(렌더 대기 포함).
+        for (let round = 0; round < 3; round++) {
+          const opened = (await wc.executeJavaScript(EXPAND_JS, true)) as number
+          if (!opened) break
+          await wait(700)
+        }
+        const probe = (await wc.executeJavaScript(FORM_PROBE_JS, true)) as FormProbe
+        pages.push({
+          section,
+          requested: url,
+          landed: probe.url, // 요청과 다르면 리다이렉트된 것 — 그 섹션은 존재하지 않는다
+          redirected: !probe.url.includes(`/${section}`),
+          title: probe.title,
+          counts: probe.counts,
+          headings: probe.headings.slice(0, 20),
+          links: probe.links
+        })
+      } catch (e) {
+        pages.push({ section, requested: url, error: String(e).slice(0, 200) })
+      }
+    }
+    try {
+      await wc.loadURL(start) // 원래 보던 화면으로 돌려놓는다
+    } catch {
+      /* 돌아가기 실패는 치명적이지 않다 */
+    }
+    try {
+      writeFileSync(
+        join(app.getPath('userData'), 'zto-console-map.json'),
+        JSON.stringify({ base: base[1], at: new Date().toISOString(), pages }, null, 2)
+      )
+    } catch {
+      /* 무시 */
+    }
+    return { ok: true, result: { sections: pages.length } }
   })
 
   // CDP 패스스루 — 합성 입력 등 강한 제어(폼필). 활성 탭 기준.

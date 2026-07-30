@@ -26,6 +26,7 @@ import type {
   StoreSnapshotEntry
 } from '../shared/launch-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
+import type { DataSafetyDoc, PullResult } from '../shared/console-types'
 
 const api = {
   platform: process.platform,
@@ -49,6 +50,8 @@ const api = {
     forward: (): Promise<void> => ipcRenderer.invoke('browser:forward'),
     reload: (): Promise<void> => ipcRenderer.invoke('browser:reload'),
     eval: (js: string): Promise<BrowserResult> => ipcRenderer.invoke('browser:eval', js),
+    probeForm: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:probeForm'),
+    crawlConsole: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:crawlConsole'),
     capture: (): Promise<string | null> => ipcRenderer.invoke('browser:capture'),
     cdp: (method: string, params?: object): Promise<BrowserResult> =>
       ipcRenderer.invoke('browser:cdp', method, params),
@@ -78,6 +81,22 @@ const api = {
     ): Promise<AiChatResult> => ipcRenderer.invoke('ai:chat', prompt, opts),
     usage: (): Promise<AiUsageEntry[]> => ipcRenderer.invoke('ai:usage'),
     usageClear: (): Promise<boolean> => ipcRenderer.invoke('ai:usageClear')
+  },
+  console: {
+    pullDataSafety: (
+      file: string,
+      askLogin?: string,
+      askChooseDev?: string,
+      askExport?: string
+    ): Promise<PullResult> =>
+      ipcRenderer.invoke('console:pullDataSafety', file, askLogin, askChooseDev, askExport),
+    dataSafetyDoc: (file: string): Promise<(DataSafetyDoc & { at?: string }) | null> =>
+      ipcRenderer.invoke('console:dataSafetyDoc', file),
+    onProgress: (cb: (p: { step: string; detail?: string }) => void): (() => void) => {
+      const l = (_e: unknown, p: { step: string; detail?: string }): void => cb(p)
+      ipcRenderer.on('console:progress', l)
+      return () => ipcRenderer.removeListener('console:progress', l)
+    }
   },
   launch: {
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),

@@ -20,6 +20,7 @@ export default function BrowserSurface(): React.JSX.Element {
   const [shortcuts, setShortcuts] = useState<string[]>([])
   const [dragId, setDragId] = useState<string | null>(null) // 끌고 있는 탭
   const [overIdx, setOverIdx] = useState<number | null>(null) // 놓일 자리
+  const [probeMsg, setProbeMsg] = useState('') // 폼 읽기 결과 알림
 
   // 내가 보유한 계정들의 소셜미디어를 모아 바로가기로 (계정 인벤토리 apps 중 social 카테고리, dedupe)
   useEffect(() => {
@@ -69,6 +70,31 @@ export default function BrowserSurface(): React.JSX.Element {
   const go = (): void => {
     if (addr.trim()) window.zto.browser.navigate(addr.trim())
   }
+
+  // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 JSON으로. 결과 개수만 인라인으로 알린다
+  // (전문은 userData/zto-form-probe.json — 매핑 설계는 그 파일을 보고 한다).
+  const probe = async (): Promise<void> => {
+    setProbeMsg('…')
+    const r = await window.zto.browser.probeForm()
+    if (r.ok) {
+      const n = (r.result as { controls?: unknown[] })?.controls?.length ?? 0
+      setProbeMsg(m.browser.probeDone.replace('{n}', String(n)))
+    } else {
+      setProbeMsg(m.browser.probeFail.replace('{e}', r.error ?? ''))
+    }
+  }
+  // 발견 단계 — 콘솔 섹션 순회(20초쯤). 끝나면 원래 보던 페이지로 돌아온다.
+  const crawl = async (): Promise<void> => {
+    setProbeMsg('…')
+    const r = await window.zto.browser.crawlConsole()
+    if (r.ok) {
+      const n = (r.result as { sections?: number })?.sections ?? 0
+      setProbeMsg(m.browser.crawlDone.replace('{n}', String(n)))
+    } else {
+      setProbeMsg(m.browser.probeFail.replace('{e}', r.error ?? ''))
+    }
+  }
+
   const openShortcut = (id: string): void => {
     const domain = PLATFORM_DOMAINS[id]
     if (domain) window.zto.browser.navigate('https://' + domain)
@@ -151,10 +177,23 @@ export default function BrowserSurface(): React.JSX.Element {
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && go()}
         />
+        {/* reverse-sync 1단계 — 현재 페이지 폼을 구조화 JSON으로 회수 (ROADMAP #4) */}
+        <button className="ghost-btn" onClick={probe} title={m.browser.probeFormTitle}>
+          {m.browser.probeForm}
+        </button>
+        {/* 발견 단계 — 콘솔 섹션을 순회하며 실제 링크 수확 */}
+        <button className="ghost-btn" onClick={crawl} title={m.browser.crawlTitle}>
+          {m.browser.crawlConsole}
+        </button>
         <button className="choice small active" onClick={go}>
           {m.browser.go}
         </button>
       </div>
+      {probeMsg && (
+        <div className="br-probe-msg" onClick={() => setProbeMsg('')}>
+          {probeMsg}
+        </div>
+      )}
       {/* WebContentsView가 이 위에 얹힌다 — 시작 상태(뷰 0×0)일 때만 아래 스피드다이얼이 보인다 */}
       <div ref={surfaceRef} className="browser-surface">
         {showStart &&
