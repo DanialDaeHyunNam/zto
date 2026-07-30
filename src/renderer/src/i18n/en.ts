@@ -201,6 +201,14 @@ export const en = {
     dashApiPlayOk: 'Service account connected',
     dashApiAscOk: 'App Manager key connected',
     dashNodeConfig: 'Config',
+    dashDeclDone: 'App content declarations completed',
+    dashWhereLabel: 'Where to check',
+    dashWherePlay: 'Play Console › Policy and programs › App content',
+    dashWherePlayItems:
+      'Content ratings · Target audience and content · Data safety · Ads · Privacy policy · Advertising ID · Sign in details',
+    dashWhereAsc: 'App Store Connect › App Information / App Privacy',
+    dashWhereAscItems:
+      'Category & age rating → App Information · Data collection → App Privacy',
     dashConfigConsole: 'Ratings · data safety — check in console',
     dashNodeMeta: 'Listing',
     dashNodeAssets: 'Assets',

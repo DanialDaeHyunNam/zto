@@ -203,6 +203,13 @@ export const ko: Messages = {
     dashApiPlayOk: '서비스 계정 연결됨',
     dashApiAscOk: 'App Manager 키 연결됨',
     dashNodeConfig: '설정',
+    dashDeclDone: '앱 콘텐츠 선언 완료',
+    dashWhereLabel: '확인 위치',
+    dashWherePlay: 'Play Console › 정책 및 프로그램 › 앱 콘텐츠',
+    dashWherePlayItems:
+      '콘텐츠 등급 · 타깃 대상 및 콘텐츠 · 데이터 보안 · 광고 · 개인정보처리방침 · 광고 ID · 로그인 정보',
+    dashWhereAsc: 'App Store Connect › 앱 정보 / 앱 개인정보',
+    dashWhereAscItems: '카테고리·연령 등급 → 앱 정보 · 데이터 수집 → 앱 개인정보',
     dashConfigConsole: '등급·데이터 보안 — 콘솔 확인',
     dashNodeMeta: '메타',
     dashNodeAssets: '자산',

@@ -138,6 +138,21 @@ function Node({
   )
 }
 
+// 스토어 설정(등급·데이터 보안·개인정보 등)은 대부분 read API가 없고, 있어도 우리가
+// 수정 동기화를 하지 않기로 했다(2026-07-30 Dan). 그래서 ZTO가 할 일은 **어디서 보는지**를
+// 정확히 알려주는 것까지다. 콘솔 메뉴 경로를 그대로 적는 이유는, 링크만 주면 열린 화면에서
+// 또 헤매기 때문 — 오늘 자동화가 사이드바 9번째 섹션을 못 찾아 다섯 번 헤맨 것과 같은 문제다.
+function WhereToCheck({ where, items }: { where: string; items: string }): React.JSX.Element {
+  const { m } = useI18n()
+  return (
+    <div className="dash-where">
+      <span className="dash-where-lbl">{m.launch.dashWhereLabel}</span>
+      <span className="dash-where-path">{where}</span>
+      <span className="dash-where-items">{items}</span>
+    </div>
+  )
+}
+
 function LocaleChips({ locales }: { locales: string[] }): React.JSX.Element {
   return (
     <span className="loc-chips">
@@ -1032,12 +1047,26 @@ function AndroidTree({
   const configReadable = [g.details.defaultLanguage, g.details.contactEmail]
     .filter(Boolean)
     .join(' · ')
+  // 릴리스가 하나라도 있으면 선언은 통과한 것 (Play가 선언 없이는 출시를 막는다)
+  const declaredDone = releases.length > 0
   // API 연결 노드는 앱별이 아니라 전역(타이틀 우측)으로 승격됨 — 트리에서는 생략
   return (
     <>
-      <Node light="y" label={m.launch.dashNodeConfig} url={PLAY_CONSOLE_URL}>
-        {[configReadable, m.launch.dashConfigConsole].filter(Boolean).join(' · ')}
+      {/* 출시된 앱은 앱 콘텐츠 선언이 이미 통과한 상태다 — Play가 선언 없이는 어떤 트랙도
+          내보내주지 않는다. 그래서 '가져온 앱' 플래그를 새로 만들지 않고 릴리스 유무에서
+          끌어낸다. 앰버로 박아두면(예전 동작) 다 끝난 앱에도 영원히 경고색이 뜬다.
+          수정 동기화는 하지 않기로 했으므로(2026-07-30) 여기서 할 일은 **불을 켜고
+          어디서 보는지 알려주는 것까지**다. */}
+      <Node
+        light={declaredDone ? 'g' : 'o'}
+        label={m.launch.dashNodeConfig}
+        url={PLAY_CONSOLE_URL}
+      >
+        {[configReadable, declaredDone ? m.launch.dashDeclDone : m.launch.dashConfigConsole]
+          .filter(Boolean)
+          .join(' · ')}
       </Node>
+      <WhereToCheck where={m.launch.dashWherePlay} items={m.launch.dashWherePlayItems} />
       <SurveyButtons surveys={surveys} onOpen={onOpenSurvey} />
       <DataSafetyPull file={file} />
       <Node light={metaDirty ? 'y' : g.listings.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
@@ -1155,6 +1184,7 @@ function IosTree({
       >
         {configVal}
       </Node>
+      <WhereToCheck where={m.launch.dashWhereAsc} items={m.launch.dashWhereAscItems} />
       <SurveyButtons surveys={surveys} onOpen={onOpenSurvey} />
       <Node light={metaDirty ? 'y' : a.meta.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={a.meta.map((l) => l.locale)} />
