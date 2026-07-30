@@ -39,7 +39,13 @@ export const ko: Messages = {
     aiPlaceholder: 'AI에게 묻거나, 이미지를 붙여넣거나, 쓸 내용을 말해보세요…',
     aiSend: '보내기',
     captureTitle: '현재 브라우저 화면을 캡처해 첨부',
-    imgPrompt: '이 화면을 보고 도와줘.'
+    imgPrompt: '이 화면을 보고 도와줘.',
+    aiEmptyConsole:
+      '왼쪽 진짜 콘솔 폼을 채우세요 — 고르시는 걸 ZTO가 보고 다음 항목을 같이 정합니다. 지금 문항이 헷갈리면 물어보세요.',
+    formProgress: '{a}/{n} 답함',
+    formMoved: '{t} 화면으로 이동',
+    follow: '따라가기',
+    followTitle: '왼쪽 폼이 바뀔 때마다 AI에게 자동으로 묻습니다. 혼자 생각할 땐 끄세요.'
   },
   settings: {
     title: '설정',
@@ -105,6 +111,8 @@ export const ko: Messages = {
       '양대 스토어 실황이 한 화면에 — 이미 된 것엔 불이 들어오고, 손이 필요한 곳만 콘솔로 점프합니다.',
     addApp: '앱 추가',
     openBrowser: '브라우저',
+    openBrowserTitle:
+      '진짜 콘솔을 열고 옆에 AI를 붙입니다 — 채우고 계신 폼을 보고 다음 답을 같이 정합니다.',
     importDesc: '이미 스토어에 나가 있는 앱을 대시보드에 연결',
     apiPlay: 'Play API',
     apiApple: 'App Store API',

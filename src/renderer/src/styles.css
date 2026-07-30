@@ -688,6 +688,63 @@ button {
   align-self: flex-start;
   background: rgba(255, 255, 255, 0.05);
   color: var(--text, #e8e8ef);
+  /* 마크다운을 실제 블록으로 그리므로 원문 줄바꿈 보존이 필요 없다 —
+     pre-wrap을 남겨두면 <p> 간격 위에 원문 개행이 겹쳐 헐렁해진다 */
+  white-space: normal;
+}
+
+/* AI 답변 안의 마크다운 — 말풍선이라 블록 여백을 바깥쪽만 죽인다 */
+.ai-msg.assistant p {
+  margin: 0 0 8px;
+}
+
+.ai-msg.assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.ai-msg.assistant ul,
+.ai-msg.assistant ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.ai-msg.assistant li {
+  margin: 2px 0;
+}
+
+.ai-msg.assistant strong {
+  font-weight: 650;
+  color: #fff;
+}
+
+.ai-msg.assistant code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.09);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+}
+
+.ai-msg.assistant pre {
+  margin: 0 0 8px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.28);
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.ai-msg.assistant pre code {
+  padding: 0;
+  background: none;
+}
+
+.ai-msg.assistant a {
+  color: #c4b5fd;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 .ai-msg.thinking {
   opacity: 0.6;
@@ -3558,6 +3615,76 @@ button {
   background: rgba(255, 255, 255, 0.02);
   max-height: 320px;
   overflow-y: auto;
+}
+
+/* 샌드위치 — 왼쪽 진짜 콘솔, 오른쪽 그 화면을 따라가는 AI (소셜 모듈과 같은 배치) */
+.overlay-sandwich {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
+.overlay-sandwich .browser-col {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 코파일럿 진행 띠 — 대화를 안 걸어도 "지금 어느 화면, 몇 개 남았나"가 늘 보인다 */
+.ai-form-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+.ai-form-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ai-form-count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 따라가기 토글 — 지속 상태라 액센트 테두리를 쓴다(hover는 밝기만, 디자인 원칙) */
+.ai-follow {
+  padding: 3px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.ai-follow:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: inherit;
+}
+
+.ai-follow.on {
+  border-color: rgba(139, 92, 246, 0.55);
+  background: rgba(139, 92, 246, 0.14);
+  color: inherit;
+}
+
+/* ZTO가 관찰한 사실 — AI 말도 사람 말도 아니므로 말풍선이 아니라 가운데 얇은 줄 */
+.ai-msg.system {
+  align-self: center;
+  max-width: 100%;
+  padding: 3px 10px;
+  border: 1px dashed var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  text-align: center;
 }
 
 /* 확인 위치 안내 — 노드에 딸린 설명 행이라 트리 들여쓰기를 따르고 톤은 약하게.

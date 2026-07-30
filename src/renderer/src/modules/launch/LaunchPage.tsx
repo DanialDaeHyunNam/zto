@@ -706,7 +706,13 @@ export default function LaunchPage(): React.JSX.Element {
             <p className="placeholder">{m.launch.subtitle}</p>
           </div>
           <div className="head-actions">
-            <button className="choice small" onClick={() => openBrowser('https://play.google.com/console')}>
+            {/* 코파일럿으로 연다 — 콘솔 폼은 ZTO가 대신 채워줄 수 없으므로(API 없음),
+                폼을 복제해 두 번 입력시키는 대신 **진짜 콘솔 옆에서 거든다**(Dan 2026-07-30) */}
+            <button
+              className="choice small"
+              onClick={() => openBrowser('https://play.google.com/console', { copilot: true })}
+              title={m.launch.openBrowserTitle}
+            >
               {m.launch.openBrowser}
             </button>
             <ApiStatusBar />

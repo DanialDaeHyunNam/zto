@@ -37,7 +37,13 @@ export const en = {
     aiPlaceholder: 'Ask AI, paste an image, or tell it what to write…',
     aiSend: 'Send',
     captureTitle: 'Capture the current browser view and attach it',
-    imgPrompt: 'Take a look at this screen and help.'
+    imgPrompt: 'Take a look at this screen and help.',
+    aiEmptyConsole:
+      'Fill the real console form on the left — ZTO watches what you pick and helps decide the next one. Ask anything about the current question.',
+    formProgress: '{a}/{n} answered',
+    formMoved: 'Moved to {t}',
+    follow: 'Follow',
+    followTitle: 'Ask AI automatically whenever the form on the left changes. Turn it off to think on your own.'
   },
   settings: {
     title: 'Settings',
@@ -103,6 +109,8 @@ export const en = {
       "Both stores at a glance — what's already done lights up, and you jump to the console only where hands are needed.",
     addApp: 'Add app',
     openBrowser: 'Browser',
+    openBrowserTitle:
+      'Opens the real console with AI beside it — ZTO watches the form you are filling and helps decide the next answer.',
     importDesc: 'Connect an app already live on the stores',
     apiPlay: 'Play API',
     apiApple: 'App Store API',

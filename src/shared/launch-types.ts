@@ -159,7 +159,9 @@ export interface AiChatResult {
 }
 
 // AI를 부른 자리 — 대시보드에서 "어디에 썼나"를 가른다.
-export type AiFeature = 'social' | 'survey' | 'other'
+// console = 콘솔 코파일럿(진짜 폼 옆에서 거드는 대화). 사용량 대시보드에서 소셜과 갈려 보인다 —
+// 자동 질문이 도는 모드라 비용 성격이 다르고, 합치면 어디서 새는지 못 본다.
+export type AiFeature = 'social' | 'survey' | 'console' | 'other'
 
 // 호출 1건 기록 (userData/zto-ai-usage.json). 설정의 사용량 대시보드가 이걸 집계한다.
 // billed=false(구독)는 실지출이 아니라 API 환산가다 — 합계를 절대 섞지 않는다.

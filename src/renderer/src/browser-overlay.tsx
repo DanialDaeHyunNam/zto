@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useState } from 'react'
 import BrowserSurface from './modules/social/BrowserSurface'
+import AiPanel from './modules/social/AiPanel'
 import { useI18n } from './i18n'
 
 // 앱스토어 관리 등에서 브라우저를 '슬라이딩 캐비닛 속 TV'처럼 불러내는 오버레이.
@@ -15,7 +16,9 @@ export interface OverlayGuide {
 }
 
 interface OverlayApi {
-  open: (url?: string) => void
+  // copilot=true면 오른쪽에 AI 패널이 붙는다(샌드위치) — 진짜 콘솔 폼 옆에서 거드는 모드.
+  // 폼을 ZTO 안에 복제해 두 번 입력시키는 대신, 사람은 콘솔에서 한 번만 고른다(Dan 2026-07-30).
+  open: (url?: string, opts?: { copilot?: boolean }) => void
   close: () => void
   setGuide: (g: OverlayGuide | null) => void
   isOpen: boolean
@@ -38,17 +41,23 @@ export function BrowserOverlayProvider({
 }): React.JSX.Element {
   const [url, setUrl] = useState<string | null>(null) // null = 닫힘
   const [guide, setGuide] = useState<OverlayGuide | null>(null)
+  const [copilot, setCopilot] = useState(false)
 
   useEffect(() => {
     setUrl(null)
     setGuide(null)
+    setCopilot(false)
   }, [closeKey])
 
   const api: OverlayApi = {
-    open: (u) => setUrl(u ?? 'about:blank'),
+    open: (u, opts) => {
+      setCopilot(!!opts?.copilot)
+      setUrl(u ?? 'about:blank')
+    },
     close: () => {
       setUrl(null)
       setGuide(null)
+      setCopilot(false)
     },
     setGuide,
     isOpen: url !== null
@@ -59,6 +68,7 @@ export function BrowserOverlayProvider({
       {url !== null && (
         <BrowserOverlay
           url={url}
+          copilot={copilot}
           guide={guide}
           onClose={() => {
             setUrl(null)
@@ -74,10 +84,12 @@ type Rect = { top: number; left: number; width: number; height: number }
 
 function BrowserOverlay({
   url,
+  copilot,
   guide,
   onClose
 }: {
   url: string
+  copilot: boolean
   guide: OverlayGuide | null
   onClose: () => void
 }): React.JSX.Element {
@@ -122,7 +134,16 @@ function BrowserOverlay({
       </button>
       {/* 슬라이드가 끝나야 뷰를 붙인다(TV on) — 닫힐 땐 먼저 떼고 문을 닫는다 */}
       {phase === 'shown' ? (
-        <BrowserSurface />
+        copilot ? (
+          // 샌드위치 — 왼쪽은 진짜 콘솔, 오른쪽은 그 화면을 따라가는 AI.
+          // 뷰 bounds는 surface 사각형만 따라가므로 AI 패널을 덮지 않는다(소셜 모듈과 같은 원리).
+          <div className="overlay-sandwich">
+            <BrowserSurface />
+            <AiPanel watch feature="console" />
+          </div>
+        ) : (
+          <BrowserSurface />
+        )
       ) : (
         <div className="overlay-curtain">{m.browser.opening}</div>
       )}

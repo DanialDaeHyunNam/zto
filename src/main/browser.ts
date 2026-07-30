@@ -16,6 +16,7 @@ import { mkdirSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { BrowserBounds as Bounds, BrowserState, BrowserResult } from '../shared/browser-types'
 import { EXPAND_JS, FORM_PROBE_JS, type FormProbe } from './form-probe'
+import type { FormChange, FormSnapshot, WatchedControl } from '../shared/console-types'
 
 interface Tab {
   id: string
@@ -272,6 +273,80 @@ export function newTab(url?: string): void {
   emit()
 }
 
+// ---------- 폼 따라가기 (콘솔 코파일럿) ----------
+// 사람이 진짜 콘솔 폼에서 고르면 그걸 감지해 렌더러(AI 패널)에 흘린다.
+//
+// **주입이 아니라 폴링이다.** MutationObserver를 페이지에 심는 쪽이 더 정확해 보이지만,
+// 주입한 스크립트는 내비게이션마다 날아간다(오늘 차단막에서 겪었다 — 이동할 때마다 다시 씌워야 했다).
+// 위저드는 단계마다 라우팅이 걸리므로 재주입 관리가 통째로 붙는다. 폴링은 그 문제가 없고,
+// form-probe는 DOM 질의 몇 번이라 1.5초 간격이면 비용이 무시할 수준이다.
+//
+// 그리고 **바뀐 것만** 올린다 — 매번 전체를 보내면 AI 토큰이 그대로 새어 나간다.
+let watchTimer: NodeJS.Timeout | null = null
+let watchSig = '' // 직전 스냅샷의 지문 (값이 같으면 아무것도 안 보낸다)
+let watchUrl = ''
+
+const compactControls = (probe: FormProbe): WatchedControl[] =>
+  probe.controls
+    .filter((c) => c.label) // 라벨 없는 건 사람에게도 AI에게도 의미가 없다
+    .slice(0, 120)
+    .map((c) => ({
+      kind: c.kind,
+      label: c.label.slice(0, 120),
+      value: c.value.slice(0, 120),
+      answered: !!c.value || c.checked === true,
+      options: c.options.map((o) => o.label.slice(0, 60)).slice(0, 12)
+    }))
+
+function stopWatch(): void {
+  if (watchTimer) clearInterval(watchTimer)
+  watchTimer = null
+  watchSig = ''
+  watchUrl = ''
+}
+
+function startWatch(): void {
+  stopWatch()
+  watchTimer = setInterval(() => {
+    void (async () => {
+      const wc = activeWc()
+      const w = getWin()
+      if (!wc || !w || w.isDestroyed()) return
+      let probe: FormProbe
+      try {
+        probe = (await wc.executeJavaScript(FORM_PROBE_JS, true)) as FormProbe
+      } catch {
+        return // 이동 중이면 실패한다 — 다음 틱에 다시 본다
+      }
+      const controls = compactControls(probe)
+      const sig = JSON.stringify(controls.map((c) => [c.label, c.value, c.answered]))
+      if (sig === watchSig) return
+      // 무엇이 달라졌는지 사람이 읽는 문장으로 — AI에도 이 줄만 보내면 된다
+      const before = new Map<string, string>(
+        (JSON.parse(watchSig || '[]') as [string, string, boolean][]).map((r) => [r[0], r[1]])
+      )
+      const navigated = probe.url !== watchUrl
+      const changed = navigated
+        ? []
+        : controls
+            .filter((c) => before.has(c.label) && before.get(c.label) !== c.value)
+            .map((c) => `${c.label} → ${c.value || '(비움)'}`)
+            .slice(0, 12)
+      watchSig = sig
+      watchUrl = probe.url
+      const snapshot: FormSnapshot = {
+        url: probe.url,
+        title: probe.title,
+        controls,
+        answered: controls.filter((c) => c.answered).length,
+        total: controls.length
+      }
+      const payload: FormChange = { snapshot, navigated, changed }
+      w.webContents.send('browser:formChanged', payload)
+    })()
+  }, 1500)
+}
+
 // ---------- 자동화 전용 탭 ----------
 // 자동화는 **자기 탭에서 돈다** — 사용자가 보던 탭을 가로채지 않고, 끝나면 그 탭으로 돌려놓는다.
 //
@@ -459,6 +534,13 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     } catch (e) {
       return { ok: false, error: String(e).slice(0, 300) }
     }
+  })
+
+  // 폼 따라가기 on/off — 코파일럿 화면이 켜질 때만 돈다(안 볼 때 폴링할 이유가 없다)
+  ipcMain.handle('browser:watchForm', (_e, on: boolean): boolean => {
+    if (on) startWatch()
+    else stopWatch()
+    return on
   })
 
   // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 구조화 JSON으로 회수한다(ROADMAP #4).

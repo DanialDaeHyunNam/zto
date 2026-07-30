@@ -59,6 +59,33 @@ export interface FormProbe {
   counts: Record<string, number>
 }
 
+// ---------- 폼 따라가기 (콘솔 코파일럿) ----------
+// 진짜 콘솔 폼 옆에서 AI가 거드는 구조. 사람이 콘솔에서 고르면 그걸 감지해 대화가 한 칸 나아간다.
+// **AI에 원문을 밀어 넣지 않는다** — 2026-07-24에 "텍스트 자동읽기는 토큰 부담"으로 폐기했고,
+// 그 판단은 지금도 유효하다. 대신 form-probe가 뽑은 **구조**(문항·선택지·현재값)만 보낸다.
+// 폼 하나가 컨트롤 20개 안팎이라 원문의 수십분의 일이고, "뭐가 안 채워졌나"가 그대로 드러난다.
+export interface WatchedControl {
+  kind: string
+  label: string
+  value: string // 현재 값(선택된 옵션 라벨 포함)
+  answered: boolean
+  options: string[] // 고를 수 있는 것들 — AI가 "이 중에 뭘 고르라"고 말하려면 필요하다
+}
+
+export interface FormSnapshot {
+  url: string
+  title: string
+  controls: WatchedControl[]
+  answered: number
+  total: number
+}
+
+export interface FormChange {
+  snapshot: FormSnapshot
+  navigated: boolean // 페이지가 바뀐 것인지, 같은 화면에서 값만 바뀐 것인지
+  changed: string[] // 사람이 읽는 변경 요약 ("폭력 → 가끔·약함")
+}
+
 // ---------- 앱 콘텐츠 선언 정찰 ----------
 // 콘텐츠 등급(IARC)·타깃 연령 등은 데이터 안전과 달리 **공식 CSV가 없다**(2026-07-30).
 // 그래서 DOM 경로이고, 콘솔 개정에 약하다 → 먼저 폼 구조를 회수해 매핑 가능성을 판단한다.

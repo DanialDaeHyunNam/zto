@@ -26,7 +26,12 @@ import type {
   StoreSnapshotEntry
 } from '../shared/launch-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
-import type { AppContentProbeDoc, DataSafetyDoc, PullResult } from '../shared/console-types'
+import type {
+  AppContentProbeDoc,
+  DataSafetyDoc,
+  FormChange,
+  PullResult
+} from '../shared/console-types'
 
 const api = {
   platform: process.platform,
@@ -51,6 +56,13 @@ const api = {
     reload: (): Promise<void> => ipcRenderer.invoke('browser:reload'),
     eval: (js: string): Promise<BrowserResult> => ipcRenderer.invoke('browser:eval', js),
     probeForm: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:probeForm'),
+    // 폼 따라가기 — 켠 동안만 main이 폴링한다. 해제 함수를 돌려주므로 언마운트 시 반드시 끈다.
+    watchForm: (on: boolean): Promise<boolean> => ipcRenderer.invoke('browser:watchForm', on),
+    onFormChanged: (cb: (c: FormChange) => void): (() => void) => {
+      const l = (_e: unknown, c: FormChange): void => cb(c)
+      ipcRenderer.on('browser:formChanged', l)
+      return () => ipcRenderer.removeListener('browser:formChanged', l)
+    },
     crawlConsole: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:crawlConsole'),
     capture: (): Promise<string | null> => ipcRenderer.invoke('browser:capture'),
     cdp: (method: string, params?: object): Promise<BrowserResult> =>
