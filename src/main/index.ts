@@ -4,16 +4,20 @@ import {
   BrowserWindow,
   clipboard,
   ipcMain,
+  net,
   powerMonitor,
+  protocol,
   safeStorage,
   systemPreferences
 } from 'electron'
-import { join } from 'path'
+import { basename, join } from 'path'
+import { pathToFileURL } from 'url'
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
-import { randomUUID } from 'crypto'
+import { createHash, randomUUID } from 'crypto'
 import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
 import { registerBrowserIpc } from './browser'
+import { pullDataSafety } from './console-sync'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
@@ -586,6 +590,51 @@ function aiStatus(fresh = false): AiStatus {
   }
 }
 
+// ---------- 스토어 자산 로컬 캐시 ----------
+// 렌더러가 googleusercontent로 직접 <img> 요청을 보내면 일부만 뜬다(6개 중 1~2개, 2026-07-30 실측).
+// URL은 살아 있고(curl 200×27) CSP도 허용하므로 원인은 요청 조건 — 렌더러는 임베드 브라우저와
+// **기본 세션을 공유**해서 구글 로그인 쿠키가 함께 나간다. main의 fetch에는 그 쿠키가 없다.
+// 그래서 여기서 받아 파일로 두고 file://로 렌더한다. 쿠키·스로틀·만료·오프라인 전부 무관해진다.
+const ASSET_DIR = (): string => join(app.getPath('userData'), 'assets')
+const EXT_BY_TYPE: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/webp': '.webp'
+}
+
+async function cacheAssets(urls: string[]): Promise<string[]> {
+  const dir = ASSET_DIR()
+  try {
+    mkdirSync(dir, { recursive: true })
+  } catch {
+    /* 있으면 무시 */
+  }
+  const out: string[] = []
+  // 4개씩 — 한 번에 다 던지면 CDN이 일부를 흘린다(원인 중 하나로 의심되던 지점)
+  for (let i = 0; i < urls.length; i += 4) {
+    const batch = urls.slice(i, i + 4)
+    const done = await Promise.all(
+      batch.map(async (url) => {
+        const key = createHash('sha1').update(url).digest('hex')
+        const hit = ['.png', '.jpg', '.webp'].map((e) => join(dir, key + e)).find(existsSync)
+        if (hit) return `zto-asset://${basename(hit)}`
+        try {
+          const r = await fetch(url)
+          if (!r.ok) return url // 실패하면 원격 URL 그대로 — 최소한 될 수도 있다
+          const ext = EXT_BY_TYPE[(r.headers.get('content-type') ?? '').split(';')[0]] ?? '.png'
+          const file = join(dir, key + ext)
+          writeFileSync(file, Buffer.from(await r.arrayBuffer()))
+          return `zto-asset://${basename(file)}`
+        } catch {
+          return url
+        }
+      })
+    )
+    out.push(...done)
+  }
+  return out
+}
+
 // ---------- 스토어 실황 조회 헬퍼 ----------
 // 토큰 캐시 — 조회마다 스크립트 스폰(각 ~1초+)을 피한다. 실제 만료(Google 60분·ASC 20분)보다 짧게 잡는다.
 const tokenCache = new Map<string, { tok: string; exp: number }>()
@@ -747,7 +796,7 @@ async function pullGoogleDashboard(sheet: {
         if (!imgRs[i].ok) continue
         const j = (await jsonOrEmpty(imgRs[i])) as { images?: { url?: string }[] }
         const urls = (j.images ?? []).map((im) => im.url ?? '').filter(Boolean)
-        if (urls.length > 0) images.push({ type: types[i], urls })
+        if (urls.length > 0) images.push({ type: types[i], urls: await cacheAssets(urls) })
       }
     }
   } finally {
@@ -1626,7 +1675,22 @@ function createWindow(): void {
   }
 }
 
+// 자산은 커스텀 스킴으로 낸다. `file://`은 CSP를 허용해도 **렌더러 오리진이 http일 때
+// Chromium이 스킴 규칙으로 막는다**(dev 서버가 http://localhost:5173) — CSP 문제가 아니라
+// 오리진↔스킴 문제라 img-src에 file:을 넣어도 안 뜬다(2026-07-30 실측: 타일이 통째로 빈칸).
+// 커스텀 스킴은 오리진과 무관하게 로드되고, 경로도 우리가 통제한다.
+protocol.registerSchemesAsPrivileged([
+  { scheme: 'zto-asset', privileges: { standard: true, secure: true, supportFetchAPI: true } }
+])
+
 app.whenReady().then(() => {
+  // userData/assets 안의 파일만 낸다 — 파일명만 받고 경로 조작은 차단한다
+  protocol.handle('zto-asset', (req) => {
+    const name = basename(decodeURIComponent(req.url.replace(/^zto-asset:\/\//, '').split('?')[0]))
+    const file = join(ASSET_DIR(), name)
+    if (!name || !existsSync(file)) return new Response('not found', { status: 404 })
+    return net.fetch(pathToFileURL(file).toString())
+  })
   // 기기가 손을 떠나는 순간 비밀번호 세션 종료
   powerMonitor.on('lock-screen', lockSecrets)
   powerMonitor.on('suspend', lockSecrets)
@@ -1800,6 +1864,43 @@ app.whenReady().then(() => {
       return { ok: false, text: '', error: `${provider}:${mode}:not-wired` }
     }
   )
+  // 데이터 안전 — 콘솔에서 CSV로 가져오기(ROADMAP #4). 사용자는 버튼 하나만 누른다:
+  // 로그인 확인 → 앱 찾기 → 폼 이동 → Export 클릭 → 파싱까지 ZTO가 대신한다.
+  // 진행 단계는 렌더러로 흘려보낸다 — 20초간 조용하면 고장으로 보인다.
+  ipcMain.handle('console:pullDataSafety', async (e, file: string, askLogin?: string, askChooseDev?: string, askExport?: string) => {
+    let packageName = ''
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      packageName = sheet.app?.packageName ?? ''
+    } catch {
+      return { ok: false, step: 'failed', error: 'sheet-unreadable' }
+    }
+    const result = await pullDataSafety(
+      packageName,
+      (step, detail) => {
+        console.log('[pullDataSafety]', step, detail ?? '')
+        if (!e.sender.isDestroyed()) e.sender.send('console:progress', { step, detail })
+      },
+      { login: askLogin ?? '', chooseDev: askChooseDev ?? '', export: askExport ?? '' }
+    )
+    // 화면만 보고 추측하지 않도록 결과를 main 로그에 남긴다 (dev 서버 출력에서 그대로 읽힌다)
+    console.log('[pullDataSafety] result', JSON.stringify({ ...result, doc: undefined }))
+    return result
+  })
+  // 가져온 데이터 안전 결과 — 성공 여부를 사용자가 화면에서 판단할 수 있어야 한다.
+  // (로그·파일로만 확인되면 그건 개발자만 아는 성공이다)
+  ipcMain.handle('console:dataSafetyDoc', (_e, file: string) => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const pkg = sheet.app?.packageName ?? ''
+      if (!pkg) return null
+      const path = join(app.getPath('userData'), `zto-data-safety-${pkg}.json`)
+      if (!existsSync(path)) return null
+      return JSON.parse(readFileSync(path, 'utf8'))
+    } catch {
+      return null
+    }
+  })
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
   // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록

@@ -16,9 +16,11 @@ import type {
   SheetSummary,
   StoreSnapshotEntry
 } from '../../../../shared/launch-types'
+import type { DataSafetyDoc } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
 import ContentSurveyWizard from './ContentSurveyWizard'
+import { useBrowserOverlay } from '../../browser-overlay'
 
 // 플랫폼별 앱 콘텐츠 설문 (콘솔 전용 설정을 메움)
 // 설문별 콘솔 딥링크 — Play는 콘솔 홈, ASC는 appId로 런타임 구성(앱 개인정보/연령 등급 페이지 구분)
@@ -249,8 +251,12 @@ function AssetStrip({
             <img
               key={`${s.type}-${i}`}
               src={u}
-              alt={s.type}
+              // alt를 비운다 — 로드 실패 시 브라우저가 alt 텍스트와 깨진 아이콘을 그리는데,
+              // 그게 화면에 '부재'를 크게 써 붙이는 꼴이라 디자인 원칙에 어긋난다(CLAUDE.md).
+              alt=""
               loading="lazy"
+              // 실패한 칸은 조용한 빈 타일로 남긴다
+              onError={(e) => e.currentTarget.classList.add('shot-failed')}
               onClick={() => onOpen(all, my)}
             />
           )
@@ -823,6 +829,143 @@ function SurveyButtons({
   )
 }
 
+// 데이터 안전 — 콘솔에서 CSV로 가져오기. 사용자는 "언제 무엇을" 할지 몰라도 되게,
+// 로그인 확인부터 파싱까지 ZTO가 한 번에 한다(Dan 2026-07-29). 진행 단계를 보여주는 이유는
+// 20초간 조용하면 고장으로 보이기 때문. 실패해도 막다른 길이 아니라 [폼 열기]로 넘긴다.
+function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
+  const { m } = useI18n()
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [failed, setFailed] = useState(false)
+  const [formUrl, setFormUrl] = useState('')
+  // 가져온 결과는 화면에 남아야 한다 — 성공을 로그로만 확인할 수 있으면 제품이 아니다
+  const [doc, setDoc] = useState<(DataSafetyDoc & { at?: string }) | null>(null)
+  const [showAnswers, setShowAnswers] = useState(false)
+  const { open, close, setGuide } = useBrowserOverlay()
+
+  const stepText = (step: string): string =>
+    ({
+      opening: m.launch.dsStepOpening,
+      'login-required': m.launch.dsStepLogin,
+      'needs-user': m.launch.dsStepNeedsUser,
+      'finding-app': m.launch.dsStepFinding,
+      'opening-form': m.launch.dsStepForm,
+      exporting: m.launch.dsStepExporting,
+      parsing: m.launch.dsStepParsing
+    })[step] ?? ''
+
+  const load = useCallback((): void => {
+    window.zto.console.dataSafetyDoc(file).then(setDoc)
+  }, [file])
+  useEffect(load, [load])
+
+  const run = async (): Promise<void> => {
+    setBusy(true)
+    setFailed(false)
+    setFormUrl('')
+    setMsg(m.launch.dsStepOpening)
+    // 브라우저를 실제로 띄운 뒤 진행한다. 숨은 뷰는 Chromium이 스로틀해서 콘솔 SPA가
+    // 아예 안 그려진다(2026-07-30 실측). 겸사겸사 사용자도 무슨 일이 일어나는지 본다.
+    open('https://play.google.com/console')
+    await new Promise((r) => setTimeout(r, 700)) // 슬라이드-오버가 열리고 뷰가 붙을 때까지
+    const running = m.launch.dsVeil.replace('{t}', m.launch.dsTaskName)
+    setGuide({ text: running, tone: 'run' })
+    const off = window.zto.console.onProgress((p) => {
+      setMsg(stepText(p.step) || '')
+      // 사람이 직접 해야 하는 단계면 안내 바를 '요청' 톤으로 — 문구는 브라우저 밖에 뜬다
+      if (p.step === 'needs-user') setGuide({ text: p.detail ?? '', tone: 'ask' })
+      else setGuide({ text: running, tone: 'run' })
+    })
+    const r = await window.zto.console.pullDataSafety(
+      file,
+      m.launch.dsAskLogin,
+      m.launch.dsAskChooseDev,
+      m.launch.dsAskExport
+    )
+    off()
+    setGuide(null)
+    setBusy(false)
+    if (r.ok && r.doc) {
+      close() // 다 끝나면 알아서 닫힌다
+      load() // 가져온 내용을 화면에 반영
+      setMsg(
+        m.launch.dsStepDone
+          .replace('{n}', String(r.doc.questions.length))
+          .replace('{a}', String(r.doc.answeredCount))
+      )
+    } else if (r.step === 'login-required') {
+      setMsg(m.launch.dsStepLogin)
+      if (r.formUrl) open(r.formUrl) // 로그인 화면을 바로 띄워준다
+    } else {
+      // 실패해도 오버레이를 닫는다 — 에러 메시지가 오버레이 뒤 대시보드에 뜨기 때문에
+      // 열어두면 정작 원인을 못 본다(Dan 2026-07-30). 이어서 직접 하려면 [폼 열기]로 다시 연다.
+      close()
+      setFailed(true)
+      setMsg(m.launch.dsStepFailed.replace('{e}', r.error ?? ''))
+      if (r.formUrl) setFormUrl(r.formUrl)
+    }
+  }
+
+  return (
+    <div className="dash-sub">
+      <div className="survey-btns">
+        <button
+          className="ghost-btn mini"
+          disabled={busy}
+          onClick={run}
+          title={m.launch.dsPullTitle}
+        >
+          {m.launch.dsPull}
+        </button>
+        {msg && !failed && <span className="ds-pull-msg">{msg}</span>}
+        {doc && (
+          <>
+            <span className="ds-imported">
+              ✓ {m.launch.dsImported
+                .replace('{n}', String(doc.questions.length))
+                .replace('{a}', String(doc.answeredCount))}
+              {doc.at && ` · ${new Date(doc.at).toLocaleDateString()}`}
+            </span>
+            <button className="ghost-btn mini" onClick={() => setShowAnswers((v) => !v)}>
+              {showAnswers ? m.launch.hideHistory : m.launch.dsViewAnswers}
+            </button>
+          </>
+        )}
+      </div>
+      {doc && showAnswers && (
+        <div className="ds-answers">
+          {doc.questions
+            .filter((q) => q.answered)
+            .map((q) => (
+              <div key={q.id} className="ds-answer-row">
+                <span className="ds-answer-q">{q.label}</span>
+                <span className="ds-answer-a">
+                  {q.value || q.options.filter((o) => o.selected).map((o) => o.label).join(', ')}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+      {/* 실패는 작은 회색 글씨로 묻히면 안 된다 — 오버레이가 닫힌 자리에서 바로 읽히게 */}
+      {failed && msg && (
+        <div className="ds-pull-fail">
+          <span className="ds-fail-text">{msg}</span>
+          <span className="ds-fail-acts">
+            {formUrl && (
+              <button className="ghost-btn mini" onClick={() => open(formUrl)}>
+                {m.launch.dsOpenForm}
+              </button>
+            )}
+            <button className="ghost-btn mini" disabled={busy} onClick={run}>
+              {m.launch.dsRetry}
+            </button>
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function AndroidTree({
   g,
   file,
@@ -852,6 +995,7 @@ function AndroidTree({
         {[configReadable, m.launch.dashConfigConsole].filter(Boolean).join(' · ')}
       </Node>
       <SurveyButtons surveys={surveys} onOpen={onOpenSurvey} />
+      <DataSafetyPull file={file} />
       <Node light={metaDirty ? 'y' : g.listings.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeMeta}>
         <LocaleChips locales={g.listings.map((l) => l.locale)} />
       </Node>
