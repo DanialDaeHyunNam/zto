@@ -8,11 +8,18 @@
 //  ③ 어느 단계가 실패해도 막다른 길이 아니라 사람에게 넘긴다(브라우저를 그 페이지에 열어둔 채)
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
-import { app } from 'electron'
-import { activeWebContents, expectDownload, newTab } from './browser'
+import { app, type WebContents } from 'electron'
+import { expectDownload, openAutomationTab } from './browser'
 import { parseDataSafetyCsv } from './data-safety'
+import { EXPAND_JS, FORM_PROBE_JS } from './form-probe'
 
-import type { PullResult, PullStep } from '../shared/console-types'
+import type {
+  AppContentForm,
+  AppContentProbeDoc,
+  FormProbe,
+  PullResult,
+  PullStep
+} from '../shared/console-types'
 export type { PullResult, PullStep } from '../shared/console-types'
 
 const CONSOLE_HOME = 'https://play.google.com/console' // 맨 URL — 리다이렉트로 개발자 id를 얻는다
@@ -161,24 +168,35 @@ const clickByTextJs = (label: string): string => `(() => {
   return { clicked: true, label: norm(cands[0]).slice(0, 60) };
 })()`
 
-export async function pullDataSafety(
-  packageName: string,
-  onStep: (step: PullStep, detail?: string) => void,
-  // 안내 문구는 **렌더러가 i18n 사전에서 넘긴다** — main에 기본값(한국어)을 두면
-  // 영어 로케일에서 한국어가 새어 나온다. 기본값 없이 필수 인자로 둬서 컴파일이 강제하게 한다.
-  asks: { login: string; chooseDev: string; export: string }
-): Promise<PullResult> {
-  if (!packageName) return { ok: false, step: 'failed', error: 'no-package-name' }
-  if (!activeWebContents()) newTab('about:blank') // 브라우저를 한 번도 안 열었을 수 있다
-  await wait(300)
-  const wc = activeWebContents()
-  if (!wc) return { ok: false, step: 'failed', error: 'no-browser-view' }
+// ---------- 자동화 한 판이 쓰는 도구 묶음 ----------
+// 이동·대기·차단막·핸드오프는 어느 폼을 다루든 똑같다. 폼마다 다른 건 목표 URL과 도착 검증뿐.
+interface Ctx {
+  wc: WebContents
+  reveal: () => void
+  dispose: () => void
+  go: (url: string, settle?: number) => Promise<string>
+  waitForUrl: (test: (u: string) => boolean, timeoutMs?: number) => Promise<string>
+  handOff: (ask: string, done: () => Promise<boolean>, timeoutMs?: number) => Promise<boolean>
+  veil: (mode: 'block' | 'off') => Promise<void>
+}
+
+function makeCtx(onStep: (step: PullStep, detail?: string) => void): Ctx {
+  // **자동화 전용 뷰 — 화면에 붙지 않는다.** 사용자의 탭을 가로채지도, 창을 앞으로 끌지도 않는다.
+  // 예전엔 렌더러가 오버레이를 열어 브라우저를 띄운 뒤 자동화를 돌렸는데, 그건 스로틀 때문에
+  // 어쩔 수 없다고 믿던 시절의 습관이었다(setBackgroundThrottling(false) 이후로는 근거가 없다).
+  // 자동화가 1분씩 화면과 포커스를 점거하면 그건 대신 해주는 게 아니라 컴퓨터를 뺏는 것이다.
+  const tab = openAutomationTab()
+  const wc = tab.wc
+
+  const veil = async (mode: 'block' | 'off'): Promise<void> => {
+    await wc.executeJavaScript(veilJs(mode), true).catch(() => false)
+  }
 
   const go = async (url: string, settle = 1800): Promise<string> => {
     await wc.loadURL(url)
     await wait(settle)
     // 이동하면 베일이 날아간다 — 매번 다시 씌운다
-    await wc.executeJavaScript(veilJs('block'), true).catch(() => false)
+    await veil('block')
     return wc.getURL()
   }
 
@@ -195,118 +213,127 @@ export async function pullDataSafety(
     }
   }
 
-  // 자동화 중 사용자 클릭 차단은 주입한 베일이 맡는다 — 전체 화면 fixed 요소라 아래를 덮는다.
+  // 자동화가 못 하는 한 걸음을 사람에게 넘기고 기다린다 — 조건이 채워지면 이어간다.
+  // **여기가 뷰를 처음 화면에 내는 유일한 지점이다.** 사람이 눌러야 할 게 있을 때만 나타난다.
+  // 그때는 차단막(주입한 전체화면 fixed 요소)을 걷어 사용자가 페이지를 만질 수 있게 한다.
   // (Electron의 setIgnoreInputEvents는 BrowserWindow 전용이라 WebContentsView엔 못 쓴다.)
-  // 자동화가 못 하는 한 걸음을 사람에게 넘기고 기다린다 — 배너로 부탁하고, 조건이 채워지면 이어간다.
-  // 실패로 끝내는 것보다 낫다: 사용자는 이미 그 화면을 보고 있고, 한 번만 눌러주면 되는 일이다.
   const handOff = async (
     ask: string,
     done: () => Promise<boolean>,
     timeoutMs = 180_000
   ): Promise<boolean> => {
     onStep('needs-user', ask) // 문구는 브라우저 밖 안내 바에 뜬다
-    await wc.executeJavaScript(veilJs('off'), true).catch(() => false)
+    tab.reveal()
+    await veil('off')
     const start = Date.now()
     while (Date.now() - start < timeoutMs) {
       await wait(900)
       if (await done()) {
         // 사람이 마친 뒤엔 다시 차단 모드로 — 이어지는 자동 단계 중 클릭이 끼지 않게
-        await wc.executeJavaScript(veilJs('block'), true).catch(() => false)
+        await veil('block')
         return true
       }
       // 이동하면 배너가 날아가므로 다시 씌운다
-      await wc.executeJavaScript(veilJs('off'), true).catch(() => false)
+      await veil('off')
     }
     return false
   }
 
-  try {
-    // 1) 콘솔 홈 — 여기서 로그인 여부가 갈린다
-    onStep('opening')
-    await go(CONSOLE_HOME, 600)
-    // 로그인으로 튕기는지만 잠깐 살핀다. 콘솔에 머무르면 그게 곧 '로그인됨'이다 —
-    // 개발자 id는 URL에 안 박히므로(아래 참고) URL로 더 기다려봐야 시간만 버린다.
-    let here = await waitForUrl((u) => /accounts\.google\.com/.test(u), 6_000)
-    if (/accounts\.google\.com/.test(here)) {
-      // 세션이 퍼시스턴트라 한 번만 하면 된다 — 로그인해 달라고 부탁하고 끝날 때까지 기다린다.
-      const ok = await handOff(
-        asks.login,
-        async () => !/accounts\.google\.com/.test(wc.getURL())
-      )
-      if (!ok) return { ok: false, step: 'login-required', formUrl: wc.getURL() }
-      here = wc.getURL()
-    }
+  return { wc, reveal: tab.reveal, dispose: tab.dispose, go, waitForUrl, handOff, veil }
+}
 
-    // 개발자 id — URL이 아니라 **화면의 링크**에서 읽는다(위 FIND_DEV_ID_JS 주석 참고).
-    // 링크가 아직 안 그려졌을 수 있어 몇 번 다시 본다.
-    onStep('finding-app')
-    // (DevProbe는 아래 handOff 콜백에서도 쓰인다)
-    type DevProbe = {
-      devId: string | null
-      links?: number
-      anchors?: number
-      textLen?: number
-      title?: string
-      url?: string
-    }
-    let dev: DevProbe = { devId: null }
-    // 콘솔은 번들이 커서 늦게 그려진다. 진입점을 바꿔가며 넉넉히 기다린다 —
-    // 7초로는 부족했다(links=0, 2026-07-30). 각 진입점마다 최대 20초.
-    const entries = [CONSOLE_HOME, 'https://play.google.com/console/u/0/developers']
-    for (const entry of entries) {
-      if (entry !== CONSOLE_HOME) await go(entry, 1000)
-      for (let attempt = 0; attempt < 20; attempt++) {
-        dev = (await wc.executeJavaScript(FIND_DEV_ID_JS, true)) as DevProbe
-        if (dev.devId) break
-        // 개발자 계정 선택 화면 — 하나뿐이면 대신 눌러주고, 여럿이면 고르는 건 사람 몫이다
-        const pick = (await wc.executeJavaScript(PICK_DEVELOPER_JS, true)) as {
-          chooser: boolean
-          clicked?: boolean
-          count?: number
-        }
-        if (pick.chooser && pick.clicked) {
-          await wait(2500)
-          await wc.executeJavaScript(veilJs('block'), true).catch(() => false)
-        } else if (pick.chooser) {
-          // 못 눌렀으면(후보 0개=선택자에 안 잡힘, 또는 2개 이상=사람의 판단) 사람에게 넘긴다.
-          // count>1만 넘기게 해뒀다가 0일 때 차단막만 쓴 채 멈춰 있었다(2026-07-30).
-          await handOff(
-            asks.chooseDev,
-            async () => {
-              const p = (await wc.executeJavaScript(FIND_DEV_ID_JS, true)) as DevProbe
-              return !!p.devId
-            }
-          )
-        }
-        await wait(1000)
-      }
+// ---------- 로그인 → 개발자 id → 앱 찾기 ----------
+// 어느 폼을 읽든 여기까지는 완전히 같다. 데이터 안전에서 실증된 경로를 그대로 재사용한다.
+async function reachApp(
+  ctx: Ctx,
+  packageName: string,
+  onStep: (step: PullStep, detail?: string) => void,
+  asks: { login: string; chooseDev: string }
+): Promise<{ base: string } | { fail: PullResult }> {
+  const { wc, go, waitForUrl, handOff, veil } = ctx
+
+  // 1) 콘솔 홈 — 여기서 로그인 여부가 갈린다
+  await go(CONSOLE_HOME, 600)
+  // 로그인으로 튕기는지만 잠깐 살핀다. 콘솔에 머무르면 그게 곧 '로그인됨'이다 —
+  // 개발자 id는 URL에 안 박히므로(아래 참고) URL로 더 기다려봐야 시간만 버린다.
+  let here = await waitForUrl((u) => /accounts\.google\.com/.test(u), 6_000)
+  if (/accounts\.google\.com/.test(here)) {
+    // 세션이 퍼시스턴트라 한 번만 하면 된다 — 로그인해 달라고 부탁하고 끝날 때까지 기다린다.
+    const ok = await handOff(asks.login, async () => !/accounts\.google\.com/.test(wc.getURL()))
+    if (!ok) return { fail: { ok: false, step: 'login-required', formUrl: wc.getURL() } }
+    here = wc.getURL()
+  }
+
+  // 개발자 id — URL이 아니라 **화면의 링크**에서 읽는다(위 FIND_DEV_ID_JS 주석 참고).
+  // 링크가 아직 안 그려졌을 수 있어 몇 번 다시 본다.
+  onStep('finding-app')
+  // (DevProbe는 아래 handOff 콜백에서도 쓰인다)
+  type DevProbe = {
+    devId: string | null
+    links?: number
+    anchors?: number
+    textLen?: number
+    title?: string
+    url?: string
+  }
+  let dev: DevProbe = { devId: null }
+  // 콘솔은 번들이 커서 늦게 그려진다. 진입점을 바꿔가며 넉넉히 기다린다 —
+  // 7초로는 부족했다(links=0, 2026-07-30). 각 진입점마다 최대 20초.
+  const entries = [CONSOLE_HOME, 'https://play.google.com/console/u/0/developers']
+  for (const entry of entries) {
+    if (entry !== CONSOLE_HOME) await go(entry, 1000)
+    for (let attempt = 0; attempt < 20; attempt++) {
+      dev = (await wc.executeJavaScript(FIND_DEV_ID_JS, true)) as DevProbe
       if (dev.devId) break
+      // 개발자 계정 선택 화면 — 하나뿐이면 대신 눌러주고, 여럿이면 고르는 건 사람 몫이다
+      const pick = (await wc.executeJavaScript(PICK_DEVELOPER_JS, true)) as {
+        chooser: boolean
+        clicked?: boolean
+        count?: number
+      }
+      if (pick.chooser && pick.clicked) {
+        await wait(2500)
+        await veil('block')
+      } else if (pick.chooser) {
+        // 못 눌렀으면(후보 0개=선택자에 안 잡힘, 또는 2개 이상=사람의 판단) 사람에게 넘긴다.
+        // count>1만 넘기게 해뒀다가 0일 때 차단막만 쓴 채 멈춰 있었다(2026-07-30).
+        await handOff(asks.chooseDev, async () => {
+          const p = (await wc.executeJavaScript(FIND_DEV_ID_JS, true)) as DevProbe
+          return !!p.devId
+        })
+      }
+      await wait(1000)
     }
-    if (!dev.devId) {
-      return {
+    if (dev.devId) break
+  }
+  if (!dev.devId) {
+    return {
+      fail: {
         ok: false,
         step: 'failed',
         error: `no-developer-id (a=${dev.anchors ?? 0}, text=${dev.textLen ?? 0}, ${(dev.url ?? here).slice(0, 70)})`,
         formUrl: dev.url ?? here
       }
     }
-    // 이미 앱 목록이 그려져 있을 수도 있으니, 아니면 명시적으로 이동한다
-    if (!here.includes('app-list')) {
-      await go(`https://play.google.com/console/u/0/developers/${dev.devId}/app-list`, 1200)
-      await waitForUrl((u) => u.includes('app-list'), 15_000)
-    }
+  }
+  // 이미 앱 목록이 그려져 있을 수도 있으니, 아니면 명시적으로 이동한다
+  if (!here.includes('app-list')) {
+    await go(`https://play.google.com/console/u/0/developers/${dev.devId}/app-list`, 1200)
+    await waitForUrl((u) => u.includes('app-list'), 15_000)
+  }
 
-    // 2) 패키지명으로 앱 찾기 — 목록이 늦게 그려질 수 있어 몇 번 다시 본다
-    let hit: { found: boolean; dev?: string; app?: string; reason?: string; linkCount?: number } = {
-      found: false
-    }
-    for (let attempt = 0; attempt < 3; attempt++) {
-      hit = (await wc.executeJavaScript(findAppJs(packageName), true)) as typeof hit
-      if (hit.found) break
-      await wait(1200)
-    }
-    if (!hit.found || !hit.dev || !hit.app) {
-      return {
+  // 2) 패키지명으로 앱 찾기 — 목록이 늦게 그려질 수 있어 몇 번 다시 본다
+  let hit: { found: boolean; dev?: string; app?: string; reason?: string; linkCount?: number } = {
+    found: false
+  }
+  for (let attempt = 0; attempt < 3; attempt++) {
+    hit = (await wc.executeJavaScript(findAppJs(packageName), true)) as typeof hit
+    if (hit.found) break
+    await wait(1200)
+  }
+  if (!hit.found || !hit.dev || !hit.app) {
+    return {
+      fail: {
         ok: false,
         step: 'failed',
         // 왜 못 찾았는지까지 올린다 — 목록이 안 그려진 건지, 그 계정에 없는 앱인지 구분돼야 한다
@@ -314,13 +341,32 @@ export async function pullDataSafety(
         formUrl: wc.getURL()
       }
     }
-    const base = `https://play.google.com/console/u/0/developers/${hit.dev}/app/${hit.app}`
+  }
+  return { base: `https://play.google.com/console/u/0/developers/${hit.dev}/app/${hit.app}` }
+}
+
+export async function pullDataSafety(
+  packageName: string,
+  onStep: (step: PullStep, detail?: string) => void,
+  // 안내 문구는 **렌더러가 i18n 사전에서 넘긴다** — main에 기본값(한국어)을 두면
+  // 영어 로케일에서 한국어가 새어 나온다. 기본값 없이 필수 인자로 둬서 컴파일이 강제하게 한다.
+  asks: { login: string; chooseDev: string; export: string }
+): Promise<PullResult> {
+  if (!packageName) return { ok: false, step: 'failed', error: 'no-package-name' }
+  const ctx = makeCtx(onStep)
+  const { wc, go, waitForUrl, veil } = ctx
+
+  try {
+    onStep('opening')
+    const reached = await reachApp(ctx, packageName, onStep, asks)
+    if ('fail' in reached) return reached.fail
+    const base = reached.base
     const formUrl = `${base}/app-content/data-privacy-security`
 
     // 3) 데이터 안전 폼 — 도착 검증(없는 경로면 조용히 홈으로 튕긴다)
     onStep('opening-form')
     await go(formUrl, 800)
-    here = await waitForUrl((u) => u.includes('data-privacy-security'), 15_000)
+    const here = await waitForUrl((u) => u.includes('data-privacy-security'), 15_000)
     if (!here.includes('data-privacy-security')) {
       return { ok: false, step: 'failed', error: 'form-not-reached', consoleBase: base, formUrl }
     }
@@ -337,10 +383,11 @@ export async function pullDataSafety(
       label?: string
     }
     if (!click.clicked) {
-      // 못 눌렀으면 사람에게 부탁한다 — 차단막을 걷고 하단 바 문구를 바꾼다.
+      // 못 눌렀으면 사람에게 부탁한다 — 이때만 뷰를 앞에 내고 차단막을 걷는다.
       // 기다림은 아래 `downloaded` 하나로 통일된다(자동/수동 어느 쪽이든 파일이 오면 끝).
-      await wc.executeJavaScript(veilJs('off'), true).catch(() => false)
       onStep('needs-user', asks.export)
+      ctx.reveal()
+      await veil('off')
     }
     let file: string
     try {
@@ -357,7 +404,7 @@ export async function pullDataSafety(
       }
     }
     // 사람이 눌러준 경우엔 다시 차단막을 씌우고 마무리한다
-    await wc.executeJavaScript(veilJs('block'), true).catch(() => false)
+    await veil('block')
 
     // 5) 파싱 + 보관
     onStep('parsing')
@@ -376,10 +423,133 @@ export async function pullDataSafety(
     onStep('failed')
     return { ok: false, step: 'failed', error: String(e).slice(0, 300) }
   } finally {
-    // 베일을 걷는다(실패로 끝나면 사람이 이어받아야 하므로 반드시 치워야 한다)
-    wc.executeJavaScript(
-      "(()=>{var e=document.getElementById('zto-automation-veil');if(e)e.remove();return true})()",
-      true
-    ).catch(() => false)
+    // 자동화 뷰는 반드시 치운다 — 베일째로 사라지므로 따로 걷을 필요가 없고,
+    // 사용자가 보던 탭으로 돌아간다. 이어서 직접 할 일은 렌더러가 [폼 열기]로 새로 연다.
+    ctx.dispose()
+  }
+}
+
+// ---------- 앱 콘텐츠 선언 정찰 (콘텐츠 등급·타깃 연령 등) ----------
+// 데이터 안전과 달리 이쪽은 **공식 CSV가 없다** → DOM 경로라 콘솔 개정에 약하다.
+// 그래서 코드를 쓰기 전에 폼이 실제로 어떻게 생겼는지부터 회수한다.
+//
+// 경로는 조립하지 않는다. `app-content/overview`에 가서 **거기 링크에서** 하위 선언 폼을
+// 수확한다 — `app-content` 단독이 존재하지 않았듯(2026-07-29) 하위 슬러그도 추측하면
+// 404가 아니라 홈으로 조용히 리다이렉트된다. 화면이 알려주는 href만 따라간다.
+export async function probeAppContent(
+  packageName: string,
+  onStep: (step: PullStep, detail?: string) => void,
+  asks: { login: string; chooseDev: string }
+): Promise<{
+  ok: boolean
+  step: PullStep
+  doc?: AppContentProbeDoc
+  consoleBase?: string
+  error?: string
+}> {
+  if (!packageName) return { ok: false, step: 'failed', error: 'no-package-name' }
+  const ctx = makeCtx(onStep)
+  const { wc, go, waitForUrl } = ctx
+
+  const expandAndProbe = async (): Promise<FormProbe> => {
+    // 접힌 영역은 DOM에 아예 없다 — 펼치고 읽는다. 한 번 펼치면 또 접힌 게 드러나므로 반복.
+    for (let round = 0; round < 3; round++) {
+      const opened = (await wc.executeJavaScript(EXPAND_JS, true).catch(() => 0)) as number
+      if (!opened) break
+      await wait(700)
+    }
+    return (await wc.executeJavaScript(FORM_PROBE_JS, true)) as FormProbe
+  }
+
+  try {
+    onStep('opening')
+    const reached = await reachApp(ctx, packageName, onStep, asks)
+    if ('fail' in reached) return { ok: false, step: reached.fail.step, error: reached.fail.error }
+    const base = reached.base
+
+    // 1) 목차 페이지 — 여기서 하위 폼 경로를 수확한다
+    onStep('opening-form')
+    const overview = `${base}/app-content/overview`
+    await go(overview, 1200)
+    const here = await waitForUrl((u) => u.includes('app-content'), 15_000)
+    if (!here.includes('app-content')) {
+      return { ok: false, step: 'failed', error: 'overview-not-reached', consoleBase: base }
+    }
+    const map = await expandAndProbe()
+
+    // 같은 앱의 app-content 하위만 — 다른 앱·개발자 페이지로 새면 순회가 폭주한다
+    const found = new Map<string, string>() // slug → 링크 텍스트
+    for (const l of map.links) {
+      const m = l.href.match(/\/app\/\d+\/app-content\/([A-Za-z0-9._-]+)(?:[/?#]|$)/)
+      if (!m || m[1] === 'overview') continue
+      if (!found.has(m[1])) found.set(m[1], l.text)
+    }
+    if (found.size === 0) {
+      return {
+        ok: false,
+        step: 'failed',
+        // 링크가 0개면 '이 앱엔 선언이 없다'가 아니라 '페이지가 안 그려졌다'일 가능성이 크다 —
+        // 구분이 되게 관측치를 함께 올린다(문서 §8)
+        error: `no-app-content-links (a=${map.links.length}, ctrl=${map.controls.length}, ${map.title.slice(0, 40)})`,
+        consoleBase: base
+      }
+    }
+
+    // 2) 폼마다 들어가서 통째로 회수한다 — '어디 있나'만이 아니라 '무엇을 묻나'까지 있어야
+    //    설문 매핑을 설계할 수 있다(1차 콘솔 지도가 링크만 담아 판단을 못 했다)
+    onStep('probing')
+    const forms: AppContentForm[] = []
+    for (const [slug, label] of found) {
+      const url = `${base}/app-content/${slug}`
+      onStep('probing', label || slug)
+      try {
+        await go(url, 1600)
+        const landed = await waitForUrl((u) => u.includes(`app-content/${slug}`), 12_000)
+        const probe = await expandAndProbe()
+        forms.push({
+          slug,
+          label,
+          url,
+          reached: landed.includes(`app-content/${slug}`),
+          title: probe.title,
+          headings: probe.headings.slice(0, 30),
+          counts: probe.counts,
+          controls: probe.controls
+        })
+      } catch (e) {
+        forms.push({
+          slug,
+          label,
+          url,
+          reached: false,
+          title: String(e).slice(0, 120),
+          headings: [],
+          counts: {},
+          controls: []
+        })
+      }
+    }
+
+    const doc: AppContentProbeDoc = {
+      at: new Date().toISOString(),
+      packageName,
+      consoleBase: base,
+      forms
+    }
+    try {
+      writeFileSync(
+        join(app.getPath('userData'), `zto-app-content-${packageName}.json`),
+        JSON.stringify(doc, null, 2)
+      )
+    } catch {
+      /* 보관 실패가 결과를 막지는 않는다 */
+    }
+    onStep('done')
+    return { ok: true, step: 'done', doc, consoleBase: base }
+  } catch (e) {
+    onStep('failed')
+    return { ok: false, step: 'failed', error: String(e).slice(0, 300) }
+  } finally {
+    ctx.dispose()
   }
 }

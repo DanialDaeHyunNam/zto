@@ -17,7 +17,7 @@ import { createHash, randomUUID } from 'crypto'
 import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
 import { registerBrowserIpc } from './browser'
-import { pullDataSafety } from './console-sync'
+import { probeAppContent, pullDataSafety } from './console-sync'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
@@ -1887,6 +1887,38 @@ app.whenReady().then(() => {
     console.log('[pullDataSafety] result', JSON.stringify({ ...result, doc: undefined }))
     return result
   })
+  // 앱 콘텐츠 선언 정찰 — 콘텐츠 등급(IARC)·타깃 연령 등은 CSV가 없어 DOM 경로다.
+  // 코드를 쓰기 전에 폼이 실제로 어떻게 생겼는지 회수한다(결과는 userData/zto-app-content-*.json).
+  ipcMain.handle(
+    'console:probeAppContent',
+    async (e, file: string, askLogin?: string, askChooseDev?: string) => {
+      let packageName = ''
+      try {
+        const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+        packageName = sheet.app?.packageName ?? ''
+      } catch {
+        return { ok: false, step: 'failed', error: 'sheet-unreadable' }
+      }
+      const result = await probeAppContent(
+        packageName,
+        (step, detail) => {
+          console.log('[probeAppContent]', step, detail ?? '')
+          if (!e.sender.isDestroyed()) e.sender.send('console:progress', { step, detail })
+        },
+        { login: askLogin ?? '', chooseDev: askChooseDev ?? '' }
+      )
+      console.log(
+        '[probeAppContent] result',
+        JSON.stringify({
+          ...result,
+          doc: result.doc
+            ? result.doc.forms.map((f) => `${f.slug}:${f.controls.length}`).join(' ')
+            : undefined
+        })
+      )
+      return result
+    }
+  )
   // 가져온 데이터 안전 결과 — 성공 여부를 사용자가 화면에서 판단할 수 있어야 한다.
   // (로그·파일로만 확인되면 그건 개발자만 아는 성공이다)
   ipcMain.handle('console:dataSafetyDoc', (_e, file: string) => {

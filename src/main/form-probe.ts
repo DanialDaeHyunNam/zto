@@ -6,37 +6,13 @@
 // Play 콘솔·ASC는 Angular/React 커스텀 컴포넌트라 <input type="radio">가 아니라
 // <div role="radio">인 경우가 많다. role은 접근성 때문에 유지될 가능성이 높아 태그보다 안정적이다.
 
-export interface ProbedOption {
-  label: string
-  value: string
-  checked: boolean
-}
-
-export interface ProbedControl {
-  kind: string // radio | radiogroup | checkbox | textbox | combobox | select | input …
-  label: string // 사람이 보는 질문 문구 (aria-label → <label> → 가까운 제목 순)
-  name: string // name/id/aria 식별자 (있으면)
-  value: string // 현재 값 (텍스트/선택)
-  checked: boolean | null
-  options: ProbedOption[] // radiogroup·select의 선택지
-  selector: string // 되짚어 찾아갈 선택자 후보
-  path: string // 조상 섹션 제목들 — 문항이 어느 묶음에 속하는지
-}
-
-export interface ProbedLink {
-  text: string
-  href: string
-}
-
-export interface FormProbe {
-  url: string
-  title: string
-  at: string
-  headings: string[]
-  links: ProbedLink[] // 콘솔 내비게이션 — 폼 페이지를 스스로 찾기 위한 지도
-  controls: ProbedControl[]
-  counts: Record<string, number>
-}
+// 타입은 shared에 산다 — 정찰 결과가 preload를 거쳐 렌더러까지 가는데 main 모듈은 그 경로에 못 낀다.
+export type {
+  ProbedOption,
+  ProbedControl,
+  ProbedLink,
+  FormProbe
+} from '../shared/console-types'
 
 // 접힌 메뉴를 펼친다 — 접혀 있으면 하위 링크가 DOM에 아예 없어서(Angular가 펼칠 때 렌더)
 // 그냥 긁으면 1단계만 잡힌다(2026-07-29 실측: grow-overview 하위가 통째로 누락).

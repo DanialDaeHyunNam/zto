@@ -118,9 +118,6 @@ const normalizeUrl = (raw: string): string => {
 
 const activeTab = (): Tab | null => tabs.find((t) => t.id === activeId) ?? null
 const activeWc = (): WebContents | null => activeTab()?.view.webContents ?? null
-// 오케스트레이션(console-sync)이 쓰는 접근자 — 탭이 없으면 null.
-export const activeWebContents = (): WebContents | null => activeWc()
-
 const isStartWc = (wc: WebContents): boolean => {
   const u = wc.getURL()
   return !u || u === 'about:blank'
@@ -273,6 +270,35 @@ export function newTab(url?: string): void {
   showActive()
   t.view.webContents.loadURL(url ? normalizeUrl(url) : 'about:blank')
   emit()
+}
+
+// ---------- 자동화 전용 뷰 ----------
+// 자동화는 **사용자의 화면과 포커스를 뺏지 않는다**(Dan 2026-07-30). 뷰를 만들되 활성화하지
+// 않으므로 창에 붙지 않고(showActive는 활성 탭만 붙인다) 보이지도 않는다.
+// 보이지 않아도 도는 근거는 makeTab의 `setBackgroundThrottling(false)`다 — 그게 없던 시절의
+// "숨은 뷰는 부트스트랩을 못 끝낸다"는 관찰 때문에 화면에 띄우는 습관이 남아 있었지만,
+// 스로틀을 끈 뒤로는 띄울 이유가 없다. 사람의 손이 필요한 순간에만 reveal()로 앞에 낸다.
+export function openAutomationTab(): {
+  wc: WebContents
+  reveal: () => void
+  dispose: () => void
+} {
+  const restore = activeId // 끝나면 사용자가 보던 탭으로 돌려놓는다
+  const t = makeTab()
+  tabs.push(t)
+  emit() // 탭 바에는 보인다 — 뭔가 돌고 있다는 사실까지 숨기면 그건 유령이다
+  return {
+    wc: t.view.webContents,
+    reveal: (): void => {
+      activeId = t.id
+      showActive()
+      emit()
+    },
+    dispose: (): void => {
+      if (activeId === t.id && restore && tabs.some((x) => x.id === restore)) activeId = restore
+      closeTab(t.id)
+    }
+  }
 }
 
 export function selectTab(id: string): void {
@@ -465,7 +491,15 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
 
     const wait = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
     const pages: unknown[] = []
-    for (const section of CONSOLE_SECTIONS) {
+    // 큐는 순회하면서 자란다 — `app-content/overview`에 도착하면 **그 페이지의 링크에서**
+    // 하위 선언 폼(콘텐츠 등급·타깃 연령·광고·앱 액세스…) 경로를 수확해 뒤에 붙인다.
+    // 슬러그를 기억으로 적지 않는 이유가 여기서도 같다: `app-content` 단독이 존재하지 않았듯
+    // 하위 경로도 추측하면 조용히 홈으로 튕긴다. 화면이 알려주는 href만 따라간다.
+    const queue = [...CONSOLE_SECTIONS]
+    const queued = new Set(queue)
+    // 상한은 폭주 방지용 — 앱 콘텐츠 선언은 보통 10여 개라 넉넉하다
+    for (let qi = 0; qi < queue.length && qi < 40; qi++) {
+      const section = queue[qi]
       const url = `${base[1]}/${section}`
       try {
         await wc.loadURL(url)
@@ -485,8 +519,19 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
           title: probe.title,
           counts: probe.counts,
           headings: probe.headings.slice(0, 20),
-          links: probe.links
+          links: probe.links,
+          // 폼 컨트롤까지 싣는다 — 지도는 '어디에 있나'만이 아니라 '무엇을 묻나'까지 답해야
+          // 설문 매핑을 설계할 수 있다. 링크만 있던 1차 지도로는 그 판단을 못 했다.
+          controls: probe.controls
         })
+        for (const l of probe.links) {
+          // 같은 앱의 app-content 하위만 — 다른 앱·개발자 페이지로 새면 순회가 폭주한다
+          const sub = l.href.match(/\/app\/\d+\/(app-content\/[A-Za-z0-9._-]+)(?:[/?#]|$)/)
+          if (sub && !queued.has(sub[1])) {
+            queued.add(sub[1])
+            queue.push(sub[1])
+          }
+        }
       } catch (e) {
         pages.push({ section, requested: url, error: String(e).slice(0, 200) })
       }

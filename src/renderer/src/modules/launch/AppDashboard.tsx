@@ -843,7 +843,7 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
   const [showAnswers, setShowAnswers] = useState(false)
   const { open, close, setGuide } = useBrowserOverlay()
 
-  const stepText = (step: string): string =>
+  const stepText = (step: string, detail?: string): string =>
     ({
       opening: m.launch.dsStepOpening,
       'login-required': m.launch.dsStepLogin,
@@ -851,6 +851,7 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
       'finding-app': m.launch.dsStepFinding,
       'opening-form': m.launch.dsStepForm,
       exporting: m.launch.dsStepExporting,
+      probing: m.launch.acStepProbing.replace('{f}', detail ?? ''),
       parsing: m.launch.dsStepParsing
     })[step] ?? ''
 
@@ -859,34 +860,52 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
   }, [file])
   useEffect(load, [load])
 
-  const run = async (): Promise<void> => {
+  // 자동화 한 판을 돌린다. **브라우저는 열지 않는다** — 자동화 뷰는 main이 화면 밖에서 굴리고,
+  // 사람이 눌러야 할 게 생겼을 때(`needs-user`)만 그 자리에서 오버레이를 연다.
+  // 예전엔 시작하자마자 오버레이를 열었는데, 그건 스로틀 때문에 화면에 띄워야 한다고 믿던
+  // 시절의 습관이었다(setBackgroundThrottling(false) 이후로 근거가 사라졌다). 자동화가 1분씩
+  // 화면과 포커스를 점거하면 대신 해주는 게 아니라 컴퓨터를 뺏는 것이다(Dan 2026-07-30).
+  const runAutomation = async <T extends { ok: boolean; step: string; error?: string }>(
+    task: () => Promise<T>
+  ): Promise<T> => {
     setBusy(true)
     setFailed(false)
     setFormUrl('')
     setMsg(m.launch.dsStepOpening)
-    // 브라우저를 실제로 띄운 뒤 진행한다. 숨은 뷰는 Chromium이 스로틀해서 콘솔 SPA가
-    // 아예 안 그려진다(2026-07-30 실측). 겸사겸사 사용자도 무슨 일이 일어나는지 본다.
-    open('https://play.google.com/console')
-    await new Promise((r) => setTimeout(r, 700)) // 슬라이드-오버가 열리고 뷰가 붙을 때까지
-    const running = m.launch.dsVeil.replace('{t}', m.launch.dsTaskName)
-    setGuide({ text: running, tone: 'run' })
+    let shown = false
     const off = window.zto.console.onProgress((p) => {
-      setMsg(stepText(p.step) || '')
-      // 사람이 직접 해야 하는 단계면 안내 바를 '요청' 톤으로 — 문구는 브라우저 밖에 뜬다
-      if (p.step === 'needs-user') setGuide({ text: p.detail ?? '', tone: 'ask' })
-      else setGuide({ text: running, tone: 'run' })
+      setMsg(stepText(p.step, p.detail) || '')
+      if (p.step === 'needs-user') {
+        // 여기서 처음으로 브라우저가 나온다. 문구는 브라우저 밖 안내 바에 띄운다.
+        if (!shown) {
+          shown = true
+          open('https://play.google.com/console')
+        }
+        setGuide({ text: p.detail ?? '', tone: 'ask' })
+      } else if (shown) {
+        setGuide({ text: m.launch.dsVeil.replace('{t}', m.launch.dsTaskName), tone: 'run' })
+      }
     })
-    const r = await window.zto.console.pullDataSafety(
-      file,
-      m.launch.dsAskLogin,
-      m.launch.dsAskChooseDev,
-      m.launch.dsAskExport
-    )
+    const r = await task()
     off()
     setGuide(null)
     setBusy(false)
+    // 사람을 부르느라 열었던 오버레이만 닫는다(열지 않았으면 닫을 것도 없다).
+    // 실패 메시지는 오버레이 뒤 대시보드에 뜨므로 실패일수록 닫아야 보인다(문서 §10).
+    if (shown) close()
+    return r
+  }
+
+  const run = async (): Promise<void> => {
+    const r = await runAutomation(() =>
+      window.zto.console.pullDataSafety(
+        file,
+        m.launch.dsAskLogin,
+        m.launch.dsAskChooseDev,
+        m.launch.dsAskExport
+      )
+    )
     if (r.ok && r.doc) {
-      close() // 다 끝나면 알아서 닫힌다
       load() // 가져온 내용을 화면에 반영
       setMsg(
         m.launch.dsStepDone
@@ -897,12 +916,28 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
       setMsg(m.launch.dsStepLogin)
       if (r.formUrl) open(r.formUrl) // 로그인 화면을 바로 띄워준다
     } else {
-      // 실패해도 오버레이를 닫는다 — 에러 메시지가 오버레이 뒤 대시보드에 뜨기 때문에
-      // 열어두면 정작 원인을 못 본다(Dan 2026-07-30). 이어서 직접 하려면 [폼 열기]로 다시 연다.
-      close()
       setFailed(true)
       setMsg(m.launch.dsStepFailed.replace('{e}', r.error ?? ''))
       if (r.formUrl) setFormUrl(r.formUrl)
+    }
+  }
+
+  // 앱 콘텐츠 선언 정찰 — 콘텐츠 등급·타깃 연령은 CSV가 없어 DOM 경로다.
+  // 매핑을 설계하려면 라이브 폼이 실제로 어떻게 생겼는지부터 회수해야 한다.
+  const probe = async (): Promise<void> => {
+    const r = await runAutomation(() =>
+      window.zto.console.probeAppContent(file, m.launch.dsAskLogin, m.launch.dsAskChooseDev)
+    )
+    if (r.ok && r.doc) {
+      const ctrls = r.doc.forms.reduce((n, f) => n + f.controls.length, 0)
+      setMsg(
+        m.launch.acProbeDone
+          .replace('{n}', String(r.doc.forms.length))
+          .replace('{c}', String(ctrls))
+      )
+    } else {
+      setFailed(true)
+      setMsg(m.launch.dsStepFailed.replace('{e}', r.error ?? ''))
     }
   }
 
@@ -916,6 +951,14 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
           title={m.launch.dsPullTitle}
         >
           {m.launch.dsPull}
+        </button>
+        <button
+          className="ghost-btn mini"
+          disabled={busy}
+          onClick={probe}
+          title={m.launch.acProbeTitle}
+        >
+          {m.launch.acProbe}
         </button>
         {msg && !failed && <span className="ds-pull-msg">{msg}</span>}
         {doc && (

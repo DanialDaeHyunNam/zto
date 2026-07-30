@@ -260,6 +260,11 @@ export const en = {
     dsStepParsing: 'Reading answers…',
     dsStepDone: '{a} of {n} questions answered',
     dsStepFailed: 'Could not finish ({e}) — open the console and do it by hand',
+    acProbe: 'Read app content forms',
+    acProbeTitle:
+      'Content rating and target audience have no export — ZTO reads the live forms in the background so we can map them. Nothing takes over your screen.',
+    acStepProbing: 'Reading {f}…',
+    acProbeDone: 'Read {n} forms, {c} controls → zto-app-content-*.json',
     dsOpenForm: 'Open the form ↗',
     dsRetry: 'Try again',
     dsImported: '{a} of {n} answered',

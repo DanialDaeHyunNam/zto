@@ -26,7 +26,7 @@ import type {
   StoreSnapshotEntry
 } from '../shared/launch-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
-import type { DataSafetyDoc, PullResult } from '../shared/console-types'
+import type { AppContentProbeDoc, DataSafetyDoc, PullResult } from '../shared/console-types'
 
 const api = {
   platform: process.platform,
@@ -92,6 +92,17 @@ const api = {
       ipcRenderer.invoke('console:pullDataSafety', file, askLogin, askChooseDev, askExport),
     dataSafetyDoc: (file: string): Promise<(DataSafetyDoc & { at?: string }) | null> =>
       ipcRenderer.invoke('console:dataSafetyDoc', file),
+    probeAppContent: (
+      file: string,
+      askLogin?: string,
+      askChooseDev?: string
+    ): Promise<{
+      ok: boolean
+      step: string
+      doc?: AppContentProbeDoc
+      consoleBase?: string
+      error?: string
+    }> => ipcRenderer.invoke('console:probeAppContent', file, askLogin, askChooseDev),
     onProgress: (cb: (p: { step: string; detail?: string }) => void): (() => void) => {
       const l = (_e: unknown, p: { step: string; detail?: string }): void => cb(p)
       ipcRenderer.on('console:progress', l)

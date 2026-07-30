@@ -262,6 +262,11 @@ export const ko: Messages = {
     dsStepParsing: '답변 읽는 중…',
     dsStepDone: '{n}문항 중 {a}문항 작성됨',
     dsStepFailed: '끝내지 못했어요 ({e}) — 콘솔을 열어 직접 진행해 주세요',
+    acProbe: '앱 콘텐츠 폼 읽기',
+    acProbeTitle:
+      '콘텐츠 등급·타깃 연령은 내보내기가 없어 ZTO가 라이브 폼을 화면 뒤에서 읽어 매핑 근거로 씁니다. 화면을 뺏지 않습니다.',
+    acStepProbing: '{f} 읽는 중…',
+    acProbeDone: '폼 {n}개·항목 {c}개 회수 → zto-app-content-*.json',
     dsOpenForm: '폼 열기 ↗',
     dsRetry: '다시 시도',
     dsImported: '{n}문항 중 {a}문항 작성됨',
