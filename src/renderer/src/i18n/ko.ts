@@ -260,7 +260,7 @@ export const ko: Messages = {
     dsStepForm: '데이터 안전 폼 여는 중…',
     dsStepExporting: 'CSV 내보내는 중…',
     dsStepParsing: '답변 읽는 중…',
-    dsStepDone: '{n}문항 중 {a}문항 작성됨',
+    dsStepDone: '가져옴 · 답변 {a}개',
     dsStepFailed: '끝내지 못했어요 ({e}) — 콘솔을 열어 직접 진행해 주세요',
     acProbe: '앱 콘텐츠 폼 읽기',
     acProbeTitle:
@@ -269,7 +269,8 @@ export const ko: Messages = {
     acProbeDone: '폼 {n}개·항목 {c}개 회수 → zto-app-content-*.json',
     dsOpenForm: '폼 열기 ↗',
     dsRetry: '다시 시도',
-    dsImported: '{n}문항 중 {a}문항 작성됨',
+    dsImported: '가져옴 · 답변 {a}개',
+    dsScope: '전체 문항 {n}개 — 답이 없는 항목은 이 앱에 해당하지 않습니다 (수집하지 않는 데이터 유형·조건부 문항)',
     dsViewAnswers: '내용 보기',
     surveyDone: '작성됨',
     surveyProgress: '{a}/{b} 답함',

@@ -258,7 +258,7 @@ export const en = {
     dsStepForm: 'Opening the Data safety form…',
     dsStepExporting: 'Exporting CSV…',
     dsStepParsing: 'Reading answers…',
-    dsStepDone: '{a} of {n} questions answered',
+    dsStepDone: 'Imported · {a} answers',
     dsStepFailed: 'Could not finish ({e}) — open the console and do it by hand',
     acProbe: 'Read app content forms',
     acProbeTitle:
@@ -267,7 +267,8 @@ export const en = {
     acProbeDone: 'Read {n} forms, {c} controls → zto-app-content-*.json',
     dsOpenForm: 'Open the form ↗',
     dsRetry: 'Try again',
-    dsImported: '{a} of {n} answered',
+    dsImported: 'Imported · {a} answers',
+    dsScope: '{n} questions in total — the unanswered ones do not apply to this app (data types it does not collect, plus conditional follow-ups)',
     dsViewAnswers: 'View answers',
     surveyDone: 'Completed',
     surveyProgress: '{a}/{b} answered',

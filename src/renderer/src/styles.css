@@ -3560,6 +3560,15 @@ button {
   overflow-y: auto;
 }
 
+/* 분모(전체 문항)가 무엇인지 밝히는 줄 — 목록 위에 고정된 설명이라 행보다 약하게 */
+.ds-answers-note {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .ds-answer-row {
   display: flex;
   gap: 12px;

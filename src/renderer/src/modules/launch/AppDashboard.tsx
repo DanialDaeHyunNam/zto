@@ -973,6 +973,11 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
       </div>
       {doc && showAnswers && (
         <div className="ds-answers">
+          {/* 217 vs 25를 진행률처럼 보이게 뒀더니 "12%만 됐다"로 읽혔다(Dan 2026-07-30).
+              분모는 '해야 할 일'이 아니라 '물어볼 수 있는 전체'다 — 그 사실을 여기서 밝힌다. */}
+          <div className="ds-answers-note">
+            {m.launch.dsScope.replace('{n}', String(doc.questions.length))}
+          </div>
           {doc.questions
             .filter((q) => q.answered)
             .map((q) => (
