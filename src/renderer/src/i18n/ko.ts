@@ -221,7 +221,6 @@ export const ko: Messages = {
     dashConfigConsole: '등급·데이터 보안 — 콘솔 확인',
     dashNodeMeta: '메타',
     dashNodeAssets: '자산',
-    assetCurrent: '현재 {n}장',
     assetReplace: '교체',
     assetStaged: '{n}장 선택됨 — 대기',
     assetRevert: '되돌리기',

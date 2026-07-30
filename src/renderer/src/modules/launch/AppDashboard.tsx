@@ -159,93 +159,113 @@ function WhereToCheck({ where, items }: { where: string; items: string }): React
 // 개별 추가·삭제가 아니라 **세트 통째 교체**인 이유: Play 스크린샷은 순서 = 업로드 순서라
 // 세트 교체가 순서 변경까지 공짜로 해결하고, 개별 삭제에 필요한 imageId 추적이 읽기·스냅샷
 // 타입까지 번지는 걸 막는다. 실제로도 스크린샷은 한 장씩 고치기보다 새 세트로 갈아끼운다.
-function AssetEditRow({
+// 종류별 교체를 한 곳에서 관리한다. 액션은 썸네일 묶음의 **뱃지 옆 아이콘 버튼**으로 나가고,
+// 고른 결과·오류만 아래에 붙는다 — 아래에 종류별 행을 다시 나열하면 라벨이 두 번이다.
+function AssetEditor({
   locale,
-  imageType,
-  current,
-  staged,
-  onStage
+  sets,
+  edits,
+  label,
+  onStage,
+  onOpen
 }: {
   locale: string
-  imageType: string
-  current: number // 지금 스토어에 올라가 있는 장수
-  staged: PendingEdit | undefined
+  sets: DashImageSet[]
+  edits: Record<string, PendingEdit>
+  label: (s: DashImageSet) => string
   onStage: (e: PendingEdit) => void
+  onOpen: (urls: string[], idx: number) => void
 }): React.JSX.Element {
   const { m } = useI18n()
   const [err, setErr] = useState('')
-  const [picks, setPicks] = useState<{ name: string; preview: string; width: number; height: number }[]>([])
-  const label = assetTypeLabel(m, imageType)
+  const [picks, setPicks] = useState<
+    Record<string, { name: string; preview: string; width: number; height: number }[]>
+  >({})
 
-  const pick = async (): Promise<void> => {
+  const idOf = (type: string): string => `android:assets:${locale}:${type}`
+
+  const pick = async (type: string): Promise<void> => {
     setErr('')
-    const r = await window.zto.launch.pickAssets(imageType)
+    const r = await window.zto.launch.pickAssets(type)
     if (r.canceled) return
     if (!r.ok) {
       // 규격 위반은 main이 "512×512여야 하는데 1024×1024"까지 만들어 준다 — 그대로 보여준다
       setErr(r.error ?? '')
       return
     }
-    setPicks(r.files.map((f) => ({ name: f.name, preview: f.preview, width: f.width, height: f.height })))
+    setPicks((p) => ({ ...p, [type]: r.files }))
     onStage({
-      id: `android:assets:${locale}:${imageType}`,
+      id: idOf(type),
       platform: 'android',
       section: 'assets',
-      field: imageType,
+      field: type,
       locale,
-      label: `${label} · ${locale}`,
+      label: `${assetTypeLabel(m, type)} · ${locale}`,
       oldValue: '',
       newValue: r.files.map((f) => f.path).join('\n')
     })
   }
 
-  const revert = (): void => {
-    setPicks([])
+  const revert = (type: string): void => {
+    setPicks((p) => {
+      const n = { ...p }
+      delete n[type]
+      return n
+    })
     setErr('')
     // oldValue와 같아지면 stage가 대기 목록에서 지운다
     onStage({
-      id: `android:assets:${locale}:${imageType}`,
+      id: idOf(type),
       platform: 'android',
       section: 'assets',
-      field: imageType,
+      field: type,
       locale,
-      label,
+      label: assetTypeLabel(m, type),
       oldValue: '',
       newValue: ''
     })
   }
 
+  const staged = Object.keys(picks).filter((t) => edits[idOf(t)])
+
   return (
-    <div className="asset-edit">
-      <span className="asset-edit-lbl">{label}</span>
-      <span className="asset-edit-cur">{m.launch.assetCurrent.replace('{n}', String(current))}</span>
-      <button className={`ghost-btn mini ${staged ? 'toggled' : ''}`} onClick={pick}>
-        {m.launch.assetReplace}
-      </button>
-      {staged && (
-        <>
-          <span className="asset-edit-new">
-            {m.launch.assetStaged.replace('{n}', String(picks.length))}
+    <>
+      <AssetStrip
+        sets={sets}
+        label={label}
+        onOpen={onOpen}
+        action={(s) => (
+          <button
+            className={`asset-swap ${edits[idOf(s.type)] ? 'on' : ''}`}
+            onClick={() => pick(s.type)}
+            title={m.launch.assetReplace}
+          >
+            ⇄
+          </button>
+        )}
+      />
+      {staged.map((t) => (
+        <div key={t} className="asset-staged">
+          <span className="asset-staged-lbl">
+            {assetTypeLabel(m, t)} · {m.launch.assetStaged.replace('{n}', String(picks[t].length))}
           </span>
-          <button className="ghost-btn mini" onClick={revert}>
+          <div className="asset-picks">
+            {picks[t].map((p, i) => (
+              <figure key={i}>
+                {p.preview && <img src={p.preview} alt="" />}
+                <figcaption>
+                  {p.width}×{p.height}
+                </figcaption>
+              </figure>
+            ))}
+          </div>
+          <button className="ghost-btn mini" onClick={() => revert(t)}>
             {m.launch.assetRevert}
           </button>
-        </>
-      )}
-      {picks.length > 0 && (
-        <div className="asset-picks">
-          {picks.map((p, i) => (
-            <figure key={i}>
-              {p.preview && <img src={p.preview} alt="" />}
-              <figcaption>
-                {p.width}×{p.height}
-              </figcaption>
-            </figure>
-          ))}
         </div>
-      )}
+      ))}
       {err && <div className="asset-edit-err">{err}</div>}
-    </div>
+    </>
   )
 }
 
@@ -359,10 +379,15 @@ const summarizeMeta = (meta: MetaListing[]): string =>
 function AssetStrip({
   sets,
   label,
+  action,
   onOpen
 }: {
   sets: DashImageSet[]
   label: (s: DashImageSet) => string
+  // 교체 액션은 **뱃지 옆**에 붙인다 — 뱃지가 이미 "이 영역이 아이콘"이라고 말하고 있으므로
+  // 아래에 같은 이름의 행을 다시 나열하면 라벨이 두 번이다(Dan 2026-07-30).
+  // 렌더 프롭으로 받는 이유: iOS는 아직 편집 경로가 없어 액션이 없다(ASC는 3단계 업로드).
+  action?: (s: DashImageSet) => React.ReactNode
   onOpen: (urls: string[], idx: number) => void
 }): React.JSX.Element {
   const all = sets.flatMap((s) => s.urls)
@@ -374,7 +399,10 @@ function AssetStrip({
         base += s.urls.length
         return (
           <div className="dash-asset-group" key={s.type}>
-            <span className="dash-asset-tag">{label(s)}</span>
+            <span className="dash-asset-head">
+              <span className="dash-asset-tag">{label(s)}</span>
+              {action?.(s)}
+            </span>
             <div className="dash-shots">
               {s.urls.map((u, i) => (
                 <img
@@ -1219,24 +1247,23 @@ function AndroidTree({
       </Node>
       {g.images.length > 0 && (
         <div className="dash-sub">
-          <AssetStrip sets={g.images} label={(s) => playAssetLabel(m, s)} onOpen={onImage} />
+          {imageLocale ? (
+            <AssetEditor
+              locale={imageLocale}
+              sets={g.images}
+              edits={assetEdits}
+              label={(s) => playAssetLabel(m, s)}
+              onStage={onStage}
+              onOpen={onImage}
+            />
+          ) : (
+            <AssetStrip sets={g.images} label={(s) => playAssetLabel(m, s)} onOpen={onImage} />
+          )}
           {/* 교체는 대표 로케일 하나에만 적용된다 — 숨기면 다른 언어도 바뀐 줄 안다 */}
           {imageLocale && (
-            <>
-              <div className="asset-note">
-                {m.launch.assetLocaleNote.replace('{l}', imageLocale)} {m.launch.assetWholeSet}
-              </div>
-              {['icon', 'featureGraphic', 'phoneScreenshots'].map((t) => (
-                <AssetEditRow
-                  key={t}
-                  locale={imageLocale}
-                  imageType={t}
-                  current={g.images.find((s) => s.type === t)?.urls.length ?? 0}
-                  staged={assetEdits[`android:assets:${imageLocale}:${t}`]}
-                  onStage={onStage}
-                />
-              ))}
-            </>
+            <div className="asset-note">
+              {m.launch.assetLocaleNote.replace('{l}', imageLocale)} {m.launch.assetWholeSet}
+            </div>
           )}
           <div>
             <HistoryToggle

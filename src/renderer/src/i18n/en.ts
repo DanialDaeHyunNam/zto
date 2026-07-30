@@ -220,7 +220,6 @@ export const en = {
     dashConfigConsole: 'Ratings · data safety — check in console',
     dashNodeMeta: 'Listing',
     dashNodeAssets: 'Assets',
-    assetCurrent: '{n} live',
     assetReplace: 'Replace',
     assetStaged: '{n} picked — pending',
     assetRevert: 'Undo',
