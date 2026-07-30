@@ -3,6 +3,7 @@ import {
   shell,
   BrowserWindow,
   clipboard,
+  dialog,
   ipcMain,
   net,
   powerMonitor,
@@ -18,6 +19,7 @@ import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
 import { registerBrowserIpc } from './browser'
 import { probeAppContent, pullDataSafety } from './console-sync'
+import { imageInfo, PLAY_IMAGE_SPECS, replacePlayImages, validatePlayImage } from './store-assets'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
@@ -718,6 +720,7 @@ async function pullGoogleDashboard(sheet: {
   let details = { defaultLanguage: '', contactEmail: '', contactWebsite: '' }
   let closedStarted = false
   const images: { type: string; urls: string[] }[] = []
+  let imageLocale = '' // 자산을 읽어온 대표 로케일 — 편집이 이 로케일에만 적용된다
   try {
     const [tracksR, listingsR, detailsR] = await Promise.all([
       fetch(`${base}/edits/${editId}/tracks`, { headers }),
@@ -787,6 +790,7 @@ async function pullGoogleDashboard(sheet: {
     }
     // 자산(아이콘·피처그래픽·스크린샷) — 대표 로케일 1개만, edit 트랜잭션 안에서만 읽힌다
     const lang = (listings.find((l) => l.locale.startsWith('ko')) ?? listings[0])?.locale
+    imageLocale = lang ?? ''
     if (lang) {
       const types = ['icon', 'featureGraphic', 'phoneScreenshots']
       const imgRs = await Promise.all(
@@ -830,7 +834,7 @@ async function pullGoogleDashboard(sheet: {
       })
     }
   }
-  return { data: { releases, listings, details, images, iap, closedStarted } }
+  return { data: { releases, listings, details, images, imageLocale, iap, closedStarted } }
 }
 
 // ASC — 버전 이력·릴리스 노트·로케일·카테고리·등급·IAP
@@ -1070,19 +1074,23 @@ async function applyPlayEdits(
     ko ? '릴리스 노트는 콘솔에서 (트랙 릴리스 편집)' : 'Release notes: use console (track release)'
   )
   const metaEdits = edits.filter((e) => e.section === 'meta')
-  if (metaEdits.length === 0) return noteResults
+  // 자산은 메타와 **같은 edit 안에서** 처리한다 — commit 하나로 같이 원자적으로 반영된다.
+  // (id = `android:assets:{locale}:{imageType}`, newValue = 파일 경로들을 개행으로 이은 것)
+  const assetEdits = edits.filter((e) => e.section === 'assets')
+  if (metaEdits.length === 0 && assetEdits.length === 0) return noteResults
+  const writeEdits = [...metaEdits, ...assetEdits]
 
   const saPath = resolveGoogleSa(sheet)
-  if (!saPath) return [...noteResults, ...errored(metaEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
+  if (!saPath) return [...noteResults, ...errored(writeEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
   const tok = await googleTokenFor(saPath)
-  if (!tok) return [...noteResults, ...errored(metaEdits, ko ? '토큰 발급 실패' : 'Token failed')]
+  if (!tok) return [...noteResults, ...errored(writeEdits, ko ? '토큰 발급 실패' : 'Token failed')]
   const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
   const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
 
   const editR = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
-  if (!editR.ok) return [...noteResults, ...errored(metaEdits, `HTTP ${editR.status}`)]
+  if (!editR.ok) return [...noteResults, ...errored(writeEdits, `HTTP ${editR.status}`)]
   const editId = ((await editR.json()) as { id?: string }).id
-  if (!editId) return [...noteResults, ...errored(metaEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
+  if (!editId) return [...noteResults, ...errored(writeEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
 
   // 로케일별로 현재 리스팅을 읽어 변경 필드만 병합 후 전체 PUT — 다른 필드 유실 방지
   const byLocale = new Map<string, PendingEdit[]>()
@@ -1116,12 +1124,26 @@ async function applyPlayEdits(
       if (!putR.ok) for (const e of group) writeErr.set(e.id, `HTTP ${putR.status}`)
     }
 
+    // 자산 — (로케일 × 이미지 종류)마다 통째 교체. 실패는 던져지므로 아래 catch가 edit을 폐기한다
+    for (const e of assetEdits) {
+      const files = e.newValue.split('\n').map((x) => x.trim()).filter(Boolean)
+      if (files.length === 0) {
+        writeErr.set(e.id, ko ? '올릴 파일이 없음' : 'No files to upload')
+        continue
+      }
+      try {
+        await replacePlayImages(base, editId, tok, e.locale, e.field, files)
+      } catch (err) {
+        writeErr.set(e.id, String(err).replace(/^Error:\s*/, '').slice(0, 140))
+      }
+    }
+
     if (writeErr.size > 0) {
       // 원자적 — 하나라도 실패하면 edit 폐기(전체 롤백)
       await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
       return [
         ...noteResults,
-        ...metaEdits.map((e) => ({
+        ...writeEdits.map((e) => ({
           id: e.id,
           ok: false,
           message: writeErr.get(e.id) ?? (ko ? '다른 항목 실패로 함께 롤백됨' : 'Rolled back (atomic)')
@@ -1130,12 +1152,12 @@ async function applyPlayEdits(
     }
     const commitR = await fetch(`${base}/edits/${editId}:commit`, { method: 'POST', headers })
     if (!commitR.ok) {
-      return [...noteResults, ...errored(metaEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
+      return [...noteResults, ...errored(writeEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
     }
-    return [...noteResults, ...applied(metaEdits)]
+    return [...noteResults, ...applied(writeEdits)]
   } catch (err) {
     await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
-    return [...noteResults, ...errored(metaEdits, String(err).slice(0, 120))]
+    return [...noteResults, ...errored(writeEdits, String(err).slice(0, 120))]
   }
 }
 
@@ -1937,6 +1959,53 @@ app.whenReady().then(() => {
     } catch {
       return null
     }
+  })
+  // 자산 고르기 — 파일 선택 → **업로드 전에** 규격 검증. 콘솔은 거부 사유를 뭉뚱그려 주므로
+  // 여기서 "512×512여야 하는데 1024×1024"까지 말해준다(문서 §8).
+  // 미리보기는 파일을 userData/assets에 복사해 zto-asset:// 로 낸다 — 이미 있는 안전한 통로를
+  // 재사용한다(경로 조작은 basename으로 막혀 있고, 렌더러에 8MB 바이트를 실어 보내지 않아도 된다).
+  ipcMain.handle('launch:pickAssets', async (_e, imageType: string) => {
+    const ko = appLocale === 'ko'
+    const spec = PLAY_IMAGE_SPECS[imageType]
+    if (!spec) return { ok: false, error: `unknown-type:${imageType}`, files: [] }
+    const picked = await dialog.showOpenDialog({
+      title: spec.label,
+      properties: spec.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+      filters: [{ name: 'Images', extensions: spec.mimes.includes('image/jpeg') ? ['png', 'jpg', 'jpeg'] : ['png'] }]
+    })
+    if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true, files: [] }
+
+    const dir = ASSET_DIR()
+    try {
+      mkdirSync(dir, { recursive: true })
+    } catch {
+      /* 있으면 무시 */
+    }
+    const files: { path: string; name: string; width: number; height: number; preview: string }[] = []
+    for (const f of picked.filePaths) {
+      const info = imageInfo(f)
+      if (!info) {
+        return { ok: false, error: ko ? `${basename(f)}: PNG·JPEG만 읽을 수 있어요` : `${basename(f)}: only PNG/JPEG`, files: [] }
+      }
+      const bad = validatePlayImage(imageType, info, ko)
+      if (bad) return { ok: false, error: bad, files: [] }
+      // 미리보기 사본 — 원본은 건드리지 않는다
+      const key = createHash('sha1').update(f + info.bytes).digest('hex')
+      const copy = join(dir, `pick-${key}${info.mime === 'image/png' ? '.png' : '.jpg'}`)
+      try {
+        writeFileSync(copy, readFileSync(f))
+      } catch {
+        /* 미리보기 실패가 업로드를 막지는 않는다 */
+      }
+      files.push({
+        path: f,
+        name: info.name,
+        width: info.width,
+        height: info.height,
+        preview: existsSync(copy) ? `zto-asset://${basename(copy)}` : ''
+      })
+    }
+    return { ok: true, files }
   })
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))

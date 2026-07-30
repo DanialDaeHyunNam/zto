@@ -26,12 +26,28 @@ import type {
   StoreSnapshotEntry
 } from '../shared/launch-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
+
 import type {
   AppContentProbeDoc,
   DataSafetyDoc,
   FormChange,
   PullResult
 } from '../shared/console-types'
+
+// 고른 자산 — 미리보기는 zto-asset:// (userData/assets 사본), 업로드는 원본 path로 한다
+export interface PickedAsset {
+  path: string
+  name: string
+  width: number
+  height: number
+  preview: string
+}
+export interface PickedAssets {
+  ok: boolean
+  canceled?: boolean
+  error?: string
+  files: PickedAsset[]
+}
 
 const api = {
   platform: process.platform,
@@ -122,6 +138,9 @@ const api = {
     }
   },
   launch: {
+    // 자산 파일 고르기 — main이 규격까지 검증해서 돌려준다(통과 못 하면 ok:false + 사유)
+    pickAssets: (imageType: string): Promise<PickedAssets> =>
+      ipcRenderer.invoke('launch:pickAssets', imageType),
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),
     checkCredentials: (file: string): Promise<CredentialStatus> =>
       ipcRenderer.invoke('launch:checkCredentials', file),

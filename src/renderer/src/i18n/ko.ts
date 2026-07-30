@@ -221,6 +221,13 @@ export const ko: Messages = {
     dashConfigConsole: '등급·데이터 보안 — 콘솔 확인',
     dashNodeMeta: '메타',
     dashNodeAssets: '자산',
+    assetCurrent: '현재 {n}장',
+    assetReplace: '교체…',
+    assetStaged: '{n}장 선택됨 — 대기',
+    assetRevert: '되돌리기',
+    assetLocaleNote:
+      'Play 자산은 언어별로 따로예요. 여기서 교체하면 {l}만 바뀌고 다른 언어는 그대로예요.',
+    assetWholeSet: '고른 순서대로 세트를 통째로 교체해요 (Play는 업로드 순서가 곧 노출 순서).',
     dashAssetIcon: '아이콘',
     dashAssetFeature: '피처 그래픽',
     dashAssetPhoneShots: '스크린샷',

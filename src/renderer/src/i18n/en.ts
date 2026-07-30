@@ -220,6 +220,14 @@ export const en = {
     dashConfigConsole: 'Ratings · data safety — check in console',
     dashNodeMeta: 'Listing',
     dashNodeAssets: 'Assets',
+    assetCurrent: '{n} live',
+    assetReplace: 'Replace…',
+    assetStaged: '{n} picked — pending',
+    assetRevert: 'Undo',
+    assetLocaleNote:
+      'Play stores assets per language. Replacing here changes {l} only — other languages keep theirs.',
+    assetWholeSet:
+      'Uploads replace the whole set in order (Play orders screenshots by upload order).',
     dashAssetIcon: 'icon',
     dashAssetFeature: 'feature graphic',
     dashAssetPhoneShots: 'screenshots',

@@ -153,6 +153,102 @@ function WhereToCheck({ where, items }: { where: string; items: string }): React
   )
 }
 
+// 자산 교체 (ROADMAP #3) — Play는 이미지 조작이 메타와 **같은 edit 안**에서 일어나 commit 하나로
+// 원자적으로 반영된다. 그래서 별도 발사 버튼 없이 기존 "수정 적용하기" 흐름에 그대로 얹힌다.
+//
+// 개별 추가·삭제가 아니라 **세트 통째 교체**인 이유: Play 스크린샷은 순서 = 업로드 순서라
+// 세트 교체가 순서 변경까지 공짜로 해결하고, 개별 삭제에 필요한 imageId 추적이 읽기·스냅샷
+// 타입까지 번지는 걸 막는다. 실제로도 스크린샷은 한 장씩 고치기보다 새 세트로 갈아끼운다.
+function AssetEditRow({
+  locale,
+  imageType,
+  current,
+  staged,
+  onStage
+}: {
+  locale: string
+  imageType: string
+  current: number // 지금 스토어에 올라가 있는 장수
+  staged: PendingEdit | undefined
+  onStage: (e: PendingEdit) => void
+}): React.JSX.Element {
+  const { m } = useI18n()
+  const [err, setErr] = useState('')
+  const [picks, setPicks] = useState<{ name: string; preview: string; width: number; height: number }[]>([])
+  const label = assetTypeLabel(m, imageType)
+
+  const pick = async (): Promise<void> => {
+    setErr('')
+    const r = await window.zto.launch.pickAssets(imageType)
+    if (r.canceled) return
+    if (!r.ok) {
+      // 규격 위반은 main이 "512×512여야 하는데 1024×1024"까지 만들어 준다 — 그대로 보여준다
+      setErr(r.error ?? '')
+      return
+    }
+    setPicks(r.files.map((f) => ({ name: f.name, preview: f.preview, width: f.width, height: f.height })))
+    onStage({
+      id: `android:assets:${locale}:${imageType}`,
+      platform: 'android',
+      section: 'assets',
+      field: imageType,
+      locale,
+      label: `${label} · ${locale}`,
+      oldValue: '',
+      newValue: r.files.map((f) => f.path).join('\n')
+    })
+  }
+
+  const revert = (): void => {
+    setPicks([])
+    setErr('')
+    // oldValue와 같아지면 stage가 대기 목록에서 지운다
+    onStage({
+      id: `android:assets:${locale}:${imageType}`,
+      platform: 'android',
+      section: 'assets',
+      field: imageType,
+      locale,
+      label,
+      oldValue: '',
+      newValue: ''
+    })
+  }
+
+  return (
+    <div className="asset-edit">
+      <span className="asset-edit-lbl">{label}</span>
+      <span className="asset-edit-cur">{m.launch.assetCurrent.replace('{n}', String(current))}</span>
+      <button className={`ghost-btn mini ${staged ? 'toggled' : ''}`} onClick={pick}>
+        {m.launch.assetReplace}
+      </button>
+      {staged && (
+        <>
+          <span className="asset-edit-new">
+            {m.launch.assetStaged.replace('{n}', String(picks.length))}
+          </span>
+          <button className="ghost-btn mini" onClick={revert}>
+            {m.launch.assetRevert}
+          </button>
+        </>
+      )}
+      {picks.length > 0 && (
+        <div className="asset-picks">
+          {picks.map((p, i) => (
+            <figure key={i}>
+              {p.preview && <img src={p.preview} alt="" />}
+              <figcaption>
+                {p.width}×{p.height}
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+      )}
+      {err && <div className="asset-edit-err">{err}</div>}
+    </div>
+  )
+}
+
 function LocaleChips({ locales }: { locales: string[] }): React.JSX.Element {
   return (
     <span className="loc-chips">
@@ -169,6 +265,14 @@ const playAssetLabel = (m: Messages, s: DashImageSet): string =>
     : s.type === 'featureGraphic'
       ? m.launch.dashAssetFeature
       : `${m.launch.dashAssetPhoneShots} ${m.launch.dashShotCount.replace('{n}', String(s.urls.length))}`
+
+// 자산 종류 이름만 (장수 없이) — 편집 행은 현재 장수를 따로 보여주므로 라벨에 섞으면 중복이다
+const assetTypeLabel = (m: Messages, type: string): string =>
+  type === 'icon'
+    ? m.launch.dashAssetIcon
+    : type === 'featureGraphic'
+      ? m.launch.dashAssetFeature
+      : m.launch.dashAssetPhoneShots
 
 const ascShotLabel = (m: Messages, s: DashImageSet): string =>
   `${s.type.replace(/^APP_/, '').replace(/_/g, ' ').toLowerCase()} ${m.launch.dashShotCount.replace('{n}', String(s.urls.length))}`
@@ -1030,6 +1134,8 @@ function AndroidTree({
   file,
   metaDirty,
   surveys,
+  assetEdits,
+  onStage,
   onImage,
   onOpenMeta,
   onOpenSurvey
@@ -1038,6 +1144,8 @@ function AndroidTree({
   file: string
   metaDirty: boolean
   surveys: SurveyItem[]
+  assetEdits: Record<string, PendingEdit>
+  onStage: (e: PendingEdit) => void
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
   onOpenSurvey: (id: string) => void
@@ -1049,6 +1157,9 @@ function AndroidTree({
     .join(' · ')
   // 릴리스가 하나라도 있으면 선언은 통과한 것 (Play가 선언 없이는 출시를 막는다)
   const declaredDone = releases.length > 0
+  const assetDirty = Object.values(assetEdits).some(
+    (e) => e.platform === 'android' && e.section === 'assets'
+  )
   // API 연결 노드는 앱별이 아니라 전역(타이틀 우측)으로 승격됨 — 트리에서는 생략
   return (
     <>
@@ -1080,12 +1191,34 @@ function AndroidTree({
           onOpenFull={onOpenMeta}
         />
       )}
-      <Node light={g.images.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeAssets}>
+      {/* 대기 중인 자산 교체가 있으면 🟡 — 메타 편집과 같은 신호 체계(적용 전에는 노랑) */}
+      <Node
+        light={assetDirty ? 'y' : g.images.length > 0 ? 'g' : 'o'}
+        label={m.launch.dashNodeAssets}
+      >
         {g.images.map((s) => playAssetLabel(m, s)).join(' · ')}
       </Node>
       {g.images.length > 0 && (
         <div className="dash-sub">
           <AssetStrip sets={g.images} onOpen={onImage} />
+          {/* 교체는 대표 로케일 하나에만 적용된다 — 숨기면 다른 언어도 바뀐 줄 안다 */}
+          {g.imageLocale && (
+            <>
+              <div className="asset-note">
+                {m.launch.assetLocaleNote.replace('{l}', g.imageLocale)} {m.launch.assetWholeSet}
+              </div>
+              {['icon', 'featureGraphic', 'phoneScreenshots'].map((t) => (
+                <AssetEditRow
+                  key={t}
+                  locale={g.imageLocale}
+                  imageType={t}
+                  current={g.images.find((s) => s.type === t)?.urls.length ?? 0}
+                  staged={assetEdits[`android:assets:${g.imageLocale}:${t}`]}
+                  onStage={onStage}
+                />
+              ))}
+            </>
+          )}
           <div>
             <HistoryToggle
               file={file}
@@ -1416,6 +1549,8 @@ export default function AppDashboard({
                   file={file}
                   metaDirty={metaDirty('android')}
                   surveys={surveysFor('android')}
+                  assetEdits={edits}
+                  onStage={stage}
                   onImage={(urls, idx) => setLightbox({ urls, idx })}
                   onOpenMeta={() => setMetaOpen(true)}
                   onOpenSurvey={openSurvey}

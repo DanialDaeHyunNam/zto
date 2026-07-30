@@ -3617,6 +3617,80 @@ button {
   overflow-y: auto;
 }
 
+/* 자산 교체 — 트리 안의 행. 컨테이너는 하나, 내부는 행(디자인 원칙: 카드 속 카드 금지) */
+.asset-note {
+  margin: 2px 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.asset-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 12px;
+}
+
+.asset-edit-lbl {
+  min-width: 96px;
+}
+
+.asset-edit-cur {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 대기 중 값은 앰버 — 메타 편집과 같은 신호(적용 전엔 노랑) */
+.asset-edit-new {
+  color: #f0b429;
+  font-variant-numeric: tabular-nums;
+}
+
+.asset-edit-err {
+  flex: 1 1 100%;
+  padding: 6px 9px;
+  border: 1px solid rgba(240, 180, 41, 0.35);
+  border-radius: 8px;
+  background: rgba(240, 180, 41, 0.08);
+  color: #f0b429;
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+.asset-picks {
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.asset-picks figure {
+  margin: 0;
+  text-align: center;
+}
+
+.asset-picks img {
+  display: block;
+  height: 72px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.asset-picks figcaption {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 샌드위치 — 왼쪽 진짜 콘솔, 오른쪽 그 화면을 따라가는 AI (소셜 모듈과 같은 배치) */
 .overlay-sandwich {
   display: flex;

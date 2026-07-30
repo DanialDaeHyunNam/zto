@@ -75,6 +75,9 @@ export interface DashGoogle {
   listings: MetaListing[]
   details: { defaultLanguage: string; contactEmail: string; contactWebsite: string }
   images: DashImageSet[]
+  // 자산은 **대표 로케일 하나**만 읽는다 → 어느 로케일이었는지 반드시 같이 보낸다.
+  // 이걸 안 실어 보내면 편집이 엉뚱한 로케일에 덮어쓴다(라이브 스토어가 바뀌는 사고).
+  imageLocale: string
   iap: LiveIapProduct[]
   closedStarted: boolean // closed 계열 트랙(alpha·커스텀)에 릴리스 존재 여부로 유추
 }
