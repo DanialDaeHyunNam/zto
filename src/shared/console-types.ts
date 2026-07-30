@@ -68,6 +68,8 @@ export interface AppContentForm {
   url: string
   reached: boolean // 도착 검증 통과 여부 — 없는 경로는 홈으로 조용히 리다이렉트된다
   title: string
+  // 컨트롤 0개일 때 '위저드 뒤에 문항이 있다'와 '안 그려졌다'를 가르는 값
+  textLen: number
   headings: string[]
   counts: Record<string, number>
   controls: ProbedControl[]

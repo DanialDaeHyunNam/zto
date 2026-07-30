@@ -1651,7 +1651,12 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // dev에서는 **포커스를 뺏지 않고** 띄운다. `src/main` 변경마다 dev 서버를 재시작하는데,
+    // 그때마다 show()가 앞으로 튀어나와 다른 앱에서 하던 작업의 포커스를 가져간다(Dan 2026-07-30).
+    // 하루에 몇 번씩 겪으면 개발 자체가 방해가 된다.
+    // 실사용(패키징) 때는 사용자가 직접 실행한 것이므로 앞으로 나오는 게 맞다.
+    if (app.isPackaged) mainWindow.show()
+    else mainWindow.showInactive()
   })
 
   const saveBounds = (): void => {

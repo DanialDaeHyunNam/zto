@@ -272,12 +272,14 @@ export function newTab(url?: string): void {
   emit()
 }
 
-// ---------- 자동화 전용 뷰 ----------
-// 자동화는 **사용자의 화면과 포커스를 뺏지 않는다**(Dan 2026-07-30). 뷰를 만들되 활성화하지
-// 않으므로 창에 붙지 않고(showActive는 활성 탭만 붙인다) 보이지도 않는다.
-// 보이지 않아도 도는 근거는 makeTab의 `setBackgroundThrottling(false)`다 — 그게 없던 시절의
-// "숨은 뷰는 부트스트랩을 못 끝낸다"는 관찰 때문에 화면에 띄우는 습관이 남아 있었지만,
-// 스로틀을 끈 뒤로는 띄울 이유가 없다. 사람의 손이 필요한 순간에만 reveal()로 앞에 낸다.
+// ---------- 자동화 전용 탭 ----------
+// 자동화는 **자기 탭에서 돈다** — 사용자가 보던 탭을 가로채지 않고, 끝나면 그 탭으로 돌려놓는다.
+//
+// ⚠️ **화면에 붙여야 한다(2026-07-30 실측).** 창에 붙이지 않고 돌려봤더니 Play 콘솔이
+// `no-developer-id (a=0, text=49)`로 죽었다 — 문서 §8이 "페이지가 아예 실행되지 않았다"로
+// 분류해둔 바로 그 신호다. `setBackgroundThrottling(false)`는 **창에 붙은 뷰가 가려졌을 때**의
+// 스로틀만 막는다. 아예 붙지 않은 뷰는 컴포지터가 없어 렌더 자체가 돌지 않으므로 무거운 SPA는
+// 부팅을 못 끝낸다. 문서 §4의 두 처방 중 "띄운다"가 실제로 값을 하고 있었다.
 export function openAutomationTab(): {
   wc: WebContents
   reveal: () => void
@@ -286,10 +288,14 @@ export function openAutomationTab(): {
   const restore = activeId // 끝나면 사용자가 보던 탭으로 돌려놓는다
   const t = makeTab()
   tabs.push(t)
-  emit() // 탭 바에는 보인다 — 뭔가 돌고 있다는 사실까지 숨기면 그건 유령이다
+  activeId = t.id
+  showActive()
+  emit()
   return {
     wc: t.view.webContents,
+    // 핸드오프용 — 도중에 사용자가 다른 탭으로 옮겼어도 다시 앞으로 가져온다
     reveal: (): void => {
+      if (activeId === t.id) return
       activeId = t.id
       showActive()
       emit()

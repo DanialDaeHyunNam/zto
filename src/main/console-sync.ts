@@ -436,6 +436,137 @@ export async function pullDataSafety(
 // 경로는 조립하지 않는다. `app-content/overview`에 가서 **거기 링크에서** 하위 선언 폼을
 // 수확한다 — `app-content` 단독이 존재하지 않았듯(2026-07-29) 하위 슬러그도 추측하면
 // 404가 아니라 홈으로 조용히 리다이렉트된다. 화면이 알려주는 href만 따라간다.
+// 앱 콘텐츠 하위 폼 **발견 전용** 스캔.
+// form-probe의 links를 쓰다가 0개로 실패했다(2026-07-30) — 그쪽 필터는 내비게이션 지도용이라
+// **텍스트 120자 초과 앵커를 버린다**. 앱 콘텐츠 목록은 행마다 제목+설명+상태가 들어간 카드라
+// 쉽게 120자를 넘는다. 도구를 재사용할 땐 그 도구가 무엇을 버리도록 설계됐는지까지 봐야 한다.
+// 그래서 여기서는 **보이든 말든, 길든 짧든 모든 앵커**를 훑는다.
+const APP_CONTENT_LINKS_JS = `(() => {
+  const seen = {};
+  const forms = [];
+  const all = Array.prototype.slice.call(document.querySelectorAll('a[href]'));
+  all.forEach((a) => {
+    const h = a.href || '';
+    const m = h.match(/\\/app\\/\\d+\\/app-content\\/([A-Za-z0-9._-]+)/);
+    if (!m || m[1] === 'overview') return;
+    if (seen[m[1]]) return;
+    seen[m[1]] = 1;
+    forms.push({ slug: m[1], text: (a.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 80) });
+  });
+  // 본문이 안 그려질 때 원인 후보가 셋이라 **한 번에 다 잰다**(따로 재면 왕복이 세 번이 된다):
+  //  ① 뷰포트가 0×0 — 반응형 레이아웃은 폭 0에서 본문을 안 그린다
+  //  ② 본문이 iframe 안 — 상위 문서의 앵커·innerText엔 안 잡힌다
+  //  ③ 진짜 미렌더
+  const frames = Array.prototype.slice.call(document.querySelectorAll('iframe'));
+  return {
+    forms: forms,
+    // 실패했을 때 다음 수정을 추측으로 하지 않도록, 본 것을 그대로 함께 올린다(문서 §8)
+    anchors: all.length,
+    hrefs: all.map((a) => a.href || '').slice(0, 120),
+    // 앵커가 아니라 클릭 요소로 된 목록일 수도 있다(계정 선택 화면이 그랬다) → 후보 텍스트도 남긴다
+    clickables: Array.prototype.slice
+      .call(document.querySelectorAll('[role="button"], button, [role="listitem"], li'))
+      .map((e) => (e.textContent || '').replace(/\\s+/g, ' ').trim())
+      .filter((t) => t && t.length < 120)
+      .slice(0, 80),
+    textLen: (document.body ? document.body.innerText.length : 0),
+    viewport: { w: window.innerWidth, h: window.innerHeight },
+    iframes: frames.map((f) => (f.src || '(srcdoc/blank)')).slice(0, 20),
+    // 본문이 917자뿐이라 통째로 실어도 부담이 없다 — 무엇이 그려졌는지 눈으로 봐야 한다
+    text: (document.body ? document.body.innerText : '').slice(0, 4000),
+    htmlLen: document.documentElement ? document.documentElement.outerHTML.length : 0
+  };
+})()`
+
+// 앱 콘텐츠 목차는 **탭으로 갈려 있다**(2026-07-30 실측). 기본 탭 "Need attention"은
+// 선언을 다 끝낸 앱에서는 비어 있고, 실제 목록은 "Actioned" 탭에 있다.
+// 페이지가 본문에 "See completed declarations on the Actioned tab"이라고 적어두고 있었는데
+// 앵커 개수만 세느라 못 봤다 — 숫자보다 화면이 하는 말이 먼저다.
+//
+// 라벨(`Actioned`)이 아니라 `role="tab"`으로 잡는다: 콘솔 언어 설정에 따라 라벨은 번역되지만
+// role은 접근성 때문에 유지된다(문서 §7과 같은 이유).
+const TAB_LABELS_JS = `(() => Array.prototype.slice
+  .call(document.querySelectorAll('[role="tab"]'))
+  .map((t) => (t.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 40)))()`
+
+// `el.click()`만으로는 안 먹는 커스텀 탭이 있다 — 컴포넌트가 pointer/mouse 이벤트를 직접 듣고
+// 있으면 합성 click 하나로는 안 열린다. 그래서 실제 포인터 시퀀스까지 쏘고, 라벨이 자식에 있는
+// 경우를 대비해 자식에도 쏜다. `aria-selected`를 함께 돌려받아 **정말 전환됐는지**를 본다
+// (안 되면 다음 수정을 또 추측으로 하게 된다 — 문서 §8).
+const clickTabJs = (i: number): string => `(() => {
+  const t = document.querySelectorAll('[role="tab"]')[${i}];
+  if (!t) return { ok: false };
+  const fire = (el) => {
+    ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'].forEach((type) => {
+      try {
+        const ev = type.indexOf('pointer') === 0
+          ? new PointerEvent(type, { bubbles: true, cancelable: true })
+          : new MouseEvent(type, { bubbles: true, cancelable: true });
+        el.dispatchEvent(ev);
+      } catch (e) {}
+    });
+  };
+  try { t.click(); } catch (e) {}
+  fire(t);
+  const kid = t.querySelector('span, div');
+  if (kid) fire(kid);
+  return {
+    ok: true,
+    label: (t.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 40),
+    selected: t.getAttribute('aria-selected')
+  };
+})()`
+
+// 선언 행은 **링크가 아니라 [Manage] 버튼**이다(2026-07-30 실측). href를 찾다가 두 번 실패했다.
+// 그러니 경로를 알아낼 필요가 없다 — 누르면 콘솔이 데려다주고, 슬러그는 **도착한 URL에서** 읽는다.
+// 이게 문서 §1("경로를 조립하지 말고 화면이 알려주는 값을 쓴다")의 가장 순수한 형태다.
+//
+// 행 라벨은 버튼에서 위로 올라가며 잡는다(문서 §6: 구조가 아니라 내용에서 출발) —
+// 'Manage'·'help'·'arrow_right'·날짜를 걷어낸 나머지가 선언 이름이다.
+const DECL_ROWS_JS = `(() => {
+  const norm = (e) => (e.textContent || '').replace(/\\s+/g, ' ').trim();
+  const clean = (t) => t
+    .replace(/arrow_right|expand_more|expand_less|help|Manage/gi, ' ')
+    .replace(/[A-Z][a-z]{2} \\d{1,2}, \\d{4}/g, ' ')  // "Jul 22, 2026"
+    .replace(/\\s+/g, ' ')
+    .trim();
+  const btns = Array.prototype.slice
+    .call(document.querySelectorAll('a,button,[role="button"],[role="link"]'))
+    .filter((e) => {
+      const t = norm(e);
+      return t.length < 40 && /(^|\\s)manage(\\s|$)/i.test(t);
+    });
+  return btns.map((b, i) => {
+    let el = b.parentElement;
+    let label = '';
+    for (let k = 0; k < 10 && el; k++) {
+      const t = clean(norm(el));
+      if (t && t.length > 2 && t.length < 80) { label = t; break; }
+      el = el.parentElement;
+    }
+    return { index: i, label: label };
+  });
+})()`
+
+const clickDeclJs = (i: number): string => `(() => {
+  const norm = (e) => (e.textContent || '').replace(/\\s+/g, ' ').trim();
+  const btns = Array.prototype.slice
+    .call(document.querySelectorAll('a,button,[role="button"],[role="link"]'))
+    .filter((e) => {
+      const t = norm(e);
+      return t.length < 40 && /(^|\\s)manage(\\s|$)/i.test(t);
+    });
+  const b = btns[${i}];
+  if (!b) return { ok: false, count: btns.length };
+  try { b.click(); } catch (e) {}
+  return { ok: true, count: btns.length };
+})()`
+
+interface Decl {
+  index: number
+  label: string
+}
+
 export async function probeAppContent(
   packageName: string,
   onStep: (step: PullStep, detail?: string) => void,
@@ -476,21 +607,81 @@ export async function probeAppContent(
       return { ok: false, step: 'failed', error: 'overview-not-reached', consoleBase: base }
     }
     const map = await expandAndProbe()
-
-    // 같은 앱의 app-content 하위만 — 다른 앱·개발자 페이지로 새면 순회가 폭주한다
-    const found = new Map<string, string>() // slug → 링크 텍스트
-    for (const l of map.links) {
-      const m = l.href.match(/\/app\/\d+\/app-content\/([A-Za-z0-9._-]+)(?:[/?#]|$)/)
-      if (!m || m[1] === 'overview') continue
-      if (!found.has(m[1])) found.set(m[1], l.text)
+    type Scan = {
+      forms: { slug: string; text: string }[]
+      anchors: number
+      hrefs: string[]
+      clickables: string[]
+      textLen: number
+      viewport: { w: number; h: number }
+      iframes: string[]
+      text: string
+      htmlLen: number
     }
-    if (found.size === 0) {
+    // **시간이 아니라 조건을 기다린다**(문서 §3) — 사이드바(셸)는 즉시 그려지지만 본문은 늦다.
+    const rowsNow = async (rounds: number): Promise<Decl[]> => {
+      let r = (await wc.executeJavaScript(DECL_ROWS_JS, true).catch(() => [])) as Decl[]
+      for (let i = 0; i < rounds && r.length === 0; i++) {
+        await wait(800)
+        r = (await wc.executeJavaScript(DECL_ROWS_JS, true).catch(() => [])) as Decl[]
+      }
+      return r
+    }
+
+    // 목차를 '선언 행이 보이는 상태'로 만든다 — 탭이 갈려 있어서 한 탭만 보면 안 된다.
+    // 선언을 다 끝낸 앱은 "Need attention"이 비고 "Actioned"에 다 있다(실측 앱이 그랬다).
+    // 반대인 앱도 있으므로 행이 나올 때까지 탭을 돌아본다.
+    const tabScans: { label: string; selected: string | null; textLen: number; rows: number }[] = []
+    const openDeclList = async (): Promise<Decl[]> => {
+      let rows = await rowsNow(10)
+      if (rows.length) return rows
+      const labels = (await wc.executeJavaScript(TAB_LABELS_JS, true).catch(() => [])) as string[]
+      for (let i = 0; i < labels.length && i < 8; i++) {
+        const click = (await wc
+          .executeJavaScript(clickTabJs(i), true)
+          .catch(() => ({ ok: false }))) as { ok: boolean; label?: string; selected?: string | null }
+        if (!click.ok) continue
+        await wait(1500) // 탭 전환은 라우팅이 아니라 목록 교체라 짧게
+        rows = await rowsNow(8)
+        // 관측은 **항상 최신으로** 덮어쓴다 — 조건부로 갱신했다가 클릭 전 값을 보고한 적이 있다
+        tabScans.push({
+          label: click.label ?? labels[i],
+          selected: click.selected ?? null,
+          textLen: (await wc
+            .executeJavaScript('(document.body?document.body.innerText.length:0)', true)
+            .catch(() => 0)) as number,
+          rows: rows.length
+        })
+        if (rows.length) return rows
+      }
+      return rows
+    }
+
+    const decls = await openDeclList()
+
+    if (decls.length === 0) {
+      // 실패했을 때만 전체 스캔을 뜬다 — 성공 경로에 진단 비용을 얹지 않는다
+      const scan = (await wc.executeJavaScript(APP_CONTENT_LINKS_JS, true)) as Scan
+      // **빈손으로 끝내지 않는다.** 실패해도 본 것은 파일로 남긴다 — 안 그러면 다음 수정을
+      // 또 화면만 보고 추측하게 된다(이 세션 최대 비효율이었다). 지금 필요한 건 "왜 0개인가"이고,
+      // 그 답은 이 페이지의 앵커·클릭요소 목록 안에 있다.
+      try {
+        writeFileSync(
+          join(app.getPath('userData'), `zto-app-content-${packageName}-DIAG.json`),
+          JSON.stringify(
+            { at: new Date().toISOString(), url: map.url, title: map.title, tabScans, scan },
+            null,
+            2
+          )
+        )
+      } catch {
+        /* 무시 */
+      }
       return {
         ok: false,
         step: 'failed',
-        // 링크가 0개면 '이 앱엔 선언이 없다'가 아니라 '페이지가 안 그려졌다'일 가능성이 크다 —
-        // 구분이 되게 관측치를 함께 올린다(문서 §8)
-        error: `no-app-content-links (a=${map.links.length}, ctrl=${map.controls.length}, ${map.title.slice(0, 40)})`,
+        // 탭별로 '전환됐는지(sel)·본문이 자랐는지(text)·행이 잡혔는지(rows)'를 갈라서 보여준다(문서 §8)
+        error: `no-declaration-rows (text=${scan.textLen}, tabs=[${tabScans.map((t) => `${t.label}:sel=${t.selected}:text=${t.textLen}:rows=${t.rows}`).join(' | ')}]) → zto-app-content-${packageName}-DIAG.json`,
         consoleBase: base
       }
     }
@@ -499,30 +690,69 @@ export async function probeAppContent(
     //    설문 매핑을 설계할 수 있다(1차 콘솔 지도가 링크만 담아 판단을 못 했다)
     onStep('probing')
     const forms: AppContentForm[] = []
-    for (const [slug, label] of found) {
-      const url = `${base}/app-content/${slug}`
-      onStep('probing', label || slug)
+    for (let n = 0; n < decls.length && n < 20; n++) {
+      const label = decls[n].label || `#${n}`
+      onStep('probing', label)
       try {
-        await go(url, 1600)
-        const landed = await waitForUrl((u) => u.includes(`app-content/${slug}`), 12_000)
-        const probe = await expandAndProbe()
+        // 매번 목차로 되돌아가 같은 상태를 만든 뒤 n번째 [Manage]를 누른다.
+        // (폼으로 이동하면 목록이 사라지므로 인덱스를 재사용할 수 없다)
+        if (n > 0) {
+          await go(overview, 1000)
+          await openDeclList()
+        }
+        const click = (await wc.executeJavaScript(clickDeclJs(decls[n].index), true)) as {
+          ok: boolean
+          count?: number
+        }
+        if (!click.ok) {
+          forms.push({
+            slug: '',
+            label,
+            url: '',
+            reached: false,
+            title: `manage-button-gone (count=${click.count ?? 0})`,
+            textLen: 0,
+            headings: [],
+            counts: {},
+            controls: []
+          })
+          continue
+        }
+        // 목차를 떠날 때까지 관찰한다 — 다이얼로그로 열리는 선언은 URL이 안 바뀔 수 있으므로
+        // 실패로 치지 않고 그 자리에서 그대로 읽는다(내용은 어차피 DOM에 있다).
+        const landed = await waitForUrl((u) => !u.includes('app-content/overview'), 15_000)
+        const slug = landed.match(/app-content\/([A-Za-z0-9._-]+)/)?.[1] ?? ''
+
+        // 컨트롤이 나올 때까지 기다린다(최대 ~16초). 끝내 0개여도 실패가 아니다:
+        // 콘텐츠 등급처럼 **위저드 뒤에 문항이 있는** 폼일 수 있다. 그 경우를 '안 그려짐'과
+        // 구분하려고 본문 길이를 함께 기록한다.
+        let probe = await expandAndProbe()
+        for (let i = 0; i < 20 && probe.controls.length === 0; i++) {
+          await wait(800)
+          probe = await expandAndProbe()
+        }
+        const textLen = (await wc
+          .executeJavaScript('(document.body ? document.body.innerText.length : 0)', true)
+          .catch(() => 0)) as number
         forms.push({
           slug,
           label,
-          url,
-          reached: landed.includes(`app-content/${slug}`),
+          url: landed,
+          reached: !landed.includes('app-content/overview'),
           title: probe.title,
+          textLen,
           headings: probe.headings.slice(0, 30),
           counts: probe.counts,
           controls: probe.controls
         })
       } catch (e) {
         forms.push({
-          slug,
+          slug: '',
           label,
-          url,
+          url: '',
           reached: false,
           title: String(e).slice(0, 120),
+          textLen: 0,
           headings: [],
           counts: {},
           controls: []

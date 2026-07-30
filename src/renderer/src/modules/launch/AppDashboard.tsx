@@ -860,11 +860,10 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
   }, [file])
   useEffect(load, [load])
 
-  // 자동화 한 판을 돌린다. **브라우저는 열지 않는다** — 자동화 뷰는 main이 화면 밖에서 굴리고,
-  // 사람이 눌러야 할 게 생겼을 때(`needs-user`)만 그 자리에서 오버레이를 연다.
-  // 예전엔 시작하자마자 오버레이를 열었는데, 그건 스로틀 때문에 화면에 띄워야 한다고 믿던
-  // 시절의 습관이었다(setBackgroundThrottling(false) 이후로 근거가 사라졌다). 자동화가 1분씩
-  // 화면과 포커스를 점거하면 대신 해주는 게 아니라 컴퓨터를 뺏는 것이다(Dan 2026-07-30).
+  // 자동화 한 판을 돌린다. 브라우저는 **처음부터 띄운다**(Dan 2026-07-30 재확인).
+  // 숨겨봤더니 콘솔 SPA가 부팅을 못 했다(a=0, text=49) — 창에 안 붙은 뷰는 컴포지터가 없어
+  // 렌더가 안 돈다. `setBackgroundThrottling(false)`는 '가려진 뷰'까지만 커버한다.
+  // 덤으로 사용자가 무슨 일이 일어나는지 보게 되는 건 부작용이 아니라 이점이다.
   const runAutomation = async <T extends { ok: boolean; step: string; error?: string }>(
     task: () => Promise<T>
   ): Promise<T> => {
@@ -872,27 +871,24 @@ function DataSafetyPull({ file }: { file: string }): React.JSX.Element {
     setFailed(false)
     setFormUrl('')
     setMsg(m.launch.dsStepOpening)
-    let shown = false
+    // URL 없이 연다 — 자동화가 자기 탭을 만들어 콘솔로 이동하므로, 여기서 주소를 주면
+    // 사용자 탭까지 같은 페이지를 한 번 더 로드한다(탭 두 개가 같은 곳을 보게 된다)
+    open()
+    await new Promise((r) => setTimeout(r, 700)) // 슬라이드-오버가 열리고 뷰가 붙을 때까지
+    const running = m.launch.dsVeil.replace('{t}', m.launch.dsTaskName)
+    setGuide({ text: running, tone: 'run' })
     const off = window.zto.console.onProgress((p) => {
       setMsg(stepText(p.step, p.detail) || '')
-      if (p.step === 'needs-user') {
-        // 여기서 처음으로 브라우저가 나온다. 문구는 브라우저 밖 안내 바에 띄운다.
-        if (!shown) {
-          shown = true
-          open('https://play.google.com/console')
-        }
-        setGuide({ text: p.detail ?? '', tone: 'ask' })
-      } else if (shown) {
-        setGuide({ text: m.launch.dsVeil.replace('{t}', m.launch.dsTaskName), tone: 'run' })
-      }
+      // 사람이 직접 해야 하는 단계면 안내 바를 '요청' 톤으로 — 문구는 브라우저 밖에 뜬다
+      if (p.step === 'needs-user') setGuide({ text: p.detail ?? '', tone: 'ask' })
+      else setGuide({ text: running, tone: 'run' })
     })
     const r = await task()
     off()
     setGuide(null)
     setBusy(false)
-    // 사람을 부르느라 열었던 오버레이만 닫는다(열지 않았으면 닫을 것도 없다).
-    // 실패 메시지는 오버레이 뒤 대시보드에 뜨므로 실패일수록 닫아야 보인다(문서 §10).
-    if (shown) close()
+    // 끝나면 닫는다 — 실패 메시지는 오버레이 뒤 대시보드에 뜨므로 실패일수록 닫아야 보인다(문서 §10)
+    close()
     return r
   }
 
