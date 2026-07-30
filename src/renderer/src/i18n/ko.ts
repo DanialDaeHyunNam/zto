@@ -222,7 +222,7 @@ export const ko: Messages = {
     dashNodeMeta: '메타',
     dashNodeAssets: '자산',
     assetCurrent: '현재 {n}장',
-    assetReplace: '교체…',
+    assetReplace: '교체',
     assetStaged: '{n}장 선택됨 — 대기',
     assetRevert: '되돌리기',
     assetLocaleNote:

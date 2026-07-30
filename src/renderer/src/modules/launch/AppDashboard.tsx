@@ -352,35 +352,47 @@ const summarizeMeta = (meta: MetaListing[]): string =>
   meta.map((l) => [l.locale, l.title, l.short].filter(Boolean).join(' · ')).join('  |  ') || '—'
 
 // ---------- 자산 썸네일 + 라이트박스 ----------
+// 썸네일을 **종류별로 묶고 라벨을 단다.** 예전엔 아이콘·피처그래픽·스크린샷을 한 줄에 죽
+// 늘어놓아서, 아래 교체 행의 '아이콘'이 위쪽 어느 칸인지 눈으로 이어지지 않았다(Dan 2026-07-30).
+// 교체는 세트 단위이므로 화면에서도 세트가 보여야 무엇을 바꾸는지 알 수 있다.
+// 라이트박스 인덱스는 전체 기준을 유지한다 — 좌우로 넘기면 종류를 가로질러 계속 넘어간다.
 function AssetStrip({
   sets,
+  label,
   onOpen
 }: {
   sets: DashImageSet[]
+  label: (s: DashImageSet) => string
   onOpen: (urls: string[], idx: number) => void
 }): React.JSX.Element {
   const all = sets.flatMap((s) => s.urls)
-  let idx = 0
+  let base = 0
   return (
-    <div className="dash-shots">
-      {sets.flatMap((s) =>
-        s.urls.map((u, i) => {
-          const my = idx++
-          return (
-            <img
-              key={`${s.type}-${i}`}
-              src={u}
-              // alt를 비운다 — 로드 실패 시 브라우저가 alt 텍스트와 깨진 아이콘을 그리는데,
-              // 그게 화면에 '부재'를 크게 써 붙이는 꼴이라 디자인 원칙에 어긋난다(CLAUDE.md).
-              alt=""
-              loading="lazy"
-              // 실패한 칸은 조용한 빈 타일로 남긴다
-              onError={(e) => e.currentTarget.classList.add('shot-failed')}
-              onClick={() => onOpen(all, my)}
-            />
-          )
-        })
-      )}
+    <div className="dash-asset-groups">
+      {sets.map((s) => {
+        const start = base
+        base += s.urls.length
+        return (
+          <div className="dash-asset-group" key={s.type}>
+            <span className="dash-asset-tag">{label(s)}</span>
+            <div className="dash-shots">
+              {s.urls.map((u, i) => (
+                <img
+                  key={`${s.type}-${i}`}
+                  src={u}
+                  // alt를 비운다 — 로드 실패 시 브라우저가 alt 텍스트와 깨진 아이콘을 그리는데,
+                  // 그게 화면에 '부재'를 크게 써 붙이는 꼴이라 디자인 원칙에 어긋난다(CLAUDE.md).
+                  alt=""
+                  loading="lazy"
+                  // 실패한 칸은 조용한 빈 타일로 남긴다
+                  onError={(e) => e.currentTarget.classList.add('shot-failed')}
+                  onClick={() => onOpen(all, start + i)}
+                />
+              ))}
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -1160,6 +1172,13 @@ function AndroidTree({
   const assetDirty = Object.values(assetEdits).some(
     (e) => e.platform === 'android' && e.section === 'assets'
   )
+  // 자산을 읽어온 로케일. `imageLocale`은 나중에 생긴 필드라 **그 전에 저장된 캐시엔 없다** —
+  // 없다고 편집 행을 통째로 숨기면 "새로고침 전까지 기능이 사라진" 것처럼 보인다(2026-07-30 실제로 그랬다).
+  // 그래서 main과 같은 규칙(ko 우선, 없으면 첫 리스팅)으로 되짚는다. 새로고침하면 실제 값이 온다.
+  const imageLocale =
+    g.imageLocale ||
+    (g.listings.find((l) => l.locale.toLowerCase().startsWith('ko')) ?? g.listings[0])?.locale ||
+    ''
   // API 연결 노드는 앱별이 아니라 전역(타이틀 우측)으로 승격됨 — 트리에서는 생략
   return (
     <>
@@ -1200,20 +1219,20 @@ function AndroidTree({
       </Node>
       {g.images.length > 0 && (
         <div className="dash-sub">
-          <AssetStrip sets={g.images} onOpen={onImage} />
+          <AssetStrip sets={g.images} label={(s) => playAssetLabel(m, s)} onOpen={onImage} />
           {/* 교체는 대표 로케일 하나에만 적용된다 — 숨기면 다른 언어도 바뀐 줄 안다 */}
-          {g.imageLocale && (
+          {imageLocale && (
             <>
               <div className="asset-note">
-                {m.launch.assetLocaleNote.replace('{l}', g.imageLocale)} {m.launch.assetWholeSet}
+                {m.launch.assetLocaleNote.replace('{l}', imageLocale)} {m.launch.assetWholeSet}
               </div>
               {['icon', 'featureGraphic', 'phoneScreenshots'].map((t) => (
                 <AssetEditRow
                   key={t}
-                  locale={g.imageLocale}
+                  locale={imageLocale}
                   imageType={t}
                   current={g.images.find((s) => s.type === t)?.urls.length ?? 0}
-                  staged={assetEdits[`android:assets:${g.imageLocale}:${t}`]}
+                  staged={assetEdits[`android:assets:${imageLocale}:${t}`]}
                   onStage={onStage}
                 />
               ))}
@@ -1335,7 +1354,7 @@ function IosTree({
       </Node>
       {a.screenshots.length > 0 && (
         <div className="dash-sub">
-          <AssetStrip sets={a.screenshots} onOpen={onImage} />
+          <AssetStrip sets={a.screenshots} label={(s) => ascShotLabel(m, s)} onOpen={onImage} />
           <div>
             <HistoryToggle
               file={file}

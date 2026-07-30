@@ -221,7 +221,7 @@ export const en = {
     dashNodeMeta: 'Listing',
     dashNodeAssets: 'Assets',
     assetCurrent: '{n} live',
-    assetReplace: 'Replace…',
+    assetReplace: 'Replace',
     assetStaged: '{n} picked — pending',
     assetRevert: 'Undo',
     assetLocaleNote:

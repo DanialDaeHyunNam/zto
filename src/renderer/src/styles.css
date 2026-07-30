@@ -3617,6 +3617,31 @@ button {
   overflow-y: auto;
 }
 
+/* 자산 썸네일을 종류별로 묶는다 — 어느 칸이 아이콘인지 눈으로 보여야 아래 교체 행과 이어진다.
+   묶음을 카드로 만들지 않는다(카드 속 카드 금지) — 라벨 + 여백으로만 가른다 */
+.dash-asset-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+}
+
+.dash-asset-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.dash-asset-tag {
+  align-self: flex-start;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
 /* 자산 교체 — 트리 안의 행. 컨테이너는 하나, 내부는 행(디자인 원칙: 카드 속 카드 금지) */
 .asset-note {
   margin: 2px 0 8px;
