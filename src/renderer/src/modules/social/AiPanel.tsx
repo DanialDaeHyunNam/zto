@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { AiFeature, AiModel, AiProviderId } from '../../../../shared/launch-types'
+import type { AiFeature, AiModel, AiProviderId, CopilotTask } from '../../../../shared/launch-types'
 import type { FormSnapshot } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
 import Markdown from './Markdown'
@@ -39,15 +39,67 @@ function describeForm(s: FormSnapshot): string {
   ].join('\n')
 }
 
+// 목적 브리핑 — 대화의 **첫 턴**에 딱 한 번. 여는 것과 이끄는 것의 차이가 여기 있다.
+// 마지막 줄이 핵심이다: 우리가 이미 아는 걸 되묻지 말라고 못 박는다. 안 그러면 AI가
+// "어느 앱인가요? 패키지명을 알려주세요"로 시작한다 — 우리가 아는 것을 사용자에게 시키는 것이다.
+// ZTO가 **직접 만드는** 프롬프트는 화면 언어를 따라야 한다. 지금까지 프롬프트가 한국어
+// 하드코딩이라 영어 UI에서도 AI가 한국어로 답했다(2026-07-31 Dan). 사용자가 직접 친 말에는
+// 안 붙인다 — 그건 사용자의 언어가 곧 지시다.
+const langLine = (ko: boolean): string =>
+  ko ? '한국어로 답하세요.' : 'Answer in English.'
+
+// 소셜 패널의 **역할 규정**. 화면에 안내 문구를 띄우는 것과 다르다 — 문구는 읽고 넘기지만
+// 페르소나는 이후 모든 답의 결을 바꾼다(무엇을 볼지, 무엇을 먼저 말할지).
+// 대화 한 세션에 한 번만 실어 보낸다(resume로 맥락이 이어지므로 반복은 낭비다).
+const socialPersona = (ko: boolean): string =>
+  [
+    '당신은 소셜미디어 그로스 마케터이자 카피라이터입니다. X·Threads·Instagram에서 무엇이 읽히고 무엇이 퍼지는지를 실무로 아는 사람입니다.',
+    '이 대화에서 당신이 하는 일:',
+    '- 사용자가 올리려는 글의 **훅(첫 문장)**이 손을 멈추게 하는지 본다',
+    '- 문장이 짧고 읽히는지, 군더더기·전문용어·자기소개식 도입을 걷어낼 곳이 있는지 짚는다',
+    '- 저장·공유·답글을 부를 요소(구체적 숫자, 의외성, 반박 여지, 질문)가 있는지 본다',
+    '- 플랫폼별 관습(글자 수, 스레드로 쪼갤 지점, 해시태그 남용 금지)을 반영한다',
+    '규칙: 칭찬으로 시작하지 말고 **고칠 곳 하나**를 먼저 말한다. 대안 문장은 예시로 직접 써서 보여준다.',
+    '길게 쓰지 않는다 — 한 번에 두세 문장.',
+    langLine(ko)
+  ].join('\n')
+
+function briefing(t: CopilotTask, ko: boolean): string {
+  return [
+    '사용자가 ZTO(앱 스토어 관리 도구)에서 이 콘솔 화면으로 넘어왔습니다.',
+    `하려는 일: ${t.goal}`,
+    t.app ? `대상 앱: ${t.app}` : '',
+    t.platform ? `스토어: ${t.platform === 'android' ? 'Google Play Console' : 'App Store Connect'}` : '',
+    t.why ? `ZTO에서 못 하고 콘솔에서 해야 하는 이유: ${t.why}` : '',
+    t.exact
+      ? '지금 화면이 그 작업을 하는 화면입니다. 여기서 무엇을 눌러야 하는지부터 짚어주세요.'
+      : '지금은 목적지가 아니라 콘솔의 다른 화면(대개 홈)입니다. 목적지까지 가는 경로를 먼저 안내하세요.',
+    '한두 문장으로 다음 한 걸음만 말하세요. 위에 이미 알려준 것(앱·목적)은 되묻지 마세요.',
+    '작업이 되돌릴 수 없는 것이면(제출·게시·삭제) 누르기 전에 확인할 것을 함께 알려주세요.',
+    langLine(ko)
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
 export default function AiPanel({
   watch = false,
-  feature = 'social'
+  watchable = false,
+  feature = 'social',
+  task
 }: {
-  // 콘솔 코파일럿 모드 — 왼쪽 폼을 따라가며 사람이 고른 것을 감지한다
+  // 콘솔 코파일럿 모드 — 왼쪽 폼을 따라가며 사람이 고른 것을 감지한다(기본 켜짐)
   watch?: boolean
+  // 따라가기를 **쓸 수 있게만** 한다(기본 꺼짐). 소셜용 —
+  // 피드는 남의 글·DM이 섞여 있고 provider가 API 키면 그게 밖으로 나간다. 그래서 옵트인이다.
+  // 게다가 피드에서 '바뀐 것'은 대개 스크롤이라, 콘솔 폼과 달리 자동 질문이 신호가 아니라 소음이다
+  watchable?: boolean
   feature?: AiFeature
+  // 무엇을 하러 왔는지. 있으면 대화를 이걸로 연다
+  task?: CopilotTask
 } = {}): React.JSX.Element {
-  const { m } = useI18n()
+  const { m, locale } = useI18n()
+  const ko = locale === 'ko'
   const [msgs, setMsgs] = useState<Msg[]>([])
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
@@ -57,8 +109,8 @@ export default function AiPanel({
   // 화면이 바뀔 때마다 자동으로 물어볼지 — 기본 켜짐이되 **끌 수 있어야 한다**.
   // 자동 질문은 토큰을 쓰므로 사용자가 통제권을 가져야 하고, 생각을 정리하는 동안
   // AI가 계속 끼어드는 것도 방해다.
-  const [follow, setFollow] = useState(true)
-  const followRef = useRef(true)
+  const [follow, setFollow] = useState(watch)
+  const followRef = useRef(watch)
   useEffect(() => {
     followRef.current = follow
   }, [follow])
@@ -144,6 +196,22 @@ export default function AiPanel({
     }
   }
 
+  // 토글을 켠 순간 = 도움을 요청한 순간. 페르소나를 심고 **AI가 먼저 말을 건다**.
+  // 화면에 "이런 걸 도와드려요"를 적는 대신 AI가 그 역할로 입을 여는 게 이 패널의 방식이다.
+  useEffect(() => {
+    if (!watchable || !follow || personaRef.current) return
+    personaRef.current = true
+    void ask(
+      [
+        socialPersona(ko),
+        '사용자가 방금 화면 읽기를 켰습니다. 아직 글은 못 봤을 수 있습니다.',
+        '한두 문장으로 먼저 말을 거세요 — 무엇을 도와줄 수 있는지 당신의 역할로 말하고, 초안을 보여달라고 청하세요. 목록·머리말 없이.'
+      ].join('\n\n'),
+      []
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watchable, follow])
+
   const send = async (): Promise<void> => {
     const text = input.trim()
     if ((!text && imgs.length === 0) || busy) return
@@ -155,13 +223,33 @@ export default function AiPanel({
     // AI가 무슨 화면인지 알아야 답이 된다. 원문이 아니라 구조라 값이 싸다.
     const withForm =
       watch && form ? `${prompt}\n\n---\n${describeForm(form)}` : prompt
-    await ask(withForm, sending, { role: 'user', text, imgs: sending })
+    // 토글을 안 켜고 바로 말을 걸어도 역할은 앞서야 한다 — 첫 답부터 결이 달라진다
+    const withPersona =
+      watchable && !personaRef.current
+        ? ((personaRef.current = true), `${socialPersona(ko)}\n\n---\n${withForm}`)
+        : withForm
+    await ask(withPersona, sending, { role: 'user', text, imgs: sending })
   }
+
+  // ---- 목적 브리핑 — 열리자마자 한 번 ----
+  // 화면에는 목적 한 줄만 남기고(사람이 읽을 수 있게) 상세 지시는 프롬프트로만 보낸다.
+  const briefed = useRef(false)
+  // 소셜 페르소나를 이 대화에 한 번만 심는다
+  const personaRef = useRef(false)
+  useEffect(() => {
+    if (!task || briefed.current) return
+    briefed.current = true
+    setMsgs((prev) => [...prev, { role: 'system', text: task.goal }])
+    void ask(briefing(task, ko), [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [task])
 
   // ---- 콘솔 코파일럿: 왼쪽 폼 따라가기 ----
   // main이 1.5초마다 폼을 읽어 **달라졌을 때만** 알려준다. 여기서는 그걸 대화로 옮긴다.
   useEffect(() => {
-    if (!watch) return
+    // **꺼져 있으면 읽지도 않는다** — '자동 질문만 끈다'로는 화면을 계속 읽는 셈이라
+    // 프라이버시 약속이 되지 못한다
+    if ((!watch && !watchable) || !follow) return
     void window.zto.browser.watchForm(true)
     const off = window.zto.browser.onFormChanged((c) => {
       setForm(c.snapshot)
@@ -173,11 +261,22 @@ export default function AiPanel({
       setMsgs((prev) => [...prev, { role: 'system', text: line }])
       if (!followRef.current) return
       // 자동 질문 — 바뀐 것 + 남은 항목만. 전체를 매번 보내면 토큰이 그대로 샌다.
-      const prompt = [
-        c.navigated ? '콘솔 화면이 바뀌었습니다.' : `사용자가 방금 골랐습니다: ${c.changed.join(', ')}`,
-        describeForm(c.snapshot),
-        '다음에 무엇을 고르면 되는지 한두 문장으로 짚어주세요. 확실하지 않으면 무엇을 확인해야 하는지 물어보세요.'
-      ].join('\n\n')
+      // **소셜과 콘솔은 물어볼 것이 다르다**: 콘솔은 "다음에 뭘 고르나", 소셜은 쓰고 있는 글이
+      // 사람들에게 어떻게 읽힐지다. 같은 프롬프트를 쓰면 소셜에서 "다음 항목을 고르세요"라는
+      // 엉뚱한 말이 나온다
+      const prompt = watchable
+        ? [
+            c.navigated ? '사용자가 다른 화면으로 이동했습니다.' : `왼쪽 화면이 바뀌었습니다: ${c.changed.join(', ')}`,
+            describeForm(c.snapshot),
+            '사용자가 소셜미디어에 올릴 글을 쓰는 중일 수 있습니다. 쓰고 있는 글이 있으면 훅(첫 문장)·읽히는 매력·퍼질 만한 요소를 한두 문장으로 짚고, 고칠 곳을 하나만 제안하세요. 쓰는 글이 없으면 아무 말도 하지 말고 "—"만 답하세요.',
+            langLine(ko)
+          ].join('\n\n')
+        : [
+            c.navigated ? '콘솔 화면이 바뀌었습니다.' : `사용자가 방금 골랐습니다: ${c.changed.join(', ')}`,
+            describeForm(c.snapshot),
+            '다음에 무엇을 고르면 되는지 한두 문장으로 짚어주세요. 확실하지 않으면 무엇을 확인해야 하는지 물어보세요.',
+            langLine(ko)
+          ].join('\n\n')
       void ask(prompt, [])
     })
     return () => {
@@ -185,7 +284,8 @@ export default function AiPanel({
       void window.zto.browser.watchForm(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [watch])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [watch, watchable, follow, ko])
 
   return (
     <aside className="ai-panel">
@@ -209,6 +309,26 @@ export default function AiPanel({
           </select>
         )}
       </div>
+      {/* 소셜에서는 폼 띠가 없으므로 토글만 따로 낸다. **끄고 켜는 게 눈에 보여야** 한다 —
+          화면을 읽는 기능이 어딘가 묻혀 있으면 그건 몰래 읽는 것과 구분되지 않는다 */}
+      {watchable && (
+        <div className="ai-form-strip" title={m.social.watchTitle}>
+          {/* 라벨 + 스위치. 전엔 라벨과 버튼이 같은 말을 두 번 하면서 켜짐/꺼짐이 안 보였다(Dan) —
+              계정 인벤토리의 토글 스위치와 같은 부품을 써서 상태가 모양으로 읽히게 한다 */}
+          <span className="switch-row">
+            <span className="switch-label">{m.social.watchLabel}</span>
+            <button
+              className={`switch ${follow ? 'on' : ''}`}
+              onClick={() => setFollow((v) => !v)}
+              role="switch"
+              aria-checked={follow}
+            >
+              <span className="knob" />
+            </button>
+          </span>
+          <span className="ai-watch-state">{follow ? m.social.watchOn : m.social.watchOff}</span>
+        </div>
+      )}
       {/* 코파일럿 진행 띠 — 왼쪽 폼의 현재 상태. 대화를 안 걸어도 "몇 개 남았나"가 늘 보인다 */}
       {watch && form && (
         <div className="ai-form-strip">

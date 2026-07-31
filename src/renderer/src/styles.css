@@ -845,23 +845,34 @@ button {
     transform: translateX(100%);
   }
 }
+/* 브라우저 닫기 — 안내 바 오른쪽 끝. 우상단 ✕는 AI 패널 드롭다운과 붙어 무엇을 닫는지
+   애매했다. 라벨을 달아 "무엇을" 닫는지까지 말한다 */
 .overlay-close {
   position: absolute;
-  top: 8px;
   right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
   z-index: 2;
-  width: 30px;
-  height: 30px;
+  padding: 6px 12px;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 8px;
   background: rgba(20, 20, 28, 0.85);
   color: var(--text, #e8e8ef);
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 700;
   cursor: pointer;
 }
 .overlay-close:hover {
   background: rgba(40, 40, 52, 0.95);
+  border-color: rgba(255, 255, 255, 0.3);
 }
+
+/* 안내가 없을 때도 바는 남는다 — 닫기 버튼의 자리가 화면마다 바뀌면 못 찾는다 */
+.overlay-guide.plain {
+  background: rgba(255, 255, 255, 0.03);
+  min-height: 44px;
+}
+
 .overlay-curtain {
   flex: 1;
   display: flex;
@@ -2912,6 +2923,94 @@ button {
   flex-shrink: 0;
 }
 
+/* 편집 범위 표 — 컨테이너는 모달 하나, 안은 행 + 얇은 구분선(카드 속 카드 금지) */
+.cap-body {
+  padding: 18px 22px 20px;
+  overflow-y: auto;
+}
+
+.cap-intro {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.cap-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.cap-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) 86px minmax(0, 1.4fr) 26px;
+  gap: 14px;
+  align-items: baseline;
+  padding: 9px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  font-size: 12.5px;
+}
+
+.cap-what {
+  color: var(--text);
+}
+
+/* 상태는 색이 아니라 **글자**로도 읽혀야 한다 — 색만으로 구분하면 못 읽는 사람이 생긴다 */
+.cap-where {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.cap-where.zto {
+  color: var(--ok);
+  background: rgba(52, 211, 153, 0.12);
+}
+
+/* 콘솔행은 경고가 아니다 — 그냥 다른 장소다. 중립색으로 둔다(앰버는 "손이 필요하다"의 몫) */
+.cap-where.console {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cap-why {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.cap-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* 버전 종속 표시 — 사유 옆에 붙는 작은 표식. "지금 이 앱이 어떤 상태인가"를 말한다 */
+.cap-ver {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* 반영될 버전이 있으면 중립(정보), 없으면 앰버(손이 필요하다) — 이 앱의 앰버 규칙 그대로 */
+.cap-ver.ok {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cap-ver.need {
+  color: var(--warn);
+  background: rgba(251, 191, 36, 0.12);
+}
+
 /* 편집할 수 없는 값 — 입력창처럼 보이면 "왜 안 써지지"가 된다. 읽는 텍스트로 둔다 */
 .meta-readonly {
   font-size: 12px;
@@ -2940,6 +3039,13 @@ button {
 /* 접혀 있어도 대기 중인 편집이 있으면 알린다 — 펼쳐야만 보이면 놓친다 */
 .dash-sub-row.iap-dirty > code {
   color: var(--warn);
+}
+
+/* 지금 읽고 있는지 — 스위치 옆에 말로도 적는다. 색·모양만으로는 "켠 건 맞나"가 안 읽힌다 */
+.ai-watch-state {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--muted);
 }
 
 /* 구독 표식 — 상태 칩(초록·앰버)과 경쟁하지 않게 테두리 없는 중립 텍스트로 둔다.
@@ -3567,6 +3673,7 @@ button {
 
 /* 자동화 안내 바 — 브라우저 '밖'(오버레이 상단). 페이지 위에 띄우면 조작할 자리를 가린다. */
 .overlay-guide {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { ConsoleAnswers, QuestionDef, Questionnaire } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
+import { useBrowserOverlay } from '../../browser-overlay'
 
 // 앱 콘텐츠 설문 (ROADMAP #2, 결정형 코어) — API 없는 콘솔 전용 설정을 질문으로 채운다.
 // 질문별 "?" 도움은 지금은 help 텍스트, 다음 슬라이스에서 AI 팝오버(위저드 세션 컨텍스트 공유)로.
@@ -129,6 +130,7 @@ export default function ContentSurveyWizard({
   onSaved: () => void
 }): React.JSX.Element {
   const { m, locale } = useI18n()
+  const overlay = useBrowserOverlay()
   const [q, setQ] = useState<Questionnaire | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [helpOpen, setHelpOpen] = useState<string | null>(null)
@@ -167,6 +169,33 @@ export default function ContentSurveyWizard({
   const answeredCount = q ? q.questions.filter((qq) => answers[qq.id]).length : 0
   const total = q?.questions.length ?? 0
   const complete = total > 0 && answeredCount === total
+
+  // 답한 것을 사람이 읽는 문장으로 — AI에게 "이걸 콘솔에 그대로 옮기게 도와라"라고 시킨다
+  const answeredLines = (): string =>
+    (q?.questions ?? [])
+      .filter((qq) => answers[qq.id])
+      // 답 값은 열거형(NONE·YES…)이라 화면과 같은 사람 말로 바꿔 넘긴다 — AI가 콘솔 폼에서
+      // 고를 항목을 짚어주려면 사용자가 본 것과 같은 단어여야 한다
+      .map((qq) => `- ${label(qq)}: ${optLabel(answers[qq.id])}`)
+      .join('\n')
+
+  const openGuided = (): void => {
+    if (!consoleUrl) return
+    const title = q ? (locale === 'ko' ? q.title : (q.titleEn ?? q.title)) : questionnaireId
+    const lines = answeredLines()
+    onClose()
+    overlay.open(consoleUrl, {
+      copilot: true,
+      task: {
+        goal: m.launch.surveyGoal.replace('{n}', title),
+        why: lines
+          ? `${m.launch.surveyAnswersHead}\n${lines}`
+          : m.launch.surveyNoAnswersYet,
+        exact: true
+      }
+    })
+    overlay.setGuide({ text: m.launch.surveyGuide.replace('{n}', title), tone: 'ask' })
+  }
 
   const save = (): void => {
     if (!q) return
@@ -251,8 +280,11 @@ export default function ContentSurveyWizard({
           <div className="survey-list">{q.questions.map(questionRow)}</div>
         )}
         <div className="survey-foot">
+          {/* 콘솔로 갈 때 **여기서 답한 것을 같이 들고 간다** — 이 설문은 콘솔에 자동 반영이
+              안 돼서 사람이 옮겨 적어야 하는데, AI가 답을 모르면 옮기는 걸 도울 수 없다.
+              밖의 브라우저로 던지면 그 순간 우리가 거들 수 있는 게 없어진다(모드 B) */}
           {consoleUrl && (
-            <button className="link-btn" onClick={() => window.zto.launch.openExternal(consoleUrl)}>
+            <button className="link-btn" onClick={openGuided}>
               {m.launch.surveyOpenConsole}
             </button>
           )}

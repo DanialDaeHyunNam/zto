@@ -7,7 +7,8 @@ export default function SocialPage(): React.JSX.Element {
   return (
     <div className="social-page">
       <BrowserSurface />
-      <AiPanel />
+      {/* 소셜은 옵트인 — 기본은 안 읽는다(피드엔 남의 글·DM이 섞여 있다) */}
+      <AiPanel watchable />
     </div>
   )
 }

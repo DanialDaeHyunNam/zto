@@ -131,6 +131,11 @@ const api = {
       consoleBase?: string
       error?: string
     }> => ipcRenderer.invoke('console:probeAppContent', file, askLogin, askChooseDev),
+    // 정찰이 수확해 둔 콘솔 링크(읽기 전용). 없으면 null — 그땐 콘솔 홈으로 보낸다
+    appContentLinks: (
+      file: string
+    ): Promise<{ consoleBase: string; forms: { slug: string; label: string; url: string }[] } | null> =>
+      ipcRenderer.invoke('console:appContentLinks', file),
     onProgress: (cb: (p: { step: string; detail?: string }) => void): (() => void) => {
       const l = (_e: unknown, p: { step: string; detail?: string }): void => cb(p)
       ipcRenderer.on('console:progress', l)

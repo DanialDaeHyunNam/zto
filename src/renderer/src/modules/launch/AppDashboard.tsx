@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import type {
   ApplyResult,
   DashApple,
@@ -28,6 +28,7 @@ import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
 import ContentSurveyWizard from './ContentSurveyWizard'
 import { useBrowserOverlay } from '../../browser-overlay'
+import { isAscEditableVersion } from '../../../../shared/launch-types'
 
 // 플랫폼별 앱 콘텐츠 설문 (콘솔 전용 설정을 메움)
 // 설문별 콘솔 딥링크 — Play는 콘솔 홈, ASC는 appId로 런타임 구성(앱 개인정보/연령 등급 페이지 구분)
@@ -52,6 +53,10 @@ function surveyConsoleUrl(
 type Tone = 'ok' | 'warn' | 'off'
 type Light = 'g' | 'y' | 'o'
 type Platform = 'android' | 'ios'
+
+// 지금 보고 있는 앱·플랫폼. 콘솔로 넘어갈 때 **AI에게 같이 넘기려고** 둔다 — 노드마다 프롭으로
+// 실어 나르면 트리가 지저분해지고, 하나 빠뜨리면 그 노드만 조용히 맥락 없이 열린다(눈에 안 보인다).
+const AppCtx = React.createContext<{ label?: string; platform?: Platform }>({})
 
 const PLAY_CONSOLE_URL = 'https://play.google.com/console'
 const ascAppUrl = (appId: string): string =>
@@ -133,17 +138,25 @@ function Node({
   light,
   label,
   url,
+  taskGoal,
   children
 }: {
   light: Light
   label: string
   url?: string
+  // AI에게 넘길 목적. 노드 라벨이 짧으면("IAP") 브리핑이 빈약해지므로 따로 줄 수 있게 둔다
+  taskGoal?: string
   children?: React.ReactNode
 }): React.JSX.Element {
   const { m } = useI18n()
   const overlay = useBrowserOverlay()
+  const app = React.useContext(AppCtx)
   const openGuided = (u: string): void => {
-    overlay.open(u, { copilot: true })
+    // 화면만 여는 게 아니라 **무엇을 하러 왔는지**를 AI에게 같이 넘긴다
+    overlay.open(u, {
+      copilot: true,
+      task: { goal: taskGoal ?? label, app: app.label, platform: app.platform, exact: true }
+    })
     overlay.setGuide({ text: m.launch.guideNode.replace('{n}', label), tone: 'ask' })
   }
   return (
@@ -962,6 +975,7 @@ function ApplyBar({
 }): React.JSX.Element | null {
   const { m } = useI18n()
   const overlay = useBrowserOverlay()
+  const appCtx = React.useContext(AppCtx)
   const [phase, setPhase] = useState<'idle' | 'confirm' | 'running'>('idle')
   const [results, setResults] = useState<ApplyResult[] | null>(null)
   const [verInput, setVerInput] = useState(suggestedVersion)
@@ -981,11 +995,15 @@ function ApplyBar({
   // 실패 항목을 콘솔로 이어붙인다 — 밖의 브라우저가 아니라 ZTO 브라우저 + AI(모드 B).
   // 안내에 **무엇을 왜 못 했는지**를 그대로 실어 보낸다: 화면만 열어주고 침묵하면
   // 사용자는 열린 콘솔 앞에서 "그래서 뭘 고치라는 거지"를 다시 조립해야 한다.
-  const openGuided = (e: PendingEdit, url: string): void => {
+  const openGuided = (e: PendingEdit, url: string, why?: string): void => {
     // 결과 패널을 먼저 닫는다 — 모달이 브라우저 위에 남으면 정작 콘솔이 안 보인다.
     // 대기 항목은 그대로 남으므로 콘솔에서 처리한 뒤 [콘솔에서 처리함]으로 정리하면 된다
     setResults(null)
-    overlay.open(url, { copilot: true })
+    // 실패 사유(why)도 넘긴다 — 왜 여기 왔는지를 알아야 AI가 "그건 ZTO에서 하세요"로 되돌려보내지 않는다
+    overlay.open(url, {
+      copilot: true,
+      task: { goal: e.label, app: appCtx.label, platform: e.platform, why, exact: true }
+    })
     overlay.setGuide({ text: m.launch.guideFix.replace('{n}', e.label), tone: 'ask' })
   }
 
@@ -1049,7 +1067,7 @@ function ApplyBar({
                         일이 영원히 "수정 대기 1건"으로 남아 다음 적용 때마다 또 실패한다 */}
                     {url && e && (
                       <>
-                        <button className="result-fix" onClick={() => openGuided(e, url)}>
+                        <button className="result-fix" onClick={() => openGuided(e, url, r.message)}>
                           {m.launch.applyFixInConsole}
                         </button>
                         <button className="ghost-btn mini" onClick={() => onApplied([r.id])}>
@@ -1433,9 +1451,13 @@ function AndroidTree({
           </div>
         </div>
       )}
+      {/* IAP는 **절반만 ZTO에서 되는** 노드다(이름·설명은 여기, 가격·구독은 콘솔) —
+          그래서 다른 노드보다 콘솔로 건너갈 일이 잦다 */}
       <Node
         light={iapDirty ? 'y' : g.iap.length > 0 ? 'g' : 'o'}
         label={m.launch.dashNodeIap}
+        url={PLAY_CONSOLE_URL}
+        taskGoal={m.launch.iapGoal}
       >
         {g.iap.length > 0
           ? m.launch.dashIapLive.replace('{n}', String(g.iap.length))
@@ -1603,6 +1625,8 @@ function IosTree({
       <Node
         light={iapDirty ? 'y' : a.iap.length > 0 ? 'g' : 'o'}
         label={m.launch.dashNodeIap}
+        url={ascAppUrl(a.appId)}
+        taskGoal={m.launch.iapGoal}
       >
         {a.iap.length > 0
           ? m.launch.dashIapLive.replace('{n}', String(a.iap.length))
@@ -1653,11 +1677,16 @@ function IosTree({
 export default function AppDashboard({
   file,
   summary,
-  onPulled
+  onPulled,
+  onAscAppId
 }: {
   file: string
   summary?: SheetSummary
   onPulled?: () => void
+  // ASC 앱 id + **지금 편집 가능한 버전**을 부모에게 올린다 — 편집 범위 표가 일반론 대신
+  // "이 앱은 지금 1.2.0에 반영됩니다"를 말하려면 이 둘이 필요하다.
+  // `onPulled`에 얹지 않는 이유: 그건 실제 pull에서만 울리는데 대시보드는 캐시로도 뜬다
+  onAscAppId?: (info: { appId: string; editableVersion?: string }) => void
 }): React.JSX.Element {
   const { m, locale } = useI18n()
   const [data, setData] = useState<DashboardData | null>(null)
@@ -1725,14 +1754,37 @@ export default function AppDashboard({
       (e) => e.platform === plat && (e.section === 'meta' || e.section === 'releaseNotes')
     )
 
+  // 부모 콜백은 **ref로만 잡는다**. 부모가 인라인 화살표로 넘기면 리렌더마다 identity가 바뀌는데,
+  // 그게 `pull`의 identity를 바꾸고 → 마운트 이펙트를 재실행시켜 → 대시보드를 다시 불러온다.
+  // 2026-07-31 실제로 무한 pull이 났다: 아래 onAscAppId가 부모 상태를 갱신 → 부모 리렌더 →
+  // onPulled 새 identity → pull 새 identity → 이펙트 재실행 → setData → 다시 onAscAppId → …
+  const onPulledRef = useRef(onPulled)
+  const onAscAppIdRef = useRef(onAscAppId)
+  useEffect(() => {
+    onPulledRef.current = onPulled
+    onAscAppIdRef.current = onAscAppId
+  })
+
+  // 값이 **실제로 달라졌을 때만** 부모에 올린다. 매번 새 객체를 올리면 그 자체가 리렌더를 만든다
+  const iosSigRef = useRef('')
+  useEffect(() => {
+    const a = data?.apple
+    if (!a?.appId) return
+    const editableVersion = a.versions.find((v) => isAscEditableVersion(v.state))?.version
+    const sig = `${a.appId}|${editableVersion ?? ''}`
+    if (sig === iosSigRef.current) return
+    iosSigRef.current = sig
+    onAscAppIdRef.current?.({ appId: a.appId, editableVersion })
+  }, [data])
+
   const pull = useCallback(() => {
     setLoading(true)
     window.zto.launch.dashboard(file).then((d) => {
       setData(d)
       setLoading(false)
-      onPulled?.() // pull 후 아이콘 캐시가 채워졌을 수 있음 → 부모가 sheets 새로고침
+      onPulledRef.current?.() // pull 후 아이콘 캐시가 채워졌을 수 있음 → 부모가 sheets 새로고침
     })
-  }, [file, onPulled])
+  }, [file])
 
   useEffect(() => {
     setData(null)
@@ -1760,8 +1812,12 @@ export default function AppDashboard({
         ? ascStateChip(data.apple.versions[0].state)
         : null
 
+  // 콘솔로 넘어갈 때 AI에게 넘길 앱 이름 — 이걸 안 주면 AI가 우리가 아는 걸 사용자에게 되묻는다
+  const appLabel = summary ? `${summary.appName} (${summary.packageName})` : undefined
+
   return (
-    <div className="step">
+    <AppCtx.Provider value={{ label: appLabel, platform: active ?? undefined }}>
+      <div className="step">
       <div className="dash-app-head">
         {summary?.icon && <img className="dash-app-icon" src={summary.icon} alt="" />}
         <strong>{summary?.appName}</strong>
@@ -1878,6 +1934,7 @@ export default function AppDashboard({
           pull() // 반영 성공분은 재-pull로 스토어에서 확인
         }}
       />
-    </div>
+      </div>
+    </AppCtx.Provider>
   )
 }

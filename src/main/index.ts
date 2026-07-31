@@ -53,6 +53,7 @@ import {
   type DevAccountState,
   type IapSnapshotInfo,
   type LiveIapProduct,
+  ASC_EDITABLE_VERSION_STATES,
   isEditableNoteTrack,
   parseIapFieldKey,
   parseNoteFieldKey,
@@ -1508,15 +1509,6 @@ async function ascErrorMsg(r: Response): Promise<string> {
   return `HTTP ${r.status}`
 }
 
-// ASC 버전을 편집할 수 있는 상태(라이브 READY_FOR_SALE 등은 제외)
-const ASC_EDITABLE_VERSION_STATES = [
-  'PREPARE_FOR_SUBMISSION',
-  'DEVELOPER_REJECTED',
-  'REJECTED',
-  'METADATA_REJECTED',
-  'INVALID_BINARY'
-]
-
 // ASC 메타를 리소스별 PATCH(부분 성공 가능). name·subtitle → appInfoLocalizations,
 // description·promotionalText·keywords·whatsNew → 편집 가능한 최신 버전의 appStoreVersionLocalizations.
 // 라이브 버전은 건드리지 않는다(편집 가능한 상태의 버전만 대상).
@@ -2471,6 +2463,32 @@ app.whenReady().then(() => {
       const path = join(app.getPath('userData'), `zto-data-safety-${pkg}.json`)
       if (!existsSync(path)) return null
       return JSON.parse(readFileSync(path, 'utf8'))
+    } catch {
+      return null
+    }
+  })
+  // 정찰 때 **눌러서 도착한** 콘솔 URL을 그대로 돌려준다(브라우저를 다시 돌리지 않는 순수 읽기).
+  // 이 값이 있어야 "콘솔에서 하세요" 대신 "이 화면입니다"까지 갈 수 있다.
+  // ⚠️ URL을 조립해서 만들지 않는다 — 없으면 없는 대로 null을 준다(BROWSER-AUTOMATION §1:
+  // `app-content`는 존재하지 않고 실제 경로는 `app-content/overview`였다. 추측은 4연속 실패했다).
+  ipcMain.handle('console:appContentLinks', (_e, file: string) => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const pkg = sheet.app?.packageName ?? ''
+      if (!pkg) return null
+      const path = join(app.getPath('userData'), `zto-app-content-${pkg}.json`)
+      if (!existsSync(path)) return null
+      const doc = JSON.parse(readFileSync(path, 'utf8')) as {
+        consoleBase?: string
+        forms?: { slug?: string; label?: string; url?: string; reached?: boolean }[]
+      }
+      return {
+        consoleBase: doc.consoleBase ?? '',
+        // 도달하지 못한 폼의 URL은 내보내지 않는다 — 열어봤자 홈으로 튕기고, 그건 조용한 실패다
+        forms: (doc.forms ?? [])
+          .filter((f) => f.slug && f.url && f.reached)
+          .map((f) => ({ slug: f.slug ?? '', label: f.label ?? '', url: f.url ?? '' }))
+      }
     } catch {
       return null
     }

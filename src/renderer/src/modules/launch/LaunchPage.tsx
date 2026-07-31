@@ -15,6 +15,7 @@ import { useBrowserOverlay } from '../../browser-overlay'
 import type { Messages } from '../../i18n/en'
 import { PlatformIcon } from '../../platform-icons'
 import AppDashboard from './AppDashboard'
+import EditScope from './EditScope'
 
 type IapChoice = 'undecided' | 'yes' | 'no'
 
@@ -578,18 +579,40 @@ function ApplyStep({
   )
 }
 // 전역 API 연결 상태 — 자격증명은 앱이 아니라 계정 단위(플랫폼당 하나). 타이틀 우측 config
+// 자격증명이 없는 사용자를 **밖으로 내보내지 않는다** — 키 발급은 콘솔 여러 화면을 오가는
+// 일이라(Play는 Cloud 프로젝트까지 건너간다) 링크만 던지면 거기서 길을 잃는다.
+// 그래서 [연결]도 다른 콘솔 작업과 같은 모드 B로 흐른다: 내부 브라우저 + 옆에서 거드는 AI.
 function ApiStatusBar(): React.JSX.Element {
   const { m } = useI18n()
+  const overlay = useBrowserOverlay()
   const [status, setStatus] = useState<ApiStatus | null>(null)
   useEffect(() => {
     window.zto.launch.apiStatus().then(setStatus)
   }, [])
 
+  const connect = (platform: 'android' | 'ios', url: string, exact: boolean): void => {
+    overlay.open(url, {
+      copilot: true,
+      task: {
+        goal: platform === 'android' ? m.launch.apiGoalPlay : m.launch.apiGoalAsc,
+        platform,
+        why: platform === 'android' ? m.launch.apiWhyPlay : m.launch.apiWhyAsc,
+        exact
+      }
+    })
+    overlay.setGuide({
+      text: platform === 'android' ? m.launch.apiGuidePlay : m.launch.apiGuideAsc,
+      tone: 'ask'
+    })
+  }
+
   const row = (
     iconId: string,
     label: string,
     st: { connected: boolean; detail: string } | undefined,
-    consoleUrl: string
+    consoleUrl: string,
+    platform: 'android' | 'ios',
+    exact: boolean
   ): React.JSX.Element => (
     <div className="api-stat" title={st?.detail}>
       <span className="api-ic">
@@ -604,7 +627,7 @@ function ApiStatusBar(): React.JSX.Element {
       ) : (
         <button
           className="link-btn api-connect"
-          onClick={() => window.zto.launch.openExternal(consoleUrl)}
+          onClick={() => connect(platform, consoleUrl, exact)}
         >
           {m.launch.apiConnect}
         </button>
@@ -614,12 +637,23 @@ function ApiStatusBar(): React.JSX.Element {
 
   return (
     <div className="api-status">
-      {row('play-console', m.launch.apiPlay, status?.play, 'https://play.google.com/console')}
+      {/* Play는 API 액세스 화면 URL에 개발자 id가 들어가 우리가 조립할 수 없다 → 홈까지만(exact=false).
+          ASC는 계정 단위 고정 경로라 그 화면으로 바로 간다(exact=true) */}
+      {row(
+        'play-console',
+        m.launch.apiPlay,
+        status?.play,
+        'https://play.google.com/console',
+        'android',
+        false
+      )}
       {row(
         'app-store-connect',
         m.launch.apiApple,
         status?.apple,
-        'https://appstoreconnect.apple.com/access/integrations/api'
+        'https://appstoreconnect.apple.com/access/integrations/api',
+        'ios',
+        true
       )}
     </div>
   )
@@ -634,6 +668,10 @@ export default function LaunchPage(): React.JSX.Element {
   )
   const [devAccounts, setDevAccounts] = useState<DevAccounts>({})
   const [sheets, setSheets] = useState<SheetSummary[]>([])
+  // 편집 범위 표. 플랫폼 탭은 대시보드 안에 있어 여기선 모르므로 Android로 열고
+  // 표 안에서 바꾸게 둔다 — 두 스토어를 나란히 비교하는 게 이 표의 쓰임 절반이다
+  const [scopeOpen, setScopeOpen] = useState(false)
+  const [iosInfo, setIosInfo] = useState<{ appId: string; editableVersion?: string }>()
   const [selected, setSelected] = useState<string | null>(null)
   const [iapChoice, setIapChoice] = useState<IapChoice>('undecided')
   const [creds, setCreds] = useState<CredentialStatus | null>(null)
@@ -708,6 +746,15 @@ export default function LaunchPage(): React.JSX.Element {
           <div className="head-actions">
             {/* 코파일럿으로 연다 — 콘솔 폼은 ZTO가 대신 채워줄 수 없으므로(API 없음),
                 폼을 복제해 두 번 입력시키는 대신 **진짜 콘솔 옆에서 거든다**(Dan 2026-07-30) */}
+            {/* "여긴 왜 편집이 안 되지"를 화면 안에서 답한다 — 이 지식이 문서나 대화에만
+                있으면 사용자는 매번 시도해 보고 나서야 알게 된다 */}
+            <button
+              className="choice small"
+              onClick={() => setScopeOpen(true)}
+              title={m.launch.capOpenTitle}
+            >
+              {m.launch.capOpen}
+            </button>
             <button
               className="choice small"
               onClick={() => openBrowser('https://play.google.com/console', { copilot: true })}
@@ -718,6 +765,19 @@ export default function LaunchPage(): React.JSX.Element {
             <ApiStatusBar />
           </div>
         </div>
+        {scopeOpen && (
+          <EditScope
+            platform="android"
+            file={selected}
+            ascAppId={iosInfo?.appId}
+            iosEditableVersion={iosInfo?.editableVersion}
+            appLabel={(() => {
+              const sh = sheets.find((x) => x.file === selected)
+              return sh ? `${sh.appName} (${sh.packageName})` : undefined
+            })()}
+            onClose={() => setScopeOpen(false)}
+          />
+        )}
         <div className="wizard wide">
           <div className="app-picker">
             {sheets.map((s) => (
@@ -766,6 +826,7 @@ export default function LaunchPage(): React.JSX.Element {
               file={selected}
               summary={sheets.find((s) => s.file === selected)}
               onPulled={() => window.zto.launch.listSheets().then(setSheets)}
+              onAscAppId={setIosInfo}
             />
           )}
         </div>

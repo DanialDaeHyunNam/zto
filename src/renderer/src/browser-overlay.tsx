@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useLayoutEffect, useState } from 
 import BrowserSurface from './modules/social/BrowserSurface'
 import AiPanel from './modules/social/AiPanel'
 import { useI18n } from './i18n'
+import type { CopilotTask } from '../../shared/launch-types'
 
 // 앱스토어 관리 등에서 브라우저를 '슬라이딩 캐비닛 속 TV'처럼 불러내는 오버레이.
 // 사이드바는 그대로 두고 콘텐츠 영역만 덮는다(= .content 사각형을 측정해 fixed). 문(패널)이 슬라이드로
@@ -18,7 +19,10 @@ export interface OverlayGuide {
 interface OverlayApi {
   // copilot=true면 오른쪽에 AI 패널이 붙는다(샌드위치) — 진짜 콘솔 폼 옆에서 거드는 모드.
   // 폼을 ZTO 안에 복제해 두 번 입력시키는 대신, 사람은 콘솔에서 한 번만 고른다(Dan 2026-07-30).
-  open: (url?: string, opts?: { copilot?: boolean }) => void
+  //
+  // task는 **무엇을 하러 왔는지**다. 이걸 안 넘기면 AI는 화면만 보고 일반론을 말하고,
+  // 우리가 이미 아는 앱·목적을 사용자에게 되묻는다(Dan 2026-07-31) — 여는 것과 이끄는 것은 다르다.
+  open: (url?: string, opts?: { copilot?: boolean; task?: CopilotTask }) => void
   close: () => void
   setGuide: (g: OverlayGuide | null) => void
   isOpen: boolean
@@ -42,22 +46,26 @@ export function BrowserOverlayProvider({
   const [url, setUrl] = useState<string | null>(null) // null = 닫힘
   const [guide, setGuide] = useState<OverlayGuide | null>(null)
   const [copilot, setCopilot] = useState(false)
+  const [task, setTask] = useState<CopilotTask | undefined>()
 
   useEffect(() => {
     setUrl(null)
     setGuide(null)
     setCopilot(false)
+    setTask(undefined)
   }, [closeKey])
 
   const api: OverlayApi = {
     open: (u, opts) => {
       setCopilot(!!opts?.copilot)
+      setTask(opts?.task)
       setUrl(u ?? 'about:blank')
     },
     close: () => {
       setUrl(null)
       setGuide(null)
       setCopilot(false)
+      setTask(undefined)
     },
     setGuide,
     isOpen: url !== null
@@ -69,6 +77,7 @@ export function BrowserOverlayProvider({
         <BrowserOverlay
           url={url}
           copilot={copilot}
+          task={task}
           guide={guide}
           onClose={() => {
             setUrl(null)
@@ -85,11 +94,13 @@ type Rect = { top: number; left: number; width: number; height: number }
 function BrowserOverlay({
   url,
   copilot,
+  task,
   guide,
   onClose
 }: {
   url: string
   copilot: boolean
+  task?: CopilotTask
   guide: OverlayGuide | null
   onClose: () => void
 }): React.JSX.Element {
@@ -129,9 +140,6 @@ function BrowserOverlay({
       style={{ top: rect.top, left: rect.left, width: rect.width, height: rect.height }}
       onAnimationEnd={onAnimEnd}
     >
-      <button className="overlay-close" onClick={() => setPhase('closing')} title={m.browser.close}>
-        ✕
-      </button>
       {/* 슬라이드가 끝나야 뷰를 붙인다(TV on) — 닫힐 땐 먼저 떼고 문을 닫는다 */}
       {phase === 'shown' ? (
         copilot ? (
@@ -139,7 +147,7 @@ function BrowserOverlay({
           // 뷰 bounds는 surface 사각형만 따라가므로 AI 패널을 덮지 않는다(소셜 모듈과 같은 원리).
           <div className="overlay-sandwich">
             <BrowserSurface />
-            <AiPanel watch feature="console" />
+            <AiPanel watch feature="console" task={task} />
           </div>
         ) : (
           <BrowserSurface />
@@ -148,13 +156,20 @@ function BrowserOverlay({
         <div className="overlay-curtain">{m.browser.opening}</div>
       )}
       {/* 안내 바는 브라우저 '아래' — 레이아웃상 뷰 바깥이라 절대 가려지지 않고,
-          상단 얇은 띠보다 눈에 잘 들어온다(Dan 2026-07-30) */}
-      {guide && (
-        <div className={`overlay-guide ${guide.tone}`}>
-          <span className="overlay-guide-dot" />
-          {guide.text}
-        </div>
-      )}
+          상단 얇은 띠보다 눈에 잘 들어온다(Dan 2026-07-30).
+          **닫기도 여기 오른쪽 끝**에 둔다: 우상단 ✕는 AI 패널의 모델 드롭다운과 붙어 있어
+          무엇을 닫는 ✕인지 애매했다(Dan 2026-07-31). 라벨을 달아 대상까지 말한다 */}
+      <div className={`overlay-guide ${guide ? guide.tone : 'plain'}`}>
+        {guide && (
+          <>
+            <span className="overlay-guide-dot" />
+            {guide.text}
+          </>
+        )}
+        <button className="overlay-close" onClick={() => setPhase('closing')}>
+          {m.browser.closeBrowser}
+        </button>
+      </div>
     </div>
   )
 }

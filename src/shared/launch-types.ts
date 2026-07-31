@@ -286,6 +286,29 @@ export interface PendingEdit {
 }
 
 // 적용 결과 — 항목별 (ASC는 부분 실패 가능, Play는 원자적)
+// 코파일럿에 넘기는 **목적**. 브라우저를 열어주는 것과 이끄는 것은 다르다 —
+// 목적 없이 화면만 띄우면 AI는 "무엇을 도와드릴까요"부터 시작하고, 우리가 이미 아는 것
+// (어느 앱인지·무엇을 하러 왔는지)을 사용자에게 되묻는다(2026-07-31 실제로 그랬다).
+// ASC에서 **편집이 되는 버전 상태**. 라이브(READY_FOR_SALE)엔 메타·스크린샷을 못 쓴다.
+// main(적용)과 화면(편집 범위 표)이 같은 규칙을 봐야 "된다고 해놓고 실패"가 안 생긴다.
+export const ASC_EDITABLE_VERSION_STATES = [
+  'PREPARE_FOR_SUBMISSION',
+  'DEVELOPER_REJECTED',
+  'REJECTED',
+  'METADATA_REJECTED',
+  'INVALID_BINARY'
+]
+export const isAscEditableVersion = (state: string): boolean =>
+  ASC_EDITABLE_VERSION_STATES.includes(state)
+
+export interface CopilotTask {
+  goal: string // 사용자가 하러 온 일 — 화면에 쓰인 라벨 그대로
+  app?: string // "실측 앱 (com.example.app)" — 알면 반드시 넘긴다. 되묻게 하지 않는다
+  platform?: 'android' | 'ios'
+  why?: string // 왜 여기서(콘솔에서) 해야 하는지 — AI가 "ZTO에서 하세요"라고 되돌려보내지 않도록
+  exact?: boolean // 목적지 화면까지 데려갔는지. false면 AI가 먼저 길찾기를 도와야 한다
+}
+
 export interface ApplyResult {
   id: string
   ok: boolean
