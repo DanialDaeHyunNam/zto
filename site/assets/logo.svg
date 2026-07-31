@@ -1,0 +1,7 @@
+<!-- ZTO 마크 — 0과 1. 그 이상 아무것도 없다.
+     아이디어를 형상에 욱여넣지 않는다: 16px에서도 "0 1"로 읽히는 게 유일한 요구다.
+     링 바깥지름(33)과 막대 높이(33)를 맞춰 시각 무게를 같게 뒀다. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="ZTO">
+  <circle cx="25" cy="32" r="13" fill="none" stroke="currentColor" stroke-width="7"/>
+  <rect x="47.5" y="15.5" width="7" height="33" rx="3.5" fill="currentColor"/>
+</svg>

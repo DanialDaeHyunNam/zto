@@ -1,0 +1,598 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>ZTO — 새 앱을 낼 때마다 늘어나는 관리 포인트, 여기서 전부</title>
+<meta name="description" content="계정, 양대 앱스토어, 홍보 글 — 새 앱을 낼 때마다 늘어나는 관리 포인트를 ZTO 하나에서. 히스토리를 아는 AI와 함께. macOS · Windows." />
+<meta property="og:title" content="ZTO — 전부 여기서 관리하세요" />
+<meta property="og:description" content="계정 · 양대 앱스토어 · 홍보 글, 그리고 히스토리를 아는 AI. 솔로파운더의 관리 데스크." />
+<meta property="og:type" content="website" />
+<link rel="icon" href="/assets/favicon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="/assets/apple-touch-icon.png" />
+<style>
+  :root{
+    --bg:#0a0a0f; --bg2:#101018; --card:rgba(255,255,255,.035);
+    --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
+    --text:#f2f1f7; --muted:#9694a6; --dim:#5f5d6e;
+    --violet:#8b5cf6; --violet-2:#c084fc; --ok:#34d399; --amber:#fbbf24;
+    --glow:0 0 40px rgba(139,92,246,.45), 0 0 120px rgba(139,92,246,.18);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--text);
+    font:15px/1.7 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",Segoe UI,sans-serif;
+    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:inherit}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
+
+  nav{position:sticky;top:0;z-index:30;background:rgba(10,10,15,.75);backdrop-filter:blur(14px);
+    border-bottom:1px solid var(--line)}
+  .nav-in{display:flex;align-items:center;gap:12px;height:60px}
+  .brand{display:flex;align-items:center;gap:9px;text-decoration:none;font-weight:800;
+    letter-spacing:-.02em;font-size:17px}
+  .brand svg{width:19px;height:19px;color:var(--violet-2)}
+  .nav-links{display:flex;gap:22px;margin-left:30px;font-size:13.5px;color:var(--muted)}
+  .nav-links a{text-decoration:none}
+  .nav-links a:hover{color:var(--text)}
+  .nav-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+  .lang{display:inline-flex;border:1px solid var(--line2);border-radius:9px;overflow:hidden}
+  .lang button{border:0;background:transparent;color:var(--muted);font:inherit;font-size:12px;
+    font-weight:700;padding:5px 10px;cursor:pointer}
+  .lang button.on{background:var(--violet);color:#fff}
+  .nav-cta{font-size:13px;font-weight:700;text-decoration:none;padding:8px 16px;border-radius:999px;
+    background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff}
+
+  /* ---------- hero ---------- */
+  .hero{position:relative;padding:104px 0 30px;text-align:center}
+  .hero::before{content:"";position:absolute;inset:-40% -20% auto;height:130%;pointer-events:none;
+    background:
+      radial-gradient(48% 42% at 50% 34%, rgba(139,92,246,.22), transparent 70%),
+      radial-gradient(30% 26% at 72% 20%, rgba(192,132,252,.12), transparent 70%);
+    filter:blur(6px)}
+  .hero>*{position:relative}
+  h1{font-size:clamp(30px,5vw,52px);line-height:1.3;letter-spacing:-.035em;font-weight:800;margin:0}
+  h1 .q{display:block;color:var(--text)}
+  h1 .a{display:block;margin-top:14px;
+    background:linear-gradient(120deg,#a78bfa,#e9d5ff 55%,#a78bfa);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    text-shadow:none;filter:drop-shadow(0 0 26px rgba(139,92,246,.55))}
+  .lede{color:var(--muted);font-size:16.5px;max-width:560px;margin:24px auto 0}
+  .cta{margin-top:32px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .btn{padding:13px 26px;border-radius:999px;font-size:15px;font-weight:800;text-decoration:none;
+    background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff;box-shadow:var(--glow)}
+  .btn.ghost{background:transparent;border:1px solid var(--line2);box-shadow:none;color:var(--text)}
+  .fine{margin-top:16px;color:var(--dim);font-size:12.5px}
+
+  /* 스크린샷 프레임 — 진짜 앱 화면이 주인공. 이미지가 없으면 프레임째 숨긴다 */
+  .shot{margin:56px auto 0;max-width:960px;border-radius:16px;overflow:hidden;
+    border:1px solid var(--line2);
+    box-shadow:0 0 0 1px rgba(139,92,246,.15), 0 30px 90px rgba(0,0,0,.6), var(--glow)}
+  .shot img{display:block;width:100%}
+  .shot.small{max-width:880px;box-shadow:0 20px 70px rgba(0,0,0,.55)}
+  .shot-cap{margin-top:14px;text-align:center;color:var(--dim);font-size:12px}
+
+  /* ---------- sections ---------- */
+  section{padding:96px 0 0}
+  .num{font-size:12px;font-weight:800;color:var(--violet-2);letter-spacing:.14em}
+  h2{font-size:clamp(23px,3.4vw,34px);letter-spacing:-.03em;font-weight:800;line-height:1.3;margin:12px 0 12px}
+  .sec p.desc{color:var(--muted);font-size:15.5px;line-height:1.7;max-width:600px;margin:0}
+  .cols{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:34px}
+  .col{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px 22px}
+  .col h3{margin:0 0 7px;font-size:14px;font-weight:700}
+  .col p{margin:0;color:var(--muted);font-size:13px;line-height:1.65}
+
+  .quote{max-width:720px;margin:0 auto;text-align:center;padding:96px 0 0}
+  .quote p{font-size:clamp(19px,2.6vw,26px);line-height:1.55;letter-spacing:-.02em;font-weight:700;margin:0}
+  .quote p em{font-style:normal;
+    background:linear-gradient(120deg,#a78bfa,#e9d5ff);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+
+  .plans{display:grid;grid-template-columns:repeat(2,1fr);gap:14px;max-width:680px;margin:36px auto 0}
+  .plan{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:26px;text-align:left}
+  .plan.hi{border-color:rgba(139,92,246,.6);box-shadow:0 0 40px rgba(139,92,246,.12)}
+  .plan .kind{font-size:12px;font-weight:700;color:var(--violet-2)}
+  .price{font-size:34px;font-weight:800;letter-spacing:-.03em;margin:10px 0 2px}
+  .price span{font-size:14px;font-weight:600;color:var(--muted)}
+  .yr{color:var(--dim);font-size:12.5px;margin-bottom:16px}
+  .plan ul{margin:0;padding:0;list-style:none;font-size:13.5px;color:var(--muted)}
+  .plan li{padding:5px 0 5px 18px;position:relative}
+  .plan li::before{content:"";position:absolute;left:0;top:13px;width:6px;height:6px;border-radius:50%;
+    background:var(--violet)}
+  .note{color:var(--muted);font-size:13.5px;background:var(--card);border:1px solid var(--line);
+    border-radius:14px;padding:18px 20px;line-height:1.7}
+  .note strong{color:var(--text)}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:30px}
+  td{padding:13px 0;border-bottom:1px solid var(--line);color:var(--muted);vertical-align:top}
+  td:first-child{color:var(--text);width:42%;padding-right:24px;font-weight:600}
+  footer.wrap{padding:0 24px 110px}  /* .wrap의 padding이 이겨서 바닥 여백이 죽고 있었다 */
+  .footc{border:1px solid var(--line);border-radius:20px;padding:44px 46px 26px;background:rgba(255,255,255,.015)}
+  .foot-grid{display:grid;grid-template-columns:1.3fr 1fr 1.1fr;gap:40px}
+  .foot-brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:17px;letter-spacing:-.02em}
+  .foot-brand svg{width:20px;height:20px;color:var(--violet-2)}
+  .foot-desc{color:var(--muted);font-size:13px;line-height:1.7;margin:14px 0 0;max-width:300px}
+  .foot-h{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--dim);margin-bottom:14px;text-transform:uppercase}
+  .foot-grid a{display:flex;align-items:center;gap:9px;color:var(--text);font-size:13.5px;
+    text-decoration:none;padding:5px 0}
+  .foot-grid a:hover{color:var(--violet-2)}
+  .foot-ic{width:26px;height:26px;border-radius:50%;border:1px solid var(--line2);display:inline-flex;
+    align-items:center;justify-content:center;font-size:12px;flex:0 0 auto}
+  .foot-note{color:var(--dim);font-size:12px;line-height:1.6;margin:12px 0 0}
+  .foot-bottom{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;
+    border-top:1px solid var(--line);margin-top:34px;padding-top:22px;color:var(--dim);font-size:12.5px}
+  .foot-socials{display:flex;gap:8px}
+  .foot-socials a{width:32px;height:32px;border-radius:50%;border:1px solid var(--line2);display:inline-flex;
+    align-items:center;justify-content:center;color:var(--text);text-decoration:none;font-size:13px}
+  .foot-socials a:hover{border-color:var(--violet)}
+  @media (max-width:840px){.foot-grid{grid-template-columns:1fr;gap:28px}.footc{padding:32px 26px 20px}}
+
+
+  /* ---------- 스토리 — 좌 고정 미리보기 + 우 스크롤 ---------- */
+  .story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;
+    align-items:start;margin-top:110px}
+  .preview{position:sticky;top:96px}
+  .win{border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:#101018;
+    box-shadow:0 0 0 1px rgba(139,92,246,.14), 0 26px 80px rgba(0,0,0,.6), var(--glow)}
+  .win-bar{display:flex;align-items:center;gap:6px;padding:10px 13px;border-bottom:1px solid var(--line);
+    background:rgba(255,255,255,.02)}
+  .win-bar i{width:9px;height:9px;border-radius:50%;background:#2c2c38;display:block}
+  .win-bar .t{margin-left:8px;font-size:11px;color:var(--dim)}
+  .win-body{display:grid;grid-template-columns:150px 1fr;min-height:340px}
+  .win-side{border-right:1px solid var(--line);padding:11px 9px;background:rgba(255,255,255,.015)}
+  .tab{padding:8px 10px;border-radius:9px;font-size:11.5px;color:var(--muted);margin-bottom:3px;
+    transition:background .35s,color .35s,box-shadow .35s}
+  .tab.on{background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff;font-weight:700;
+    box-shadow:0 0 18px rgba(139,92,246,.4)}
+  .panes{position:relative}
+  .pane{position:absolute;inset:0;padding:14px 16px;opacity:0;transform:translateY(8px);
+    transition:opacity .45s ease,transform .45s ease;pointer-events:none}
+  .pane.on{opacity:1;transform:none;pointer-events:auto}
+  .pane img.real{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top left;display:none}
+  .pane.has-img img.real{display:block}
+  .pane.has-img .sketch{display:none}
+
+  .p-tiles{display:flex;gap:7px;margin-bottom:12px}
+  .p-tile{border:1px solid var(--line);border-radius:10px;padding:7px 12px;min-width:64px}
+  .p-tile b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em}
+  .p-tile span{font-size:10px;color:var(--dim)}
+  .p-acc{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+  .p-av{width:22px;height:22px;border-radius:7px;flex:0 0 auto;font-size:10px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;color:#fff}
+  .p-acc .m{color:var(--dim);font-size:10px}
+  .p-svc{margin-left:auto;display:flex;gap:4px}
+  .p-svc i{width:17px;height:17px;border-radius:5px;font-style:normal;font-size:9px;font-weight:800;
+    display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
+
+  .p-chips{display:flex;gap:6px;margin-bottom:10px}
+  .p-chips span{font-size:10.5px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted)}
+  .p-chips span.on{border-color:rgba(139,92,246,.6);color:var(--text);background:rgba(139,92,246,.12)}
+  .p-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;margin-bottom:11px}
+  .p-seg span{font-size:10.5px;font-weight:700;color:var(--muted);padding:4px 11px;border-radius:6px}
+  .p-seg span.on{background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff}
+  .p-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+  .p-row i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px rgba(52,211,153,.5);flex:0 0 auto}
+  .p-row .k{width:64px;color:var(--dim);flex:0 0 auto}
+
+  .p-draft{border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:11.5px;
+    line-height:1.6;background:rgba(255,255,255,.02);white-space:pre-wrap}
+  .p-bub{margin-top:10px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.35);
+    border-radius:10px;padding:10px 12px;font-size:11px;line-height:1.6;color:var(--muted)}
+  .p-bub b{color:#c9b6ff}
+
+  .steps .step{min-height:72vh;display:flex;flex-direction:column;justify-content:center;
+    opacity:.28;transition:opacity .4s ease}
+  /* 첫 스텝은 가운데 정렬 대신 위에서 시작 — 진입 순간 미리보기 창과 나란히 잡힌다 */
+  .steps .step:first-child{justify-content:flex-start;padding-top:6px;min-height:64vh}
+  .steps .step.on{opacity:1}
+  .step .pts{margin:20px 0 0;padding:0;list-style:none;color:var(--muted);font-size:13.5px}
+  .step .pts li{padding:6px 0 6px 20px;position:relative;line-height:1.65}
+  .step .pts li::before{content:"";position:absolute;left:0;top:14px;width:6px;height:6px;
+    border-radius:50%;background:var(--violet)}
+  .step .pts b{color:var(--text);font-weight:700}
+
+
+  /* 마무리 — 히어로의 답 문장으로 닫는다(수미상관). 푸터 직전이 페이지의 마지막 인상이다 */
+  .ending{text-align:center;padding:130px 0 110px;position:relative}
+  .ending::before{content:"";position:absolute;inset:auto -20% -60%;height:120%;pointer-events:none;
+    background:radial-gradient(46% 40% at 50% 62%, rgba(139,92,246,.16), transparent 70%);filter:blur(6px)}
+  .ending>*{position:relative}
+  .end-h{margin:0;font-size:clamp(26px,4vw,40px);font-weight:800;letter-spacing:-.03em;
+    background:linear-gradient(120deg,#a78bfa,#e9d5ff 55%,#a78bfa);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    filter:drop-shadow(0 0 22px rgba(139,92,246,.5))}
+
+  @media (max-width:900px){
+    .story{grid-template-columns:1fr;gap:0;margin-top:72px}
+    .preview{position:static;margin-bottom:8px}
+    .steps .step{min-height:0;padding:44px 0;opacity:1}
+  }
+
+  @media (max-width:840px){
+    .nav-links{display:none}
+    .cols{grid-template-columns:1fr}
+    .plans{grid-template-columns:1fr}
+    .hero{padding:72px 0 20px}
+    section{padding:72px 0 0}
+  }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap nav-in">
+    <a class="brand" href="#">
+      <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="25" cy="32" r="13" fill="none" stroke="currentColor" stroke-width="7"/><rect x="47.5" y="15.5" width="7" height="33" rx="3.5" fill="currentColor"/></svg>
+      ZTO
+    </a>
+    <div class="nav-links">
+      <a href="#accounts" data-i18n="navAccounts">계정</a>
+      <a href="#stores" data-i18n="navStores">앱스토어</a>
+      <a href="#ai" data-i18n="navAi">AI</a>
+      <a href="#pricing" data-i18n="navPricing">요금제</a>
+    </div>
+    <div class="nav-right">
+      <div class="lang" role="group" aria-label="Language">
+        <button type="button" data-lang="ko" class="on">KO</button>
+        <button type="button" data-lang="en">EN</button>
+      </div>
+      <a class="nav-cta" href="mailto:libertas.kr@gmail.com?subject=ZTO%20%EC%B6%9C%EC%8B%9C%20%EC%95%8C%EB%A6%BC%20%EC%8B%A0%EC%B2%AD" data-i18n="navCta">출시 알림 받기</a>
+    </div>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<header class="hero">
+  <h1>
+    <span class="q" data-i18n="h1q">새로운 앱을 낼 때마다<br />늘어나는 관리 포인트, 힘드시죠?</span>
+    <span class="a" data-i18n="h1a">ZTO에서 전부 관리하세요</span>
+  </h1>
+  <p class="lede" data-i18n="lede">
+    많은 계정, 마케팅 히스토리, 앱스토어 관리까지 이제 모두 한 곳에서 관리하세요.
+  </p>
+  <div class="cta">
+    <a class="btn" href="mailto:libertas.kr@gmail.com?subject=ZTO%20%EC%B6%9C%EC%8B%9C%20%EC%95%8C%EB%A6%BC%20%EC%8B%A0%EC%B2%AD" data-i18n="ctaMain">출시되면 알려주세요</a>
+    <a class="btn ghost" href="#pricing" data-i18n="ctaSub">요금제 보기</a>
+  </div>
+  <p class="fine" data-i18n="fine">macOS · Windows · 3일 전체 기능 체험 · 카드 등록 없음</p>
+</header>
+
+<!-- ============ 스토리 — 좌 미리보기 · 우 스크롤 ============ -->
+<div class="story">
+  <div class="preview" id="preview">
+    <div class="win">
+      <div class="win-bar"><i></i><i></i><i></i><span class="t">ZTO</span></div>
+      <div class="win-body">
+        <div class="win-side">
+          <div class="tab" data-tab="1" data-i18n="tabAcc">계정 인벤토리</div>
+          <div class="tab" data-tab="2" data-i18n="tabStore">앱 스토어 관리</div>
+          <div class="tab" data-tab="3" data-i18n="tabSocial">소셜미디어 관리</div>
+        </div>
+        <div class="panes">
+          <!-- 1 계정 -->
+          <div class="pane" data-pane="1">
+            <img class="real" src="/assets/shot-accounts.png" alt="" />
+            <div class="sketch">
+              <div class="p-tiles">
+                <div class="p-tile"><b>7</b><span data-i18n="ptAcc">계정</span></div>
+                <div class="p-tile"><b>14</b><span data-i18n="ptSvc">서비스</span></div>
+                <div class="p-tile"><b>3</b><span data-i18n="ptBrand">브랜드</span></div>
+              </div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#8b5cf6,#c084fc)">M</span><span>studio@mygame.dev<br /><span class="m" data-i18n="pm1">Play Console 소유 · 결제</span></span><span class="p-svc"><i style="color:#8ab4f8">G</i><i style="color:#e8e8ef">X</i><i style="color:#f08ba0">I</i></span></div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#f472b6,#fb7185)">L</span><span>hello@example.app<br /><span class="m" data-i18n="pm2">App Store Connect · 문의</span></span><span class="p-svc"><i style="color:#7cb8ff">A</i><i style="color:#e8e8ef">T</i></span></div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#34d399,#22d3ee)">D</span><span>dan@personal<br /><span class="m" data-i18n="pm3">개인 — 브랜드와 분리</span></span><span class="p-svc"><i style="color:#8ab4f8">G</i><i style="color:#e8e8ef">X</i></span></div>
+            </div>
+          </div>
+          <!-- 2 스토어 -->
+          <div class="pane" data-pane="2">
+            <img class="real" src="/assets/shot-store.png" alt="" />
+            <div class="sketch">
+              <div class="p-chips"><span class="on">My Game</span><span>Example</span><span>+</span></div>
+              <div class="p-seg"><span class="on">Android</span><span>iOS</span></div>
+              <div class="p-row"><i></i><span class="k" data-i18n="pk1">설정</span><span data-i18n="pv1">앱 콘텐츠 선언 완료</span></div>
+              <div class="p-row"><i></i><span class="k" data-i18n="pk2">메타</span><span>en-US · ko-KR · ja-JP</span></div>
+              <div class="p-row"><i></i><span class="k" data-i18n="pk3">자산</span><span data-i18n="pv3">아이콘 · 스크린샷 8컷</span></div>
+              <div class="p-row"><i></i><span class="k">IAP</span><span data-i18n="pv4">2종 실황 · 구독</span></div>
+              <div class="p-row"><i></i><span class="k" data-i18n="pk5">릴리스</span><span data-i18n="pv5">0.1.4 · 클로즈드 테스트</span></div>
+            </div>
+          </div>
+          <!-- 3 소셜 -->
+          <div class="pane" data-pane="3">
+            <img class="real" src="/assets/shot-social.png" alt="" />
+            <div class="sketch">
+              <div class="p-draft" data-i18n="pDraft">14개월. 반려 3번. 앱 1개.
+
+오늘 양쪽 스토어에 올라갔습니다 — 혼자 만든 턴제 RPG.</div>
+              <div class="p-bub" data-i18n="pBub"><b>AI</b> — 첫 줄 좋아요. 마지막에 좋아요 부탁은 빼세요. 이야기가 이미 그걸 벌어놨어요.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="steps">
+    <div class="step" data-step="1" id="accounts">
+      <div class="num">01 · <span data-i18n="numAcc">계정 인벤토리</span></div>
+      <h2 data-i18n="accTitle">"이거… 무슨 아이디로 가입했더라?"</h2>
+      <p class="desc" data-i18n="accSub">
+        앱마다 많은 계정을 필요로 합니다. Gmail, X, Instagram, Threads, TikTok —
+      </p>
+      <ul class="pts">
+        <li data-i18n="a1"><b>계정마다 용도 메모</b> — 왜 만들었는지, 어디 연결돼 있는지를 옆에 적어둡니다.</li>
+        <li data-i18n="a2"><b>비밀번호는 OS 키체인에</b> — ZTO 파일엔 없습니다. 볼 때마다 Touch ID 인증을 거칩니다.</li>
+        <li data-i18n="a3"><b>서버도 가입도 없음</b> — 전부 이 컴퓨터 안에서 보관돼요.</li>
+      </ul>
+    </div>
+
+    <div class="step" data-step="2" id="stores">
+      <div class="num">02 · <span data-i18n="numStore">앱 스토어 관리</span></div>
+      <h2 data-i18n="stTitle">앱이 늘어도, 관리는 하나로</h2>
+      <p class="desc" data-i18n="stSub">
+        Play Console과 App Store Connect를 오가며 같은 일을 두 번씩 하는 거 힘드시죠?
+        이제 ZTO 하나로 모든 설정을 관리하세요.
+      </p>
+      <ul class="pts">
+        <li data-i18n="s1"><b>모아서, 확인하고, 한 번에 수정</b></li>
+        <li data-i18n="s3"><b>수정한 히스토리도 다 기록돼요</b></li>
+      </ul>
+    </div>
+
+    <div class="step" data-step="3" id="ai">
+      <div class="num">03 · <span data-i18n="numAi">AI 패널</span></div>
+      <h2 data-i18n="aiTitle">당신을 처음 보는 AI에게, 그만 설명하세요</h2>
+      <p class="desc" data-i18n="aiSub">
+        캡션 하나 쓰려고 매번 "내 앱은 이런 거고요…"부터 시작하고 있진 않나요.
+        ZTO의 AI는 이미 압니다 — 어떤 앱인지, 어떤 계정으로 뭘 하는지, 지난주에 뭘 바꿨는지.
+      </p>
+      <ul class="pts">
+        <li data-i18n="ai1"><b>히스토리가 곧 컨텍스트</b> — 조언이 일반론이 아니라 당신 얘기가 됩니다.</li>
+        <li data-i18n="ai2"><b>허락할 때만 읽습니다</b> — 화면 읽기는 기본이 꺼진 스위치입니다.</li>
+        <li data-i18n="ai3"><b>내 AI, 또는 우리 AI</b> — 쓰던 구독·키를 연결하거나, AI 포함 요금제를 쓰거나.</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 한 줄 ============ -->
+<div class="quote">
+  <p data-i18n="thBig">
+    앱 만들 때마다 늘어나는 관리 포인트, <em>이제 하나로 관리하세요.</em>
+  </p>
+</div>
+
+<!-- ============ 요금제 ============ -->
+<section id="pricing" class="sec" style="text-align:center">
+  <h2 data-i18n="priceTitle">요금제</h2>
+  <p class="desc" style="margin:0 auto" data-i18n="priceSub">같은 앱, 두 가지. AI를 어디서 가져오느냐만 다릅니다.</p>
+  <div class="plans">
+    <div class="plan">
+      <div class="kind" data-i18n="planByo">내 AI 연결</div>
+      <div class="price">$5 <span data-i18n="perMo">/ 월</span></div>
+      <div class="yr" data-i18n="yr5">연 $50 — 2개월 무료</div>
+      <ul>
+        <li data-i18n="f1">모든 기능</li>
+        <li data-i18n="f2">쓰던 API 키나 구독 그대로</li>
+        <li data-i18n="f3">macOS · Windows</li>
+      </ul>
+    </div>
+    <div class="plan hi">
+      <div class="kind" data-i18n="planPlus">AI 포함</div>
+      <div class="price">$15 <span data-i18n="perMo2">/ 월</span></div>
+      <div class="yr" data-i18n="yr15">연 $150 — 2개월 무료</div>
+      <ul>
+        <li data-i18n="f4">모든 기능</li>
+        <li data-i18n="f5">키 발급도, 두 번째 청구서도 없이</li>
+        <li data-i18n="f6">macOS · Windows</li>
+      </ul>
+    </div>
+  </div>
+  <p class="note" style="max-width:680px;margin:16px auto 0;text-align:left" data-i18n="trialNote">
+    <strong>3일 전체 기능 체험.</strong> 시계는 설치가 아니라 스토어를 처음 연결한 순간부터 갑니다 —
+    서비스 계정 키 만드는 시간에 체험이 깎이면 안 되니까요.
+  </p>
+</section>
+
+<!-- ============ 데이터 ============ -->
+<section id="data" class="sec">
+  <h2 data-i18n="dataTitle">내 데이터는 어디에 있나</h2>
+  <p class="desc" data-i18n="dataSub">ZTO는 로컬 앱입니다. ZTO 서버도, 만들 계정도 없습니다.</p>
+  <table>
+    <tr><td data-i18n="d1t">계정 메모 · 앱 시트 · 스토어 기록</td><td data-i18n="d1d">이 컴퓨터 안에만</td></tr>
+    <tr><td data-i18n="d2t">비밀번호 암호화 키</td><td data-i18n="d2d">OS 키체인 — macOS Keychain, Windows DPAPI</td></tr>
+    <tr><td data-i18n="d3t">저장된 비밀번호</td><td data-i18n="d3d">암호문으로만. 볼 때마다 생체 인증을 거칩니다.</td></tr>
+    <tr><td data-i18n="d4t">AI 대화</td><td data-i18n="d4d">고른 제공자에게 직접 전송</td></tr>
+  </table>
+  <p class="note" style="margin-top:22px" data-i18n="dataNote">
+    스토어 API 호출과 AI 요청 말고는 네트워크를 쓰지 않습니다. 사용 통계 수집도 없습니다.
+  </p>
+</section>
+
+<!-- ============ 윈도우 ============ -->
+<section id="windows" class="sec">
+  <h2 data-i18n="winTitle">Windows에서 뜨는 경고에 대해</h2>
+  <p class="note" style="margin-top:22px" data-i18n="winBody">
+    <strong>macOS 빌드는 애플 공증을 거쳐</strong> 경고 없이 열립니다.
+    <strong>Windows 설치 파일은 아직 코드 서명이 없어</strong> 첫 실행에 "Windows의 PC 보호"가 뜹니다.
+    서명이 없다는 안내이지 악성코드 탐지가 아닙니다 — 인증서는 매년 비용이 들어서 아직 안 샀을 뿐이에요.
+    <strong>추가 정보 → 실행</strong>을 누르면 Windows가 기억합니다.
+    릴리스마다 SHA-256 체크섬을 올리니 직접 검증할 수도 있습니다.
+  </p>
+</section>
+
+<div class="ending">
+  <p class="end-h" data-i18n="endH">ZTO에서 전부 관리하세요</p>
+  <div class="cta">
+    <a class="btn" href="mailto:libertas.kr@gmail.com?subject=ZTO%20%EC%B6%9C%EC%8B%9C%20%EC%95%8C%EB%A6%BC%20%EC%8B%A0%EC%B2%AD" data-i18n="endCta">출시되면 알려주세요</a>
+  </div>
+  <p class="fine" data-i18n="endFine">macOS · Windows · 3일 전체 기능 체험</p>
+</div>
+
+<footer class="wrap">
+  <div class="footc">
+    <div class="foot-grid">
+      <div>
+        <div class="foot-brand">
+          <svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="25" cy="32" r="13" fill="none" stroke="currentColor" stroke-width="7"/><rect x="47.5" y="15.5" width="7" height="33" rx="3.5" fill="currentColor"/></svg>
+          ZTO
+        </div>
+        <p class="foot-desc" data-i18n="footDesc">새 앱을 낼 때마다 늘어나는 관리 포인트 — 계정, 양대 앱스토어, 홍보 글까지 한 곳에서. 로컬에서 돌아가고, 서버가 없습니다.</p>
+      </div>
+      <div>
+        <div class="foot-h" data-i18n="footProduct">제품</div>
+        <a href="#pricing" data-i18n="footPricing">요금제</a>
+        <a href="#data" data-i18n="footData">내 데이터는 어디에</a>
+        <a href="#windows" data-i18n="footWin">Windows 경고 안내</a>
+        <a href="mailto:libertas.kr@gmail.com" data-i18n="footContact">문의하기</a>
+      </div>
+      <div>
+        <div class="foot-h" data-i18n="footFollow">FOLLOW THE MAKER</div>
+        <a href="https://www.threads.net/@build_useful" target="_blank" rel="noopener"><span class="foot-ic">@</span>Threads @build_useful</a>
+        <a href="https://x.com/build_useful" target="_blank" rel="noopener"><span class="foot-ic">𝕏</span>X @build_useful</a>
+        <p class="foot-note" data-i18n="footNote">만드는 과정을 공개하고 있어요. 팔로우해 주시면 큰 힘이 됩니다 🙌</p>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <span data-i18n="footRights">© 2026 ZTO · DaeHyun Nam. All rights reserved.</span>
+      <span class="foot-socials">
+        <a href="https://www.threads.net/@build_useful" target="_blank" rel="noopener" aria-label="Threads">@</a>
+        <a href="https://x.com/build_useful" target="_blank" rel="noopener" aria-label="X">𝕏</a>
+      </span>
+    </div>
+  </div>
+</footer>
+
+</div>
+
+<script>
+
+  // 스토리 스크롤 — 화면 중앙에 온 스텝에 맞춰 미리보기의 탭·페인이 넘어간다.
+  (() => {
+    const steps=[...document.querySelectorAll(".step")];
+    const tabs=[...document.querySelectorAll(".tab")];
+    const panes=[...document.querySelectorAll(".pane")];
+    if(!steps.length) return;
+    function activate(n){
+      tabs.forEach(t=>t.classList.toggle("on",t.dataset.tab===n));
+      panes.forEach(p=>p.classList.toggle("on",p.dataset.pane===n));
+      steps.forEach(st=>st.classList.toggle("on",st.dataset.step===n));
+    }
+    activate("1");
+    const io=new IntersectionObserver(es=>{
+      es.forEach(e=>{ if(e.isIntersecting) activate(e.target.dataset.step); });
+    },{rootMargin:"-42% 0px -42% 0px"});
+    steps.forEach(st=>io.observe(st));
+    // 진짜 스크린샷이 있으면 스케치 대신 그걸 보여준다
+    panes.forEach(p=>{
+      const img=p.querySelector("img.real");
+      img.addEventListener("load",()=>p.classList.add("has-img"));
+      if(img.complete&&img.naturalWidth>0)p.classList.add("has-img");
+    });
+  })();
+
+  // 스크린샷이 실제로 있으면 프레임을 켠다 — 깨진 이미지 프레임을 보여주느니 없는 게 낫다
+  document.querySelectorAll(".shot").forEach((f) => {
+    const img = f.querySelector("img");
+    img.addEventListener("load", () => { f.hidden = false; });
+    if (img.complete && img.naturalWidth > 0) f.hidden = false;
+  });
+
+  // ko/en — 한국어가 원문(마크업), 영어는 여기. 로드 시 DOM에서 KO 스냅샷을 떠서 중복이 없다.
+  (() => {
+    const EN = {
+      navAccounts: "Accounts",
+      footDesc: "Every new app adds more to manage — accounts, both app stores, promo posts. One place for all of it. Runs locally, no server.",
+      footProduct: "Product", footPricing: "Pricing", footData: "Where your data lives",
+      footWin: "About the Windows warning", footContact: "Contact",
+      footFollow: "FOLLOW THE MAKER",
+      footNote: "Building in public — a follow means a lot 🙌",
+      footRights: "© 2026 ZTO · DaeHyun Nam. All rights reserved.",
+      endH: "Run it all from ZTO",
+      endCta: "Tell me when it launches",
+      endFine: "macOS · Windows · 3-day full trial",
+      tabAcc: "Accounts", tabStore: "App Stores", tabSocial: "Social",
+      ptAcc: "accounts", ptSvc: "services", ptBrand: "brands",
+      pm1: "Play Console owner · billing", pm2: "App Store Connect · support", pm3: "Personal — kept separate",
+      pk1: "Settings", pv1: "declarations complete",
+      pk2: "Listing", pk3: "Assets", pv3: "icon · 8 screenshots",
+      pv4: "2 live · subscription", pk5: "Release", pv5: "0.1.4 · closed testing",
+      pDraft: "14 months. 3 rejections. 1 app.\n\nLive on both stores today — a turn-based RPG built alone.",
+      pBub: "<b>AI</b> — Good hook. Cut the like-request at the end; the story already earned it.",
+      a1: "<b>A note on every account</b> — why it exists and what it's connected to, written next to it.",
+      a2: "<b>Passwords stay in the OS keychain</b> — never in ZTO's files. Viewing one passes Touch ID.",
+      a3: "<b>No server, no signup</b> — everything stays on this computer.",
+      s1: "<b>Stage, confirm, apply — in one batch</b>",
+      s3: "<b>Every change is recorded</b>",
+      ai1: "<b>History is the context</b> — advice about you, not about apps in general.",
+      ai2: "<b>Reads only when you allow it</b> — page-reading is a switch that starts off.",
+      ai3: "<b>Your AI, or ours</b> — connect your subscription or key, or take the plan with AI included.",
+ navStores: "App Stores", navAi: "AI", navPricing: "Pricing",
+      navCta: "Get launch news",
+      h1q: "Every new app you ship<br />piles on more to manage.",
+      h1a: "Run it all from ZTO",
+      lede: "Your accounts, your marketing history, both app stores — all managed in one place.",
+      ctaMain: "Tell me when it launches", ctaSub: "Pricing",
+      fine: "macOS · Windows · 3-day full trial · no card",
+
+      numAcc: "Account inventory",
+      accTitle: "“Wait — which ID did I sign up with?”",
+      accSub: "Every app needs its own accounts. Gmail, X, Instagram, Threads, TikTok —",
+      a1t: "A note on every account", a1d: "Why it exists and what it's connected to, written next to it — so the answer isn't only in your head.",
+      a2t: "Passwords stay in the OS", a2d: "ZTO's files hold no passwords. The key lives in the system keychain, and viewing one passes Touch ID every time.",
+      a3t: "No server, no signup", a3d: "Everything stays on this computer. Nothing to sync, no account to create.",
+
+      numStore: "App Store manager",
+      stTitle: "More apps, one place to manage",
+      stSub: "Tired of doing everything twice — once in Play Console, once in App Store Connect? Do it once, in ZTO.",
+      s1t: "Staged, confirmed, applied", s1d: "Only your changes queue up, pass a two-step confirmation, and go out at once. Results are reported per item.",
+      s2t: "It admits what it can't do", s2d: "Settings with no API open in the real console — with an AI beside you that knows why you came.",
+      s3t: "The history stores don't keep", s3d: "Every read is snapshotted, so you can see what changed and when.",
+
+      numAi: "AI panel",
+      aiTitle: "Stop introducing yourself to an AI that forgets",
+      aiSub: "Writing one caption shouldn't start with “so, my app is…” every time. ZTO's AI already knows — which app, which account, what changed last week. Set up as a growth marketer, it reads the draft you're actually writing.",
+      ai1t: "History is the context", ai1d: "Apps, accounts and store records live in one place, so the advice is about you — not about apps in general.",
+      ai2t: "Reads only when you allow it", ai2d: "Letting the AI see the page is a switch that starts off. Your feed holds other people's posts and DMs.",
+      ai3t: "Your AI, or ours", ai3d: "Connect the Claude/ChatGPT subscription or API key you already have — or take the plan where it's included.",
+
+      thBig: "Every app you build adds more to manage. <em>Now it all lives in one place.</em>",
+
+      priceTitle: "Pricing", priceSub: "Same app, two plans. The difference is where the AI comes from.",
+      planByo: "Bring your own AI", perMo: "/ month", yr5: "$50 a year — 2 months free",
+      f1: "Every feature", f2: "Your existing key or subscription", f3: "macOS · Windows",
+      planPlus: "AI included", perMo2: "/ month", yr15: "$150 a year — 2 months free",
+      f4: "Every feature", f5: "No keys, no second bill", f6: "macOS · Windows",
+      trialNote: "<strong>3-day full trial.</strong> The clock starts when you first connect a store — not at install. Making a service account key takes an afternoon, and that shouldn't count against you.",
+
+      dataTitle: "Where your data lives", dataSub: "ZTO is a local app. No ZTO server, no account to create.",
+      d1t: "Account notes · app sheets · store snapshots", d1d: "On this computer only",
+      d2t: "Password encryption key", d2d: "OS keychain — macOS Keychain, Windows DPAPI",
+      d3t: "Stored passwords", d3d: "Ciphertext only. Viewing one passes biometric auth every time",
+      d4t: "AI conversations", d4d: "Sent straight to the provider you chose",
+      dataNote: "Apart from store API calls and AI requests, ZTO makes no network calls. No telemetry.",
+
+      winTitle: "About the Windows warning",
+      winBody: "<strong>macOS builds are notarized by Apple</strong> and open with no warning. <strong>The Windows installer isn't code-signed yet</strong>, so its first run shows “Windows protected your PC”. That's a missing-signature notice, not a malware detection — the certificate costs money every year and we haven't bought one yet. Click <strong>More info → Run anyway</strong> and Windows remembers. Every release ships with SHA-256 checksums you can verify.",
+      footTag: "ZTO — every new app, managed from here"
+    };
+
+    const els = [...document.querySelectorAll("[data-i18n]")];
+    const KO = {};
+    els.forEach((el) => { KO[el.dataset.i18n] = el.innerHTML; });
+
+    function apply(lang) {
+      const d = lang === "en" ? EN : KO;
+      els.forEach((el) => { const v = d[el.dataset.i18n]; if (v != null) el.innerHTML = v; });
+      document.documentElement.lang = lang;
+      document.querySelectorAll(".lang button").forEach((b) => b.classList.toggle("on", b.dataset.lang === lang));
+      try { localStorage.setItem("zto-lang", lang); } catch (e) { /* private mode */ }
+    }
+    document.querySelectorAll(".lang button").forEach((b) =>
+      b.addEventListener("click", () => apply(b.dataset.lang)));
+
+    const saved = (() => { try { return localStorage.getItem("zto-lang"); } catch (e) { return null; } })();
+    apply(saved || ((navigator.language || "").toLowerCase().startsWith("ko") ? "ko" : "en"));
+  })();
+</script>
+</body>
+</html>
