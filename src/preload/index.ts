@@ -25,6 +25,7 @@ import type {
   StoreKind,
   StoreSnapshotEntry
 } from '../shared/launch-types'
+import type { LicenseInfo } from '../shared/license-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
 
 import type {
@@ -141,6 +142,12 @@ const api = {
       ipcRenderer.on('console:progress', l)
       return () => ipcRenderer.removeListener('console:progress', l)
     }
+  },
+  // 라이선스 (SPEC §8) — 검증은 Lemon Squeezy 공개 API를 main이 직접 부른다(서버 없음)
+  license: {
+    info: (): Promise<LicenseInfo> => ipcRenderer.invoke('license:info'),
+    activate: (key: string): Promise<LicenseInfo> => ipcRenderer.invoke('license:activate', key),
+    deactivate: (): Promise<LicenseInfo> => ipcRenderer.invoke('license:deactivate')
   },
   launch: {
     // 자산 파일 고르기 — main이 규격까지 검증해서 돌려준다(통과 못 하면 ok:false + 사유)

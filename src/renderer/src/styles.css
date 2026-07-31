@@ -1169,6 +1169,15 @@ button {
   gap: 6px;
 }
 
+/* 라이선스 상태 행 — 칩 + 마스킹된 키 + 액션 */
+.lic-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 10px 0 12px;
+  flex-wrap: wrap;
+}
+
 /* 심사 중 안내 — 해결 버튼이 없는 상태다. 행동 유도 대신 사실만 말한다 */
 .version-fix.in-review {
   font-size: 12.5px;

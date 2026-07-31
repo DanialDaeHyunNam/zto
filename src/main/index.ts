@@ -18,6 +18,8 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { createHash, randomUUID } from 'crypto'
 import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
+import { hostname } from 'os'
+import { createLicense } from './license'
 import { registerBrowserIpc } from './browser'
 import { probeAppContent, pullDataSafety } from './console-sync'
 import {
@@ -82,6 +84,9 @@ const launchScript = (...seg: string[]): string => join(resourceDir(), 'scripts'
 const ANSWERS_DIR = app.isPackaged
   ? join(app.getPath('userData'), 'answers')
   : join(app.getAppPath(), 'launch', 'answers')
+
+// 라이선스 — 파일은 userData, 키는 safeStorage로 암호화해 넣는다
+const license = createLicense(join(app.getPath('userData'), 'zto-license.json'))
 
 // 전역 로컬 상태 (개발자 계정 보유 여부 등) — 비밀 없음, 메타데이터만
 const stateFile = (): string => join(app.getPath('userData'), 'zto-state.json')
@@ -2369,6 +2374,11 @@ app.whenReady().then(() => {
         feature?: AiFeature
       }
     ): Promise<AiChatResult> => {
+      // AI도 유료 기능이다. **자기 키를 쓰는 BYO여도** 앱 자체가 유료다 — 키를 넣었다고
+      // 앱값을 안 내도 되는 건 아니다(그 구분이 흐려지면 $5 티어가 존재할 이유가 없어진다)
+      if (!license.info().entitled) {
+        return { ok: false, text: '', error: 'license-required' }
+      }
       const cfg = readAiConfig()
       const provider = cfg.active
       const mode = cfg.modes[provider]
@@ -2646,6 +2656,16 @@ app.whenReady().then(() => {
     }
     return { ok: true, files }
   })
+  // ---------- 라이선스 (SPEC §8) ----------
+  // 게이트는 **쓰기와 AI만** 건다. 읽기(대시보드·계정 보기)는 열어둔다 — 체험이 끝났다고
+  // 이미 내 계정에 있는 정보를 못 보게 하는 건 인질이지 판매가 아니다.
+  ipcMain.handle('license:info', async () => await license.revalidate())
+  ipcMain.handle('license:activate', async (_e, key: string) => {
+    const name = `${hostname()} · ${process.platform}`
+    return await license.activate(key, name)
+  })
+  ipcMain.handle('license:deactivate', async () => await license.deactivate())
+
   ipcMain.handle('launch:listSheets', () => listSheets())
   ipcMain.handle('launch:checkCredentials', (_e, file: string) => checkCredentials(file))
   // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록
@@ -2827,6 +2847,7 @@ app.whenReady().then(() => {
           }
         }
         writeState({ ...readState(), lastGoogleSa: creds.path })
+        license.startTrial() // 체험 시계는 여기서 시작한다 — 준비 기간은 무료(SPEC §8.6)
         return { ok: true }
       }
       if (!creds.keyId || !creds.issuerId) {
@@ -2843,6 +2864,7 @@ app.whenReady().then(() => {
         }
       }
       writeState({ ...readState(), ascCreds: asc })
+      license.startTrial()
       return { ok: true }
     }
   )
@@ -2944,6 +2966,17 @@ app.whenReady().then(() => {
   ipcMain.handle(
     'launch:applyEdits',
     async (_e, file: string, edits: PendingEdit[]): Promise<ApplyResult[]> => {
+      // 체험 만료 + 미결제 → 항목별로 사유를 돌려준다(결과 패널이 이미 항목별 메시지를 그린다)
+      if (!license.info().entitled) {
+        return edits.map((e) => ({
+          id: e.id,
+          ok: false,
+          message:
+            appLocale === 'ko'
+              ? '체험이 끝났어요 — 설정에서 라이선스를 등록하면 적용됩니다'
+              : 'Trial ended — add a license in Settings to apply'
+        }))
+      }
       let sheet: {
         app: { packageName: string; bundleId: string }
         credentials?: {

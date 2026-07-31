@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { AiProviderId, AiProviderStatus, AiStatus } from '../../../../shared/launch-types'
+import type { LicenseInfo } from '../../../../shared/license-types'
 import { useI18n, type Locale } from '../../i18n'
 import AiUsage from './AiUsage'
 
@@ -18,6 +19,93 @@ const PROVIDER_CLI: Record<AiProviderId, string> = {
 }
 
 // ZTO 서비스 config — AI provider(BYO 2방식: 구독 CLI / API 키), 언어.
+
+// ---------- 라이선스 (SPEC §8) ----------
+// 상태를 **사실 그대로** 보여준다: 체험 중이면 남은 날짜, 등록됐으면 마스킹된 키와 마지막 확인,
+// 오프라인이면 언제까지 쓸 수 있는지. 결제 유도 문구보다 "지금 내 상태가 뭔가"가 먼저다.
+function LicenseCard(): React.JSX.Element {
+  const { m } = useI18n()
+  const [info, setInfo] = useState<LicenseInfo | null>(null)
+  const [draft, setDraft] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const load = (): void => {
+    window.zto.license.info().then(setInfo)
+  }
+  useEffect(load, [])
+
+  const activate = async (): Promise<void> => {
+    setBusy(true)
+    setInfo(await window.zto.license.activate(draft))
+    setBusy(false)
+    setDraft('')
+  }
+  const remove = async (): Promise<void> => {
+    setBusy(true)
+    setInfo(await window.zto.license.deactivate())
+    setBusy(false)
+  }
+
+  const daysLeft = (iso?: string): number =>
+    iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)) : 0
+
+  return (
+    <div className="settings-card">
+      <h2 className="settings-h2">{m.settings.licenseTitle}</h2>
+      <p className="settings-intro">{m.settings.licenseIntro}</p>
+      {!info ? (
+        <p className="settings-intro">…</p>
+      ) : info.state === 'active' ? (
+        <div className="lic-row">
+          <span className="status-chip ok">{m.settings.licenseActive}</span>
+          <code className="cred-path">{info.keyMasked}</code>
+          {info.plan && <span className="iap-kind">{info.plan === 'plus' ? 'Plus' : 'BYO'}</span>}
+          <button className="ghost-btn mini" disabled={busy} onClick={remove}>
+            {m.settings.licenseRemove}
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* 체험은 **첫 스토어 연결부터** 센다 — 아직 연결 전이면 시작조차 안 한 것이다 */}
+          <div className="lic-row">
+            {info.trialActive ? (
+              <span className="status-chip warn">
+                {m.settings.licenseTrialLeft.replace('{d}', String(daysLeft(info.trialEndsAt)))}
+              </span>
+            ) : info.trialStartedAt ? (
+              <span className="status-chip off">{m.settings.licenseTrialOver}</span>
+            ) : (
+              <span className="status-chip off">{m.settings.licenseTrialNotStarted}</span>
+            )}
+          </div>
+          <div className="cred-file">
+            <input
+              className="email-input"
+              placeholder={m.settings.licensePlaceholder}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+            />
+            <button
+              className="choice small active"
+              disabled={!draft.trim() || busy}
+              onClick={activate}
+            >
+              {busy ? m.settings.licenseChecking : m.settings.licenseActivate}
+            </button>
+          </div>
+          {info.error && <div className="asset-edit-err">{m.settings.licenseErrors[info.error] ?? info.error}</div>}
+        </>
+      )}
+      {/* 오프라인 유예는 숨기지 않는다 — 언제 잠기는지 모르는 게 가장 나쁘다 */}
+      {info?.state === 'active' && info.offlineUntil && (
+        <p className="settings-intro">
+          {m.settings.licenseOffline.replace('{d}', String(daysLeft(info.offlineUntil)))}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function SettingsPage(): React.JSX.Element {
   const { m, locale, setLocale } = useI18n()
   const [ai, setAi] = useState<AiStatus | null>(null)
@@ -160,6 +248,8 @@ export default function SettingsPage(): React.JSX.Element {
   return (
     <section>
       <h1>{m.settings.title}</h1>
+
+      <LicenseCard />
 
       <div className="settings-card">
         <h2 className="settings-h2">{m.settings.aiTitle}</h2>
