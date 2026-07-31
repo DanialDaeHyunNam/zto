@@ -1169,6 +1169,18 @@ button {
   gap: 6px;
 }
 
+/* 계정 식별자 — 편집 아닐 땐 읽는 값으로 */
+.acc-id-view {
+  font-size: 13px;
+  color: var(--text);
+  padding: 2px 0 6px;
+}
+
+.id-err {
+  font-size: 11.5px;
+  color: var(--warn);
+}
+
 /* 토글 스위치 */
 .switch-row {
   display: inline-flex;
@@ -2921,6 +2933,59 @@ button {
   color: var(--muted);
   font-size: 11px;
   flex-shrink: 0;
+}
+
+/* 자격증명 등록 — 발급(콘솔로)과 등록(파일)이 한 화면. 컨테이너는 모달 하나, 안은 행 */
+.cred-modal {
+  max-width: 560px;
+}
+
+.cred-step {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.cred-step.col {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.cred-step-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.cred-file {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cred-path {
+  font-size: 11.5px;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cred-ids {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.cred-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
 }
 
 /* 편집 범위 표 — 컨테이너는 모달 하나, 안은 행 + 얇은 구분선(카드 속 카드 금지) */

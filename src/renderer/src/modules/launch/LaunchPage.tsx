@@ -16,6 +16,7 @@ import type { Messages } from '../../i18n/en'
 import { PlatformIcon } from '../../platform-icons'
 import AppDashboard from './AppDashboard'
 import EditScope from './EditScope'
+import CredentialSetup from './CredentialSetup'
 
 type IapChoice = 'undecided' | 'yes' | 'no'
 
@@ -584,35 +585,17 @@ function ApplyStep({
 // 그래서 [연결]도 다른 콘솔 작업과 같은 모드 B로 흐른다: 내부 브라우저 + 옆에서 거드는 AI.
 function ApiStatusBar(): React.JSX.Element {
   const { m } = useI18n()
-  const overlay = useBrowserOverlay()
   const [status, setStatus] = useState<ApiStatus | null>(null)
+  const [setup, setSetup] = useState<StoreKind | null>(null)
   useEffect(() => {
     window.zto.launch.apiStatus().then(setStatus)
   }, [])
-
-  const connect = (platform: 'android' | 'ios', url: string, exact: boolean): void => {
-    overlay.open(url, {
-      copilot: true,
-      task: {
-        goal: platform === 'android' ? m.launch.apiGoalPlay : m.launch.apiGoalAsc,
-        platform,
-        why: platform === 'android' ? m.launch.apiWhyPlay : m.launch.apiWhyAsc,
-        exact
-      }
-    })
-    overlay.setGuide({
-      text: platform === 'android' ? m.launch.apiGuidePlay : m.launch.apiGuideAsc,
-      tone: 'ask'
-    })
-  }
 
   const row = (
     iconId: string,
     label: string,
     st: { connected: boolean; detail: string } | undefined,
-    consoleUrl: string,
-    platform: 'android' | 'ios',
-    exact: boolean
+    store: StoreKind
   ): React.JSX.Element => (
     <div className="api-stat" title={st?.detail}>
       <span className="api-ic">
@@ -625,10 +608,7 @@ function ApiStatusBar(): React.JSX.Element {
       ) : st?.connected ? (
         <span className="dash-dot g" />
       ) : (
-        <button
-          className="link-btn api-connect"
-          onClick={() => connect(platform, consoleUrl, exact)}
-        >
+        <button className="link-btn api-connect" onClick={() => setSetup(store)}>
           {m.launch.apiConnect}
         </button>
       )}
@@ -637,23 +617,15 @@ function ApiStatusBar(): React.JSX.Element {
 
   return (
     <div className="api-status">
-      {/* Play는 API 액세스 화면 URL에 개발자 id가 들어가 우리가 조립할 수 없다 → 홈까지만(exact=false).
-          ASC는 계정 단위 고정 경로라 그 화면으로 바로 간다(exact=true) */}
-      {row(
-        'play-console',
-        m.launch.apiPlay,
-        status?.play,
-        'https://play.google.com/console',
-        'android',
-        false
-      )}
-      {row(
-        'app-store-connect',
-        m.launch.apiApple,
-        status?.apple,
-        'https://appstoreconnect.apple.com/access/integrations/api',
-        'ios',
-        true
+      {row('play-console', m.launch.apiPlay, status?.play, 'play')}
+      {row('app-store-connect', m.launch.apiApple, status?.apple, 'apple')}
+      {/* 발급(콘솔로)과 등록(파일 선택)이 한 화면에 — 발급까지 데려다 놓고 등록에서 막히면 반쪽이다 */}
+      {setup && (
+        <CredentialSetup
+          store={setup}
+          onClose={() => setSetup(null)}
+          onSaved={() => window.zto.launch.apiStatus().then(setStatus)}
+        />
       )}
     </div>
   )

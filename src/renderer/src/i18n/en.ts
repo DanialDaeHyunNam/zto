@@ -132,6 +132,22 @@ export const en = {
       'Play Console is open. Go to Settings → API access, create a service account and download its JSON key — the AI on the right walks you through each step. Keep the file somewhere safe and remember its path.',
     apiGuideAsc:
       'This is the App Store Connect API keys screen. The .p8 file can be downloaded **only once**, so save it immediately and note the Key ID and Issuer ID too.',
+    credTitlePlay: 'Connect the Play API',
+    credTitleAsc: 'Connect the App Store Connect API',
+    credIntroPlay:
+      'ZTO needs a service account key (JSON) to read and write the store. Create one if you have none, or register the one you have.',
+    credIntroAsc:
+      'ZTO needs an API key (.p8) plus Key ID and Issuer ID. Create one if you have none, or register the one you have.',
+    credStepIssue: "I don't have a key yet",
+    credGoIssue: 'Create one in the console',
+    credStepRegister: 'I already have a key',
+    credPickJson: 'Choose the JSON file',
+    credPickP8: 'Choose the .p8 file',
+    credKeyId: 'Key ID',
+    credIssuerId: 'Issuer ID',
+    credVerifyNote: 'We check that a token is actually issued before saving.',
+    credSave: 'Verify and save',
+    credVerifying: 'Checking…',
     apiConnect: 'Connect',
     apiChecking: 'Checking…',
     stepDevAccounts: 'Store developer accounts',
@@ -458,6 +474,16 @@ export const en = {
     todoChecklist: 'Manual console step checklist (L2/L3)'
   },
   accounts: {
+    identifier: 'Email · ID',
+    idEdit: 'Change',
+    idRenameSecrets: 'Saved passwords and access history move with it — you will authenticate once.',
+    idErrors: {
+      duplicate: 'Another account already uses this email/ID',
+      auth: 'Authentication was cancelled — nothing changed',
+      empty: 'Enter a value',
+      'not-found': 'Account not found',
+      failed: 'Could not change it'
+    } as Record<string, string>,
     title: 'Account Inventory',
     subtitle:
       "All your accounts at a glance — accounts aren't a burden when each one's reason to exist is written down. Passwords are never stored here (SPEC §7.3).",

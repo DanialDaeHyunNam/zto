@@ -171,6 +171,14 @@ const api = {
     dashboard: (file: string): Promise<DashboardData> =>
       ipcRenderer.invoke('launch:dashboard', file),
     apiStatus: (): Promise<ApiStatus> => ipcRenderer.invoke('launch:apiStatus'),
+    // 자격증명 등록 — 고르고, **검증에 통과해야** 저장된다
+    pickCredential: (store: StoreKind): Promise<{ path: string }> =>
+      ipcRenderer.invoke('launch:pickCredential', store),
+    saveCredential: (
+      store: StoreKind,
+      creds: { path: string; keyId?: string; issuerId?: string }
+    ): Promise<{ ok: boolean; error?: string }> =>
+      ipcRenderer.invoke('launch:saveCredential', store, creds),
     dashboardCached: (file: string): Promise<DashboardData | null> =>
       ipcRenderer.invoke('launch:dashboardCached', file),
     snapshots: (file: string): Promise<StoreSnapshotEntry[]> =>
@@ -210,6 +218,12 @@ const api = {
       ipcRenderer.invoke('accounts:setApps', id, apps),
     setMemo: (id: string, memo: string): Promise<Account[]> =>
       ipcRenderer.invoke('accounts:setMemo', id, memo),
+    // 개명은 비밀번호 키·접근 로그까지 함께 옮긴다 → 성공 여부와 사유를 돌려준다
+    rename: (
+      id: string,
+      email: string
+    ): Promise<{ ok: boolean; error?: string; accounts: Account[] }> =>
+      ipcRenderer.invoke('accounts:rename', id, email),
     delete: (id: string): Promise<Account[]> => ipcRenderer.invoke('accounts:delete', id)
   },
   secrets: {

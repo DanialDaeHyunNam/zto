@@ -67,7 +67,19 @@ import {
   type StoreSnapshotEntry
 } from '../shared/launch-types'
 
-const ANSWERS_DIR = join(app.getAppPath(), 'launch', 'answers')
+// ---------- 패키징 경로 ----------
+// 개발과 배포에서 파일이 사는 곳이 다르다. 이걸 안 나누면 패키징한 앱이 **조용히** 망가진다:
+//  ① 스크립트·설문은 asar 안으로 들어가는데, 스크립트는 별도 프로세스로 실행되므로
+//     asar 밖(extraResources)에 있어야 한다 → `resourceDir()`
+//  ② 답안 시트는 **쓰기** 대상이다. 앱 번들 안은 서명이 걸려 있어 macOS가 쓰기를 막으므로
+//     반드시 userData로 간다 → `ANSWERS_DIR`
+const resourceDir = (): string =>
+  app.isPackaged ? join(process.resourcesPath, 'launch') : join(app.getAppPath(), 'launch')
+const launchScript = (...seg: string[]): string => join(resourceDir(), 'scripts', ...seg)
+
+const ANSWERS_DIR = app.isPackaged
+  ? join(app.getPath('userData'), 'answers')
+  : join(app.getAppPath(), 'launch', 'answers')
 
 // 전역 로컬 상태 (개발자 계정 보유 여부 등) — 비밀 없음, 메타데이터만
 const stateFile = (): string => join(app.getPath('userData'), 'zto-state.json')
@@ -655,7 +667,7 @@ const tokenCache = new Map<string, { tok: string; exp: number }>()
 async function googleTokenFor(saPath: string): Promise<string | null> {
   const hit = tokenCache.get('g:' + saPath)
   if (hit && Date.now() < hit.exp) return hit.tok
-  const tokenScript = join(app.getAppPath(), 'launch', 'scripts', 'google', 'token.js')
+  const tokenScript = launchScript('google', 'token.js')
   return await new Promise((resolve) => {
     execFile(
       process.execPath,
@@ -677,7 +689,7 @@ async function googleTokenFor(saPath: string): Promise<string | null> {
 async function ascTokenFor(asc: { keyPath: string; keyId: string; issuerId: string }): Promise<string | null> {
   const hit = tokenCache.get('a:' + asc.keyId)
   if (hit && Date.now() < hit.exp) return hit.tok
-  const script = join(app.getAppPath(), 'launch', 'scripts', 'apple', 'asc-token.js')
+  const script = launchScript('apple', 'asc-token.js')
   return await new Promise((resolve) => {
     execFile(
       process.execPath,
@@ -1926,6 +1938,12 @@ function recordStoreSnapshot(
 }
 
 function firstAscCreds(): { keyPath: string; keyId: string; issuerId: string } | null {
+  // 전역 상태에 등록된 것이 우선 — 자격증명은 앱이 아니라 브랜드 단위 하나다.
+  // 이게 없던 동안 사용자는 ASC 키를 **답안 시트 JSON에 손으로** 적어야 했다
+  const saved = readState().ascCreds as { keyPath?: string; keyId?: string; issuerId?: string } | undefined
+  if (saved?.keyPath && existsSync(saved.keyPath) && saved.keyId && saved.issuerId) {
+    return { keyPath: saved.keyPath, keyId: saved.keyId, issuerId: saved.issuerId }
+  }
   if (!existsSync(ANSWERS_DIR)) return null
   for (const f of readdirSync(ANSWERS_DIR).filter((x) => x.endsWith('.json') && !x.startsWith('_'))) {
     try {
@@ -2218,6 +2236,12 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(() => {
+  // 패키징 앱의 답안 시트는 userData에 산다(번들 안은 서명 때문에 쓰기 불가) — 없으면 만든다
+  try {
+    mkdirSync(ANSWERS_DIR, { recursive: true })
+  } catch {
+    /* 있으면 무시 */
+  }
   // userData/assets 안의 파일만 낸다 — 파일명만 받고 경로 조작은 차단한다
   protocol.handle('zto-asset', (req) => {
     const name = basename(decodeURIComponent(req.url.replace(/^zto-asset:\/\//, '').split('?')[0]))
@@ -2601,7 +2625,7 @@ app.whenReady().then(() => {
       let verified = false
       if (saPath) {
         if (!existsSync(saPath)) return { ok: false, error: 'verify-failed', detail: 'SA file not found' }
-        const tokenScript = join(app.getAppPath(), 'launch', 'scripts', 'google', 'token.js')
+        const tokenScript = launchScript('google', 'token.js')
         const tok = await new Promise<{ ok?: boolean; access_token?: string } | null>((resolve) => {
           execFile(
             process.execPath,
@@ -2696,6 +2720,61 @@ app.whenReady().then(() => {
     }
     return { play, apple }
   })
+  // 자격증명 등록 — 파일을 고르고 **토큰이 실제로 발급되는지 확인한 뒤에만** 저장한다.
+  // 검증 없이 저장하면 "연결됨"이라고 표시해놓고 첫 pull에서 터진다(화면이 거짓말한다).
+  ipcMain.handle('launch:pickCredential', async (_e, store: StoreKind) => {
+    const picked = await dialog.showOpenDialog({
+      properties: ['openFile'],
+      filters:
+        store === 'play'
+          ? [{ name: 'Service account JSON', extensions: ['json'] }]
+          : [{ name: 'App Store Connect key', extensions: ['p8'] }]
+    })
+    if (picked.canceled || !picked.filePaths[0]) return { path: '' }
+    return { path: picked.filePaths[0] }
+  })
+
+  ipcMain.handle(
+    'launch:saveCredential',
+    async (
+      _e,
+      store: StoreKind,
+      creds: { path: string; keyId?: string; issuerId?: string }
+    ): Promise<{ ok: boolean; error?: string }> => {
+      const ko = appLocale === 'ko'
+      if (!creds.path || !existsSync(creds.path)) {
+        return { ok: false, error: ko ? '파일을 찾을 수 없어요' : 'File not found' }
+      }
+      if (store === 'play') {
+        const tok = await googleTokenFor(creds.path)
+        if (!tok) {
+          return {
+            ok: false,
+            error: ko
+              ? '이 키로 토큰을 못 받았어요 — 서비스 계정 JSON이 맞는지, Play Console에서 권한을 줬는지 확인하세요'
+              : 'Could not get a token — check it is a service account JSON and has Play Console access'
+          }
+        }
+        writeState({ ...readState(), lastGoogleSa: creds.path })
+        return { ok: true }
+      }
+      if (!creds.keyId || !creds.issuerId) {
+        return { ok: false, error: ko ? 'Key ID와 Issuer ID를 입력하세요' : 'Enter Key ID and Issuer ID' }
+      }
+      const asc = { keyPath: creds.path, keyId: creds.keyId.trim(), issuerId: creds.issuerId.trim() }
+      const tok = await ascTokenFor(asc)
+      if (!tok) {
+        return {
+          ok: false,
+          error: ko
+            ? '이 키로 토큰을 못 받았어요 — .p8 파일과 Key ID·Issuer ID가 서로 맞는지 확인하세요'
+            : 'Could not get a token — check the .p8 file matches the Key ID and Issuer ID'
+        }
+      }
+      writeState({ ...readState(), ascCreds: asc })
+      return { ok: true }
+    }
+  )
   ipcMain.handle('launch:dashboardCached', (_e, file: string): DashboardData | null => {
     const d = readDashCache()[file]
     if (!d) return null
@@ -2714,7 +2793,7 @@ app.whenReady().then(() => {
   ipcMain.handle('launch:questionnaire', (_e, id: string): Questionnaire | null => {
     try {
       const safe = id.replace(/[^a-z0-9-]/g, '')
-      const p = join(app.getAppPath(), 'launch', 'questionnaires', `${safe}.json`)
+      const p = join(resourceDir(), 'questionnaires', `${safe}.json`)
       return JSON.parse(readFileSync(p, 'utf8'))
     } catch {
       return null
@@ -2722,7 +2801,7 @@ app.whenReady().then(() => {
   })
   // 설문 목록 — 설정 노드가 플랫폼별로 여러 설문 버튼을 라벨과 함께 그리도록 (질문은 안 실음)
   ipcMain.handle('launch:questionnaireList', (): QuestionnaireMeta[] => {
-    const dir = join(app.getAppPath(), 'launch', 'questionnaires')
+    const dir = join(resourceDir(), 'questionnaires')
     if (!existsSync(dir)) return []
     const out: QuestionnaireMeta[] = []
     for (const f of readdirSync(dir).filter((x) => x.endsWith('.json'))) {
@@ -2938,10 +3017,7 @@ app.whenReady().then(() => {
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
       const saPath = resolveGoogleSa(sheet)
       if (!saPath) return { ok: false, output: 'google-sa-missing' }
-      const script = join(
-        app.getAppPath(),
-        'launch',
-        'scripts',
+      const script = launchScript(
         'google',
         action === 'upsert' ? 'otp-upsert.js' : 'otp-activate.js'
       )
@@ -3024,6 +3100,64 @@ app.whenReady().then(() => {
     }
     return accounts
   })
+  // 계정 식별자(이메일/ID) 변경. **비밀번호 키와 접근 로그가 이 값을 물고 있다** —
+  // 계정 파일만 고치면 저장된 비밀번호가 고아가 되고(옛 이메일 키로 남아 영영 못 꺼냄)
+  // 접근 로그도 다른 사람 기록처럼 갈린다. 그래서 셋을 **한 번에** 옮긴다.
+  //
+  // 비밀번호가 있는 계정의 개명은 파괴적 변경이라 생체 관문을 지난다(저장·삭제와 같은 규칙).
+  ipcMain.handle(
+    'accounts:rename',
+    async (_e, id: string, email: string): Promise<{ ok: boolean; error?: string; accounts: Account[] }> => {
+      const accounts = readAccounts()
+      const account = accounts.find((a) => a.id === id)
+      const next = email.trim()
+      if (!account) return { ok: false, error: 'not-found', accounts }
+      if (!next) return { ok: false, error: 'empty', accounts }
+      if (next === account.email) return { ok: true, accounts }
+      // 같은 식별자가 이미 있으면 막는다 — 합치면 어느 쪽 비밀번호가 남는지 우리가 정하게 된다
+      if (accounts.some((a) => a.id !== id && a.email === next)) {
+        return { ok: false, error: 'duplicate', accounts }
+      }
+
+      const prefix = account.email + '::'
+      const secrets = readSecrets()
+      const keys = Object.keys(secrets).filter((k) => k.startsWith(prefix))
+      if (keys.length > 0) {
+        try {
+          await biometricGate(`${account.email} → ${next}`)
+        } catch {
+          logAccess({ email: account.email, appId: '', action: 'update', ok: false })
+          return { ok: false, error: 'auth', accounts }
+        }
+        for (const k of keys) {
+          secrets[next + '::' + k.slice(prefix.length)] = secrets[k]
+          delete secrets[k]
+        }
+        writeSecrets(secrets)
+      }
+
+      // 접근 로그도 따라 옮긴다 — 안 옮기면 "내가 연 게 맞나"를 확인할 수 없게 된다
+      try {
+        const log = JSON.parse(readFileSync(accessLogFile(), 'utf8')) as AccessLogEntry[]
+        let touched = false
+        for (const e of log) {
+          if (e.email === account.email) {
+            e.email = next
+            touched = true
+          }
+        }
+        if (touched) writeFileSync(accessLogFile(), JSON.stringify(log, null, 2))
+      } catch {
+        /* 로그가 없으면 옮길 것도 없다 */
+      }
+
+      account.email = next
+      account.updatedAt = new Date().toISOString()
+      writeAccounts(accounts)
+      if (keys.length > 0) logAccess({ email: next, appId: '', action: 'update', ok: true })
+      return { ok: true, accounts }
+    }
+  )
   ipcMain.handle('accounts:setApps', (_e, id: string, apps: string[]): Account[] => {
     const accounts = readAccounts()
     const account = accounts.find((a) => a.id === id)

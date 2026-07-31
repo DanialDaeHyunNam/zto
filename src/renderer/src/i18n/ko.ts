@@ -134,6 +134,22 @@ export const ko: Messages = {
       'Play Console이 열렸어요. 설정 › API 액세스에서 서비스 계정을 만들고 JSON 키를 받으세요 — 오른쪽 AI가 단계마다 짚어드립니다. 받은 파일은 안전한 곳에 두시고 경로를 기억해 두세요.',
     apiGuideAsc:
       'App Store Connect API 키 화면이에요. 키를 만들면 .p8 파일은 **한 번만** 받을 수 있으니 바로 저장하시고, Key ID와 Issuer ID도 같이 적어두세요.',
+    credTitlePlay: 'Play API 연결',
+    credTitleAsc: 'App Store Connect API 연결',
+    credIntroPlay:
+      'ZTO가 스토어를 읽고 쓰려면 서비스 계정 키(JSON)가 필요해요. 아직 없으면 발급부터, 이미 있으면 바로 등록하세요.',
+    credIntroAsc:
+      'ZTO가 스토어를 읽고 쓰려면 API 키(.p8)와 Key ID · Issuer ID가 필요해요. 아직 없으면 발급부터, 이미 있으면 바로 등록하세요.',
+    credStepIssue: '아직 키가 없어요',
+    credGoIssue: '콘솔에서 발급받기',
+    credStepRegister: '이미 받은 키가 있어요',
+    credPickJson: 'JSON 파일 고르기',
+    credPickP8: '.p8 파일 고르기',
+    credKeyId: 'Key ID',
+    credIssuerId: 'Issuer ID',
+    credVerifyNote: '저장 전에 실제로 토큰이 발급되는지 확인해요.',
+    credSave: '확인하고 저장',
+    credVerifying: '확인 중…',
     apiConnect: '연결',
     apiChecking: '확인중',
     stepDevAccounts: '스토어 개발자 계정',
@@ -458,6 +474,16 @@ export const ko: Messages = {
     todoChecklist: '콘솔 수동 단계 체크리스트 (L2/L3)'
   },
   accounts: {
+    identifier: '이메일 · ID',
+    idEdit: '변경',
+    idRenameSecrets: '저장된 비밀번호와 접근 기록도 함께 옮겨져요 — 인증을 한 번 거칩니다.',
+    idErrors: {
+      duplicate: '같은 이메일·ID를 가진 계정이 이미 있어요',
+      auth: '인증이 취소돼 변경하지 않았어요',
+      empty: '값을 입력하세요',
+      'not-found': '계정을 찾을 수 없어요',
+      failed: '변경하지 못했어요'
+    } as Record<string, string>,
     title: '계정 인벤토리',
     subtitle:
       '모든 계정을 한눈에 — 존재 이유가 적혀 있으면 계정이 많아도 짐이 아닙니다. 비밀번호는 여기 저장되지 않습니다 (SPEC §7.3).',

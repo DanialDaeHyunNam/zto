@@ -1,0 +1,50 @@
+# ZTO 패키징 — mac(서명·공증) / win
+#
+# ⚠️ 핵심 두 가지가 이 파일에 걸려 있다:
+#  ① `launch/scripts`·`launch/questionnaires`는 **asar 밖**(extraResources)이어야 한다.
+#     스크립트는 별도 프로세스(ELECTRON_RUN_AS_NODE)로 실행되므로 아카이브 안에 있으면 못 찾는다.
+#  ② 답안 시트(answers)는 **번들에 넣지 않는다**. 쓰기 대상이라 userData로 가고(main이 처리),
+#     애초에 앱별 정보를 배포물에 담지 않는다는 원칙(SPEC §7.3)과도 맞는다.
+appId: com.zto.desktop
+productName: ZTO
+copyright: © Dan
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: launch/scripts
+    to: launch/scripts
+  - from: launch/questionnaires
+    to: launch/questionnaires
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+    - target: zip # 자동 업데이트(후속)가 zip을 쓴다
+      arch: [arm64, x64]
+  # 공증에 필요 — 하드닝 런타임 + 엔타이틀먼트. Electron은 JIT를 쓰므로 허용 항목이 필요하다
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  # 공증: 환경변수 APPLE_ID · APPLE_APP_SPECIFIC_PASSWORD · APPLE_TEAM_ID 필요
+  notarize: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  # 코드 서명 인증서가 없으면 미서명으로 나간다(설치 시 SmartScreen 경고).
+  # 인증서가 생기면 CSC_LINK · CSC_KEY_PASSWORD 환경변수로 붙인다
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

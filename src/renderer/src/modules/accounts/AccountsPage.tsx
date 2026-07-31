@@ -471,12 +471,14 @@ function AccountRow({
   showMemo,
   onSetApps,
   onSetMemo,
+  onRename,
   onDelete
 }: {
   account: Account
   showMemo: boolean
   onSetApps: (id: string, apps: string[]) => void
   onSetMemo: (id: string, memo: string) => void
+  onRename: (id: string, email: string) => Promise<string | null> // 실패 사유 키 or null
   onDelete: (id: string) => void
 }): React.JSX.Element {
   const { m } = useI18n()
@@ -484,6 +486,10 @@ function AccountRow({
   const [editingApps, setEditingApps] = useState(false)
   const [memoEditing, setMemoEditing] = useState(false)
   const [confirmDeleteAcc, setConfirmDeleteAcc] = useState(false)
+  const [idEditing, setIdEditing] = useState(false)
+  const [idDraft, setIdDraft] = useState('')
+  const [idErr, setIdErr] = useState<string | null>(null)
+  const [idBusy, setIdBusy] = useState(false)
   const [memoDraft, setMemoDraft] = useState('')
   const [secretApps, setSecretApps] = useState<string[]>([])
   const apps = account.apps ?? []
@@ -535,6 +541,56 @@ function AccountRow({
 
       {open && (
         <div className="acc-detail">
+          {/* 식별자(이메일/핸들) 편집. 값이 비밀번호 키·접근 로그의 열쇠라 main이 셋을 함께 옮긴다 —
+              화면은 그 사실을 알려주기만 하면 된다(비밀번호가 있으면 인증 관문이 뜬다) */}
+          <div className="acc-detail-head">
+            <span className="form-label">{m.accounts.identifier}</span>
+            <button
+              className={`choice tiny ${idEditing ? 'toggled' : ''}`}
+              onClick={() => {
+                setIdErr(null)
+                setIdDraft(account.email)
+                setIdEditing(!idEditing)
+              }}
+            >
+              {idEditing ? m.accounts.cancel : m.accounts.idEdit}
+            </button>
+          </div>
+          {idEditing ? (
+            <div className="memo-edit">
+              <input
+                className="email-input"
+                value={idDraft}
+                onChange={(e) => {
+                  setIdDraft(e.target.value)
+                  setIdErr(null)
+                }}
+                autoFocus
+              />
+              <span className="memo-actions">
+                <button
+                  className="choice small active"
+                  disabled={idBusy || !idDraft.trim() || idDraft.trim() === account.email}
+                  onClick={async () => {
+                    setIdBusy(true)
+                    const err = await onRename(account.id, idDraft.trim())
+                    setIdBusy(false)
+                    if (err) setIdErr(err)
+                    else setIdEditing(false)
+                  }}
+                >
+                  {m.accounts.save}
+                </button>
+              </span>
+              {idErr && <span className="id-err">{m.accounts.idErrors[idErr] ?? idErr}</span>}
+              {secretApps.length > 0 && (
+                <span className="secret-note-inline">{m.accounts.idRenameSecrets}</span>
+              )}
+            </div>
+          ) : (
+            <span className="acc-id-view">{account.email}</span>
+          )}
+
           <div className="acc-detail-head">
             <span className="form-label">{m.accounts.connectedApps}</span>
             <button
@@ -722,6 +778,14 @@ export default function AccountsPage(): React.JSX.Element {
     window.zto.accounts.setMemo(id, memo).then(setAccounts)
   }
 
+  // 실패 사유를 그대로 돌려준다 — 화면이 "왜 안 됐는지"를 말할 수 있어야 한다
+  // (중복·인증취소·빈 값이 각각 다른 대응을 요구한다)
+  const renameAccount = async (id: string, email: string): Promise<string | null> => {
+    const r = await window.zto.accounts.rename(id, email)
+    setAccounts(r.accounts)
+    return r.ok ? null : (r.error ?? 'failed')
+  }
+
   const deleteAccount = (id: string): void => {
     window.zto.accounts
       .delete(id)
@@ -836,6 +900,7 @@ export default function AccountsPage(): React.JSX.Element {
               showMemo={showMemos}
               onSetApps={setAccountApps}
               onSetMemo={setAccountMemo}
+              onRename={renameAccount}
               onDelete={deleteAccount}
             />
           ))}
