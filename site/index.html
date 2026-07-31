@@ -127,57 +127,101 @@
   @media (max-width:840px){.foot-grid{grid-template-columns:1fr;gap:28px}.footc{padding:32px 26px 20px}}
 
 
-  /* ---------- 스토리 — 좌 고정 미리보기 + 우 스크롤 ---------- */
-  .story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;
+  /* ---------- 스토리 — 좌 고정 미리보기 + 우 스크롤 ----------
+     미리보기는 실제 앱 styles.css 값을 그대로 이식했다(그라데이션·사이드바·아바타·노드).
+     "거의 100% 동일하게"가 요구사항 — 여기 값을 바꾸려면 앱 쪽과 함께 바꿔야 한다. */
+  .story{--agrad:linear-gradient(135deg,#7c3aed 0%,#a855f7 55%,#6366f1 100%);
+    --afg:#ececf1;--amut:#8b8b99;--abd:rgba(255,255,255,.08);--abds:rgba(255,255,255,.14);
+    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;
     align-items:start;margin-top:110px}
   .preview{position:sticky;top:96px}
-  .win{border:1px solid var(--line2);border-radius:14px;overflow:hidden;background:#101018;
+  .win{border:1px solid var(--abds);border-radius:14px;overflow:hidden;background:#0a0a0f;
+    color:var(--afg);font-size:14px;
     box-shadow:0 0 0 1px rgba(139,92,246,.14), 0 26px 80px rgba(0,0,0,.6), var(--glow)}
-  .win-bar{display:flex;align-items:center;gap:6px;padding:10px 13px;border-bottom:1px solid var(--line);
+  .win-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;border-bottom:1px solid var(--abd);
     background:rgba(255,255,255,.02)}
-  .win-bar i{width:9px;height:9px;border-radius:50%;background:#2c2c38;display:block}
-  .win-bar .t{margin-left:8px;font-size:11px;color:var(--dim)}
-  .win-body{display:grid;grid-template-columns:150px 1fr;min-height:340px}
-  .win-side{border-right:1px solid var(--line);padding:11px 9px;background:rgba(255,255,255,.015)}
-  .tab{padding:8px 10px;border-radius:9px;font-size:11.5px;color:var(--muted);margin-bottom:3px;
-    transition:background .35s,color .35s,box-shadow .35s}
-  .tab.on{background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff;font-weight:700;
-    box-shadow:0 0 18px rgba(139,92,246,.4)}
+  .win-bar i{width:11px;height:11px;border-radius:50%;display:block}
+  .win-bar i:nth-child(1){background:#3a3a45}.win-bar i:nth-child(2){background:#3a3a45}
+  .win-bar i:nth-child(3){background:#3a3a45}
+  .win-body{display:grid;grid-template-columns:172px 1fr;min-height:392px}
+  .win-side{border-right:1px solid var(--abd);padding:16px 10px;background:rgba(255,255,255,.02);
+    display:flex;flex-direction:column;gap:5px}
+  .win-logo{font-size:21px;font-weight:800;letter-spacing:-.7px;padding:0 10px 14px;
+    background:var(--agrad);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .win-logo span{display:block;font-size:8px;font-weight:600;letter-spacing:2.4px;
+    text-transform:uppercase;color:var(--amut);-webkit-text-fill-color:var(--amut);margin-top:2px}
+  .tab{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;
+    font-size:12.5px;font-weight:600;color:var(--afg);
+    transition:background .35s,box-shadow .35s}
+  .tab small{font-size:10px;font-weight:500;color:var(--amut)}
+  .tab.on{background:var(--agrad);box-shadow:0 4px 24px rgba(139,92,246,.35)}
+  .tab.on small{color:rgba(255,255,255,.8)}
   .panes{position:relative}
-  .pane{position:absolute;inset:0;padding:14px 16px;opacity:0;transform:translateY(8px);
-    transition:opacity .45s ease,transform .45s ease;pointer-events:none}
+  .pane{position:absolute;inset:0;padding:16px;opacity:0;transform:translateY(8px);
+    transition:opacity .45s ease,transform .45s ease;pointer-events:none;display:flex;flex-direction:column}
   .pane.on{opacity:1;transform:none;pointer-events:auto}
   .pane img.real{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top left;display:none}
   .pane.has-img img.real{display:block}
   .pane.has-img .sketch{display:none}
 
-  .p-tiles{display:flex;gap:7px;margin-bottom:12px}
-  .p-tile{border:1px solid var(--line);border-radius:10px;padding:7px 12px;min-width:64px}
-  .p-tile b{display:block;font-size:15px;font-weight:800;letter-spacing:-.02em}
-  .p-tile span{font-size:10px;color:var(--dim)}
-  .p-acc{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--line);font-size:11.5px}
-  .p-av{width:22px;height:22px;border-radius:7px;flex:0 0 auto;font-size:10px;font-weight:800;
-    display:flex;align-items:center;justify-content:center;color:#fff}
-  .p-acc .m{color:var(--dim);font-size:10px}
-  .p-svc{margin-left:auto;display:flex;gap:4px}
-  .p-svc i{width:17px;height:17px;border-radius:5px;font-style:normal;font-size:9px;font-weight:800;
-    display:flex;align-items:center;justify-content:center;border:1px solid var(--line)}
+  /* 계정 — 통계 타일 + 행 (앱의 .tile/.avatar/.acc-row/.mini-ic 그대로) */
+  .p-tiles{display:flex;gap:8px;margin-bottom:14px}
+  .p-tile{display:grid;grid-template-areas:"ic count" "name name";grid-template-columns:auto 1fr;
+    align-items:center;gap:2px 8px;flex:1;background:rgba(255,255,255,.03);
+    border:1px solid var(--abd);border-radius:12px;padding:10px 12px}
+  .p-tile .ic{grid-area:ic;width:26px;height:26px;border-radius:8px;display:inline-flex;
+    align-items:center;justify-content:center;font-weight:800;font-size:12px}
+  .p-tile .ic.all{background:var(--agrad);color:#fff}
+  .p-tile b{grid-area:count;font-size:19px;font-weight:800;letter-spacing:-.5px;justify-self:end}
+  .p-tile span{grid-area:name;font-size:10.5px;font-weight:600;color:var(--amut)}
+  .p-acc{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+    padding:11px 4px;border-top:1px solid rgba(255,255,255,.05)}
+  .p-av{width:34px;height:34px;border-radius:50%;font-size:13px;font-weight:800;color:#fff;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(0,0,0,.3)}
+  .p-acc .e{font-weight:700;font-size:12.5px;letter-spacing:-.2px}
+  .p-acc .m{font-size:10.5px;color:var(--amut)}
+  .p-svc{display:flex;gap:5px}
+  .p-svc i{width:22px;height:22px;border-radius:7px;font-style:normal;font-size:10px;font-weight:800;
+    display:inline-flex;align-items:center;justify-content:center}
 
-  .p-chips{display:flex;gap:6px;margin-bottom:10px}
-  .p-chips span{font-size:10.5px;padding:4px 10px;border:1px solid var(--line);border-radius:8px;color:var(--muted)}
-  .p-chips span.on{border-color:rgba(139,92,246,.6);color:var(--text);background:rgba(139,92,246,.12)}
-  .p-seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:2px;gap:2px;margin-bottom:11px}
-  .p-seg span{font-size:10.5px;font-weight:700;color:var(--muted);padding:4px 11px;border-radius:6px}
-  .p-seg span.on{background:linear-gradient(135deg,#8b5cf6,#c084fc);color:#fff}
-  .p-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line);font-size:11.5px}
-  .p-row i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px rgba(52,211,153,.5);flex:0 0 auto}
-  .p-row .k{width:64px;color:var(--dim);flex:0 0 auto}
+  /* 스토어 — 앱 칩 + 세그 + 대시 노드 (앱의 .app-chip/.seg/.dash-node 그대로) */
+  .p-chips{display:flex;gap:6px;margin-bottom:11px}
+  .p-chips span{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;
+    border:1px solid var(--abds);border-radius:999px;background:rgba(255,255,255,.03);
+    color:var(--afg);font-size:11px;font-weight:600}
+  .p-chips span.on{border-color:transparent;background:rgba(139,92,246,.18);
+    box-shadow:inset 0 0 0 1.5px #8b5cf6}
+  .p-seg{display:inline-flex;background:rgba(255,255,255,.06);border:1px solid var(--abd);
+    border-radius:11px;padding:3px;gap:2px;margin-bottom:12px;align-self:flex-start}
+  .p-seg span{color:var(--amut);padding:4px 13px;border-radius:8px;font-size:11px;font-weight:700}
+  .p-seg span.on{background:var(--agrad);color:#fff;box-shadow:0 2px 10px rgba(139,92,246,.35)}
+  .p-row{display:flex;align-items:center;gap:10px;padding:8px 2px;font-size:11.5px;
+    border-top:1px solid rgba(255,255,255,.045)}
+  .p-row:first-of-type{border-top:none}
+  .p-row i{width:9px;height:9px;border-radius:50%;background:var(--ok);
+    box-shadow:0 0 8px rgba(52,211,153,.6);flex:0 0 auto}
+  .p-row .k{width:64px;color:var(--amut);flex:0 0 auto}
+  .p-chip-s{font-size:9.5px;font-weight:700;padding:1px 8px;border-radius:999px;
+    background:rgba(52,211,153,.15);color:var(--ok);margin-left:auto}
 
-  .p-draft{border:1px solid var(--line);border-radius:10px;padding:11px 12px;font-size:11.5px;
-    line-height:1.6;background:rgba(255,255,255,.02);white-space:pre-wrap}
-  .p-bub{margin-top:10px;background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.35);
-    border-radius:10px;padding:10px 12px;font-size:11px;line-height:1.6;color:var(--muted)}
-  .p-bub b{color:#c9b6ff}
+  /* 소셜 — AI 패널 (앱의 .ai-msg 계열 그대로) */
+  .p-aihead{display:flex;align-items:baseline;justify-content:space-between;
+    padding:0 0 10px;border-bottom:1px solid var(--abd);margin-bottom:10px}
+  .p-aihead b{font-size:13px}
+  .p-aihead span{font-size:10px;color:var(--amut);border:1px solid var(--abds);
+    border-radius:7px;padding:3px 8px}
+  .p-msgs{display:flex;flex-direction:column;gap:8px;flex:1}
+  .p-msg{padding:8px 11px;border-radius:12px;font-size:11.5px;line-height:1.55;max-width:92%}
+  .p-msg.sys{align-self:center;max-width:100%;padding:3px 10px;border:1px dashed var(--abd);
+    border-radius:999px;background:transparent;color:var(--amut);font-size:9.5px}
+  .p-msg.user{align-self:flex-end;background:var(--agrad);color:#fff}
+  .p-msg.ai{align-self:flex-start;background:rgba(255,255,255,.05)}
+  .p-msg.ai b{color:#fff;font-weight:650}
+  .p-input{display:flex;gap:6px;border-top:1px solid var(--abd);padding-top:10px;margin-top:10px}
+  .p-input span{flex:1;border:1px solid var(--abd);border-radius:9px;padding:7px 10px;
+    font-size:10.5px;color:var(--amut)}
+  .p-input b{background:var(--agrad);color:#fff;border-radius:9px;padding:7px 13px;
+    font-size:10.5px;font-weight:700}
 
   .steps .step{min-height:72vh;display:flex;flex-direction:column;justify-content:center;
     opacity:.28;transition:opacity .4s ease}
@@ -261,12 +305,13 @@
 <div class="story">
   <div class="preview" id="preview">
     <div class="win">
-      <div class="win-bar"><i></i><i></i><i></i><span class="t">ZTO</span></div>
+      <div class="win-bar"><i></i><i></i><i></i></div>
       <div class="win-body">
         <div class="win-side">
-          <div class="tab" data-tab="1" data-i18n="tabAcc">계정 인벤토리</div>
-          <div class="tab" data-tab="2" data-i18n="tabStore">앱 스토어 관리</div>
-          <div class="tab" data-tab="3" data-i18n="tabSocial">소셜미디어 관리</div>
+          <div class="win-logo">zto<span>Zero to One</span></div>
+          <div class="tab" data-tab="1"><span data-i18n="tabAcc">계정 인벤토리</span><small data-i18n="tabAccD">모든 계정을 한눈에</small></div>
+          <div class="tab" data-tab="2"><span data-i18n="tabStore">앱 스토어 관리</span><small data-i18n="tabStoreD">스토어 실황·출시 자동화</small></div>
+          <div class="tab" data-tab="3"><span data-i18n="tabSocial">소셜미디어 관리</span><small data-i18n="tabSocialD">임베드 브라우저 + AI 코파일럿</small></div>
         </div>
         <div class="panes">
           <!-- 1 계정 -->
@@ -274,36 +319,39 @@
             <img class="real" src="/assets/shot-accounts.png" alt="" />
             <div class="sketch">
               <div class="p-tiles">
-                <div class="p-tile"><b>7</b><span data-i18n="ptAcc">계정</span></div>
-                <div class="p-tile"><b>14</b><span data-i18n="ptSvc">서비스</span></div>
-                <div class="p-tile"><b>3</b><span data-i18n="ptBrand">브랜드</span></div>
+                <div class="p-tile"><span class="ic all">@</span><b>7</b><span data-i18n="ptAcc">계정</span></div>
+                <div class="p-tile"><span class="ic" style="background:rgba(139,92,246,.16);color:#c4b5fd">⌘</span><b>14</b><span data-i18n="ptSvc">서비스</span></div>
+                <div class="p-tile"><span class="ic" style="background:rgba(52,211,153,.16);color:#34d399">✦</span><b>3</b><span data-i18n="ptBrand">브랜드</span></div>
               </div>
-              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#8b5cf6,#c084fc)">M</span><span>studio@mygame.dev<br /><span class="m" data-i18n="pm1">Play Console 소유 · 결제</span></span><span class="p-svc"><i style="color:#8ab4f8">G</i><i style="color:#e8e8ef">X</i><i style="color:#f08ba0">I</i></span></div>
-              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#f472b6,#fb7185)">L</span><span>hello@example.app<br /><span class="m" data-i18n="pm2">App Store Connect · 문의</span></span><span class="p-svc"><i style="color:#7cb8ff">A</i><i style="color:#e8e8ef">T</i></span></div>
-              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#34d399,#22d3ee)">D</span><span>dan@personal<br /><span class="m" data-i18n="pm3">개인 — 브랜드와 분리</span></span><span class="p-svc"><i style="color:#8ab4f8">G</i><i style="color:#e8e8ef">X</i></span></div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#8b5cf6,#c084fc)">M</span><span><span class="e">studio@mygame.dev</span><br /><span class="m" data-i18n="pm1">Play Console 소유 · 결제</span></span><span class="p-svc"><i style="background:rgba(66,133,244,.16);color:#8ab4f8">G</i><i style="background:rgba(255,255,255,.1);color:#ececf1">𝕏</i><i style="background:rgba(228,64,95,.16);color:#f08ba0">I</i></span></div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#f472b6,#fb7185)">L</span><span><span class="e">hello@example.app</span><br /><span class="m" data-i18n="pm2">App Store Connect · 문의</span></span><span class="p-svc"><i style="background:rgba(0,122,255,.16);color:#7cb8ff">A</i><i style="background:rgba(255,255,255,.1);color:#ececf1">T</i></span></div>
+              <div class="p-acc"><span class="p-av" style="background:linear-gradient(135deg,#34d399,#22d3ee)">D</span><span><span class="e">dan@personal</span><br /><span class="m" data-i18n="pm3">개인 — 브랜드와 분리</span></span><span class="p-svc"><i style="background:rgba(66,133,244,.16);color:#8ab4f8">G</i><i style="background:rgba(255,255,255,.1);color:#ececf1">𝕏</i></span></div>
             </div>
           </div>
           <!-- 2 스토어 -->
           <div class="pane" data-pane="2">
             <img class="real" src="/assets/shot-store.png" alt="" />
             <div class="sketch">
-              <div class="p-chips"><span class="on">My Game</span><span>Example</span><span>+</span></div>
+              <div class="p-chips"><span class="on">My Game</span><span>Example</span><span>＋</span></div>
               <div class="p-seg"><span class="on">Android</span><span>iOS</span></div>
               <div class="p-row"><i></i><span class="k" data-i18n="pk1">설정</span><span data-i18n="pv1">앱 콘텐츠 선언 완료</span></div>
               <div class="p-row"><i></i><span class="k" data-i18n="pk2">메타</span><span>en-US · ko-KR · ja-JP</span></div>
               <div class="p-row"><i></i><span class="k" data-i18n="pk3">자산</span><span data-i18n="pv3">아이콘 · 스크린샷 8컷</span></div>
-              <div class="p-row"><i></i><span class="k">IAP</span><span data-i18n="pv4">2종 실황 · 구독</span></div>
-              <div class="p-row"><i></i><span class="k" data-i18n="pk5">릴리스</span><span data-i18n="pv5">0.1.4 · 클로즈드 테스트</span></div>
+              <div class="p-row"><i></i><span class="k">IAP</span><span data-i18n="pv4">2종 실황 · 구독</span><span class="p-chip-s">active</span></div>
+              <div class="p-row"><i></i><span class="k" data-i18n="pk5">릴리스</span><span>0.1.4</span><span class="p-chip-s" style="background:rgba(255,255,255,.07);color:#8b8b99" data-i18n="pv5">closed</span></div>
             </div>
           </div>
           <!-- 3 소셜 -->
           <div class="pane" data-pane="3">
             <img class="real" src="/assets/shot-social.png" alt="" />
             <div class="sketch">
-              <div class="p-draft" data-i18n="pDraft">14개월. 반려 3번. 앱 1개.
-
-오늘 양쪽 스토어에 올라갔습니다 — 혼자 만든 턴제 RPG.</div>
-              <div class="p-bub" data-i18n="pBub"><b>AI</b> — 첫 줄 좋아요. 마지막에 좋아요 부탁은 빼세요. 이야기가 이미 그걸 벌어놨어요.</div>
+              <div class="p-aihead"><b>AI</b><span>GPT-5.6 Luna</span></div>
+              <div class="p-msgs">
+                <div class="p-msg sys" data-i18n="pSys">X 글쓰기 화면</div>
+                <div class="p-msg user" data-i18n="pUser">출시 소식 이렇게 올릴까? "14개월. 반려 3번. 앱 1개."</div>
+                <div class="p-msg ai" data-i18n="pAi">훅 좋아요. 마지막에 좋아요 부탁만 빼세요 — <b>이야기가 이미 그걸 벌어놨어요.</b></div>
+              </div>
+              <div class="p-input"><span data-i18n="pPh">AI에게 묻거나, 이미지를 붙여넣거나…</span><b data-i18n="pSend">보내기</b></div>
             </div>
           </div>
         </div>
@@ -340,13 +388,13 @@
 
     <div class="step" data-step="3" id="ai">
       <div class="num">03 · <span data-i18n="numAi">AI 패널</span></div>
-      <h2 data-i18n="aiTitle">당신을 처음 보는 AI에게, 그만 설명하세요</h2>
+      <h2 data-i18n="aiTitle">소셜미디어 글 올릴 때도,<br />AI를 비서처럼 사용해요</h2>
       <p class="desc" data-i18n="aiSub">
-        캡션 하나 쓰려고 매번 "내 앱은 이런 거고요…"부터 시작하고 있진 않나요.
-        ZTO의 AI는 이미 압니다 — 어떤 앱인지, 어떤 계정으로 뭘 하는지, 지난주에 뭘 바꿨는지.
+        캡션에 어떤 스토리텔링이 담기냐에 따라 성패가 갈립니다.
+        AI와 논의해서 더 좋은 성적을 거두세요.
       </p>
       <ul class="pts">
-        <li data-i18n="ai1"><b>히스토리가 곧 컨텍스트</b> — 조언이 일반론이 아니라 당신 얘기가 됩니다.</li>
+        <li data-i18n="ai1"><b>등록된 계정과 앱이 곧 컨텍스트</b></li>
         <li data-i18n="ai2"><b>허락할 때만 읽습니다</b> — 화면 읽기는 기본이 꺼진 스위치입니다.</li>
         <li data-i18n="ai3"><b>내 AI, 또는 우리 AI</b> — 쓰던 구독·키를 연결하거나, AI 포함 요금제를 쓰거나.</li>
       </ul>
@@ -510,12 +558,17 @@
       endH: "Run it all from ZTO",
       endCta: "Tell me when it launches",
       endFine: "macOS · Windows · 3-day full trial",
-      tabAcc: "Accounts", tabStore: "App Stores", tabSocial: "Social",
+      tabAcc: "Accounts", tabAccD: "Every account at a glance",
+      tabStoreD: "Live store status & automation", tabSocialD: "Embedded browser + AI copilot",
+      pSys: "X compose screen",
+      pUser: "Posting the launch like this? \"14 months. 3 rejections. 1 app.\"",
+      pAi: "Great hook. Just cut the like-request at the end — <b>the story already earned it.</b>",
+      pPh: "Ask AI, paste an image…", pSend: "Send", tabStore: "App Store Manager", tabSocial: "Social Media",
       ptAcc: "accounts", ptSvc: "services", ptBrand: "brands",
       pm1: "Play Console owner · billing", pm2: "App Store Connect · support", pm3: "Personal — kept separate",
       pk1: "Settings", pv1: "declarations complete",
       pk2: "Listing", pk3: "Assets", pv3: "icon · 8 screenshots",
-      pv4: "2 live · subscription", pk5: "Release", pv5: "0.1.4 · closed testing",
+      pv4: "2 live · subscription", pk5: "Release", pv5: "closed",
       pDraft: "14 months. 3 rejections. 1 app.\n\nLive on both stores today — a turn-based RPG built alone.",
       pBub: "<b>AI</b> — Good hook. Cut the like-request at the end; the story already earned it.",
       a1: "<b>A note on every account</b> — why it exists and what it's connected to, written next to it.",
@@ -523,14 +576,14 @@
       a3: "<b>No server, no signup</b> — everything stays on this computer.",
       s1: "<b>Stage, confirm, apply — in one batch</b>",
       s3: "<b>Every change is recorded</b>",
-      ai1: "<b>History is the context</b> — advice about you, not about apps in general.",
+      ai1: "<b>Your registered accounts and apps are the context</b>",
       ai2: "<b>Reads only when you allow it</b> — page-reading is a switch that starts off.",
       ai3: "<b>Your AI, or ours</b> — connect your subscription or key, or take the plan with AI included.",
  navStores: "App Stores", navAi: "AI", navPricing: "Pricing",
       navCta: "Get launch news",
       h1q: "Every new app you ship<br />piles on more to manage.",
       h1a: "Run it all from ZTO",
-      lede: "Your accounts, your marketing history, both app stores — all managed in one place.",
+      lede: "Your accounts, your marketing history, both app stores.<br />All managed in one place.",
       ctaMain: "Tell me when it launches", ctaSub: "Pricing",
       fine: "macOS · Windows · 3-day full trial · no card",
 
@@ -549,8 +602,8 @@
       s3t: "The history stores don't keep", s3d: "Every read is snapshotted, so you can see what changed and when.",
 
       numAi: "AI panel",
-      aiTitle: "Stop introducing yourself to an AI that forgets",
-      aiSub: "Writing one caption shouldn't start with “so, my app is…” every time. ZTO's AI already knows — which app, which account, what changed last week. Set up as a growth marketer, it reads the draft you're actually writing.",
+      aiTitle: "Posting to social?<br />Treat the AI as your assistant",
+      aiSub: "The storytelling in a caption decides how it performs. Talk it through with the AI and post the better version.",
       ai1t: "History is the context", ai1d: "Apps, accounts and store records live in one place, so the advice is about you — not about apps in general.",
       ai2t: "Reads only when you allow it", ai2d: "Letting the AI see the page is a switch that starts off. Your feed holds other people's posts and DMs.",
       ai3t: "Your AI, or ours", ai3d: "Connect the Claude/ChatGPT subscription or API key you already have — or take the plan where it's included.",
