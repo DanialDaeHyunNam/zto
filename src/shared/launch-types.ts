@@ -55,17 +55,32 @@ export interface LiveIapProduct {
   listings?: { locale: string; title: string; description: string }[]
 }
 
-// IAP 편집은 (상품 × 필드)로 갈리는데 `PendingEdit.field`는 문자열 하나뿐이라 둘을 같이 싣는다.
+// `PendingEdit.field`는 문자열 하나뿐인데, 어떤 섹션은 대상이 둘로 갈린다
+// (IAP = 상품 × 필드, 릴리스 노트 = 트랙 × 필드). 그래서 대상을 필드 키에 같이 싣는다.
 // 렌더러가 만들고 main이 푸는 규칙이라 **양쪽이 보는 한 곳**에 둔다.
-export const IAP_FIELD_SEP = '::'
+export const FIELD_SEP = '::'
+/** @deprecated 이름만 남긴 별칭 — 새 코드는 FIELD_SEP을 쓴다 */
+export const IAP_FIELD_SEP = FIELD_SEP
+
+// 릴리스 노트는 **어느 트랙의 릴리스인가**가 위험도를 가른다 → 트랙을 필드에 싣는다
+export const noteFieldKey = (track: string): string => `${track}${FIELD_SEP}whatsNew`
+export const parseNoteFieldKey = (key: string): { track: string } | null => {
+  const at = key.lastIndexOf(FIELD_SEP)
+  if (at < 0 || key.slice(at + FIELD_SEP.length) !== 'whatsNew') return null
+  return { track: key.slice(0, at) }
+}
+// 프로덕션 릴리스 노트 수정은 라이브 사용자에게 바로 나가고 롤아웃 중이면 위험하다 →
+// 테스트 트랙(internal·closed·open)만 연다. 판정을 렌더러·main이 공유해야 화면과 결과가 안 어긋난다.
+export const isEditableNoteTrack = (track: string): boolean => track !== 'production'
+
 export const iapFieldKey = (productId: string, field: 'title' | 'description'): string =>
-  `${productId}${IAP_FIELD_SEP}${field}`
+  `${productId}${FIELD_SEP}${field}`
 export const parseIapFieldKey = (
   key: string
 ): { productId: string; field: 'title' | 'description' } | null => {
-  const at = key.lastIndexOf(IAP_FIELD_SEP)
+  const at = key.lastIndexOf(FIELD_SEP)
   if (at < 0) return null
-  const field = key.slice(at + IAP_FIELD_SEP.length)
+  const field = key.slice(at + FIELD_SEP.length)
   if (field !== 'title' && field !== 'description') return null
   return { productId: key.slice(0, at), field }
 }

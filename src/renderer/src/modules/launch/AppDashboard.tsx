@@ -17,7 +17,12 @@ import type {
   StoreSnapshotEntry
 } from '../../../../shared/launch-types'
 // 값(런타임)으로 쓰는 것 — IAP 편집 필드 키 규칙을 main과 공유한다
-import { IAP_FIELD_SEP, iapFieldKey } from '../../../../shared/launch-types'
+import {
+  FIELD_SEP,
+  iapFieldKey,
+  isEditableNoteTrack,
+  noteFieldKey
+} from '../../../../shared/launch-types'
 import type { DataSafetyDoc } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
@@ -536,7 +541,7 @@ function IapSub({
         const dirty =
           editable &&
           Object.values(edits).some(
-            (e) => e.section === 'iap' && e.platform === platform && e.field.startsWith(`${p.productId}${IAP_FIELD_SEP}`)
+            (e) => e.section === 'iap' && e.platform === platform && e.field.startsWith(`${p.productId}${FIELD_SEP}`)
           )
         return (
           // 구독은 상품 하나가 요금제 여럿(월·연)으로 펴져 id가 겹칠 수 있어 인덱스를 함께 쓴다
@@ -897,7 +902,20 @@ function MetaModal({
               <MetaField platform="android" platLabel={m.launch.dashAndroid} section="meta" locale={gl.locale} fieldKey="title" label={m.launch.dashFieldName} storeValue={gl.title} edits={edits} stage={stage} />
               <MetaField platform="android" platLabel={m.launch.dashAndroid} section="meta" locale={gl.locale} fieldKey="short" label={m.launch.dashFieldShort} storeValue={gl.short} edits={edits} stage={stage} />
               <MetaField platform="android" platLabel={m.launch.dashAndroid} section="meta" locale={gl.locale} fieldKey="full" label={m.launch.dashFieldFull} storeValue={gl.full} multiline edits={edits} stage={stage} />
-              <MetaField platform="android" platLabel={m.launch.dashAndroid} section="releaseNotes" locale={gl.locale} fieldKey="whatsNew" label={m.launch.dashFieldNotes} storeValue={gNote ?? ''} multiline edits={edits} stage={stage} />
+              {/* 릴리스 노트는 **트랙에 매달린 값**이다 — 어느 트랙을 고치는지 밝히고,
+                  프로덕션이면 편집 대신 콘솔로 보낸다(입력만 받고 실패시키면 거짓말이다) */}
+              {gRelease && isEditableNoteTrack(gRelease.track) ? (
+                <MetaField platform="android" platLabel={m.launch.dashAndroid} section="releaseNotes" locale={gl.locale} fieldKey={noteFieldKey(gRelease.track)} label={`${m.launch.dashFieldNotes} · ${gRelease.track}`} storeValue={gNote ?? ''} multiline edits={edits} stage={stage} />
+              ) : (
+                <div className="meta-field">
+                  <div className="meta-field-label">
+                    {m.launch.dashFieldNotes}
+                    {gRelease ? ` · ${gRelease.track}` : ''}
+                  </div>
+                  <div className="meta-readonly">{gNote || '—'}</div>
+                  <div className="asset-note">{m.launch.notesProdConsole}</div>
+                </div>
+              )}
             </div>
           )}
           {al && (

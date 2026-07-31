@@ -235,6 +235,7 @@ export const ko: Messages = {
     dashAssetPhoneShots: '스크린샷',
     dashShotCount: '{n}컷',
     dashIosIconBuild: '아이콘은 빌드 소속',
+    notesProdConsole: '프로덕션 릴리스 노트는 라이브 사용자에게 바로 나가서 콘솔에서만 고쳐요.',
     dashNodeIap: 'IAP',
     iapEdit: '이름·설명 편집',
     iapTitle: '이름',

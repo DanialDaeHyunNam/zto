@@ -234,6 +234,7 @@ export const en = {
     dashAssetPhoneShots: 'screenshots',
     dashShotCount: '{n}',
     dashIosIconBuild: 'icon ships with the build',
+    notesProdConsole: 'Production release notes reach live users immediately — edit them in the console.',
     dashNodeIap: 'IAP',
     iapEdit: 'Edit name & description',
     iapTitle: 'Name',

@@ -53,7 +53,9 @@ import {
   type DevAccountState,
   type IapSnapshotInfo,
   type LiveIapProduct,
+  isEditableNoteTrack,
   parseIapFieldKey,
+  parseNoteFieldKey,
   type LockState,
   type MetaListing,
   type PendingEdit,
@@ -1222,10 +1224,17 @@ async function applyPlayEdits(
   const errored = (list: PendingEdit[], msg: string): ApplyResult[] =>
     list.map((e) => ({ id: e.id, ok: false, message: msg }))
 
-  // 릴리스 노트는 라이브 트랙을 건드리므로 보류 (iOS는 초안 버전만 편집해 안전 — 비대칭 의도됨)
+  // 릴리스 노트는 **트랙에 따라** 갈린다: 테스트 트랙은 여기서 쓰고, 프로덕션은 콘솔로 보낸다
+  // (라이브 사용자에게 바로 나가고 롤아웃 중이면 위험하다). 판정 규칙은 shared에 있어
+  // 화면이 "편집 가능"이라고 보여준 것과 여기서 실제로 되는 것이 어긋나지 않는다.
+  const allNoteEdits = edits.filter((e) => e.section === 'releaseNotes')
+  const noteEdits = allNoteEdits.filter((e) => {
+    const t = parseNoteFieldKey(e.field)
+    return t && isEditableNoteTrack(t.track)
+  })
   const noteResults: ApplyResult[] = errored(
-    edits.filter((e) => e.section === 'releaseNotes'),
-    ko ? '릴리스 노트는 콘솔에서 (트랙 릴리스 편집)' : 'Release notes: use console (track release)'
+    allNoteEdits.filter((e) => !noteEdits.includes(e)),
+    ko ? '프로덕션 릴리스 노트는 콘솔에서' : 'Production release notes: use the console'
   )
   // IAP는 edit 트랜잭션 밖이다 — 상품 API(`oneTimeProducts`)는 리스팅 edit과 무관하게 즉시 반영된다.
   // 그래서 메타·자산의 원자적 커밋에 섞지 않고 **따로** 처리한다(섞으면 롤백 범위가 거짓말이 된다).
@@ -1237,8 +1246,10 @@ async function applyPlayEdits(
   // 자산은 메타와 **같은 edit 안에서** 처리한다 — commit 하나로 같이 원자적으로 반영된다.
   // (id = `android:assets:{locale}:{imageType}`, newValue = 파일 경로들을 개행으로 이은 것)
   const assetEdits = edits.filter((e) => e.section === 'assets')
-  if (metaEdits.length === 0 && assetEdits.length === 0) return [...noteResults, ...iapResults]
-  const writeEdits = [...metaEdits, ...assetEdits]
+  if (metaEdits.length === 0 && assetEdits.length === 0 && noteEdits.length === 0)
+    return [...noteResults, ...iapResults]
+  // 셋 다 같은 edit 트랜잭션 안에서 처리된다 → 커밋 하나로 원자적, 실패 시 함께 롤백
+  const writeEdits = [...metaEdits, ...assetEdits, ...noteEdits]
 
   const saPath = resolveGoogleSa(sheet)
   if (!saPath) return [...noteResults, ...iapResults, ...errored(writeEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
@@ -1296,6 +1307,67 @@ async function applyPlayEdits(
       } catch (err) {
         writeErr.set(e.id, String(err).replace(/^Error:\s*/, '').slice(0, 140))
       }
+    }
+
+    // 릴리스 노트 — 트랙별로 현재 릴리스를 읽어 해당 로케일만 갈아끼우고 트랙을 다시 PUT한다.
+    // versionCodes·status·userFraction을 그대로 다시 실어 보내는 게 핵심이다: 일부만 보내면
+    // 롤아웃 비율이나 버전 목록이 날아간다(트랙 PUT은 병합이 아니라 교체다).
+    const byTrack = new Map<string, PendingEdit[]>()
+    for (const e of noteEdits) {
+      const t = parseNoteFieldKey(e.field)
+      if (!t) {
+        writeErr.set(e.id, ko ? '트랙을 알 수 없음' : 'Unknown track')
+        continue
+      }
+      const arr = byTrack.get(t.track) ?? []
+      arr.push(e)
+      byTrack.set(t.track, arr)
+    }
+    for (const [track, group] of byTrack) {
+      const tR = await fetch(`${base}/edits/${editId}/tracks/${encodeURIComponent(track)}`, {
+        headers
+      })
+      if (!tR.ok) {
+        for (const e of group) writeErr.set(e.id, `track ${track}: HTTP ${tR.status}`)
+        continue
+      }
+      const tJ = (await jsonOrEmpty(tR)) as {
+        releases?: {
+          status?: string
+          releaseNotes?: { language?: string; text?: string }[]
+          [k: string]: unknown
+        }[]
+      }
+      const releases = tJ.releases ?? []
+      // 롤아웃 중이면 릴리스가 둘일 수 있다 — 어느 쪽인지 우리가 고르면 틀릴 수 있으므로 넘긴다
+      if (releases.length !== 1) {
+        for (const e of group) {
+          writeErr.set(
+            e.id,
+            releases.length === 0
+              ? ko
+                ? `${track} 트랙에 릴리스가 없음`
+                : `No release in ${track}`
+              : ko
+                ? `${track} 트랙에 릴리스가 여러 개 — 콘솔에서 수정하세요`
+                : `Multiple releases in ${track} — edit in the console`
+          )
+        }
+        continue
+      }
+      const rel = releases[0]
+      const notes = [...(rel.releaseNotes ?? [])]
+      for (const e of group) {
+        const row = notes.find((n) => n.language === e.locale)
+        if (row) row.text = e.newValue
+        else notes.push({ language: e.locale, text: e.newValue })
+      }
+      const putR = await fetch(`${base}/edits/${editId}/tracks/${encodeURIComponent(track)}`, {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ track, releases: [{ ...rel, releaseNotes: notes }] })
+      })
+      if (!putR.ok) for (const e of group) writeErr.set(e.id, `track ${track}: HTTP ${putR.status}`)
     }
 
     if (writeErr.size > 0) {
