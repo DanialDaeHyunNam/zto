@@ -168,17 +168,22 @@ function WhereToCheck({ where, items }: { where: string; items: string }): React
 // 종류별 교체를 한 곳에서 관리한다. 액션은 썸네일 묶음의 **뱃지 옆 아이콘 버튼**으로 나가고,
 // 고른 결과·오류만 아래에 붙는다 — 아래에 종류별 행을 다시 나열하면 라벨이 두 번이다.
 function AssetEditor({
+  platform,
   locale,
   sets,
   edits,
   label,
+  typeLabel,
   onStage,
   onOpen
 }: {
+  platform: 'android' | 'ios'
   locale: string
   sets: DashImageSet[]
   edits: Record<string, PendingEdit>
   label: (s: DashImageSet) => string
+  // 종류 이름은 플랫폼마다 다르다 — Play는 아이콘·피처그래픽, iOS는 기기명(APP_IPHONE_67)
+  typeLabel: (type: string) => string
   onStage: (e: PendingEdit) => void
   onOpen: (urls: string[], idx: number) => void
 }): React.JSX.Element {
@@ -188,11 +193,12 @@ function AssetEditor({
     Record<string, { name: string; preview: string; width: number; height: number }[]>
   >({})
 
-  const idOf = (type: string): string => `android:assets:${locale}:${type}`
+  const idOf = (type: string): string => `${platform}:assets:${locale}:${type}`
 
   const pick = async (type: string): Promise<void> => {
     setErr('')
-    const r = await window.zto.launch.pickAssets(type)
+    // 규격 검증기가 플랫폼마다 다르다 — iOS는 기기별 크기 + 알파 채널까지 본다
+    const r = await window.zto.launch.pickAssets(type, platform)
     if (r.canceled) return
     if (!r.ok) {
       // 규격 위반은 main이 "512×512여야 하는데 1024×1024"까지 만들어 준다 — 그대로 보여준다
@@ -202,11 +208,11 @@ function AssetEditor({
     setPicks((p) => ({ ...p, [type]: r.files }))
     onStage({
       id: idOf(type),
-      platform: 'android',
+      platform,
       section: 'assets',
       field: type,
       locale,
-      label: `${assetTypeLabel(m, type)} · ${locale}`,
+      label: `${typeLabel(type)} · ${locale}`,
       oldValue: '',
       newValue: r.files.map((f) => f.path).join('\n')
     })
@@ -222,11 +228,11 @@ function AssetEditor({
     // oldValue와 같아지면 stage가 대기 목록에서 지운다
     onStage({
       id: idOf(type),
-      platform: 'android',
+      platform,
       section: 'assets',
       field: type,
       locale,
-      label: assetTypeLabel(m, type),
+      label: typeLabel(type),
       oldValue: '',
       newValue: ''
     })
@@ -253,7 +259,7 @@ function AssetEditor({
       {staged.map((t) => (
         <div key={t} className="asset-staged">
           <span className="asset-staged-lbl">
-            {assetTypeLabel(m, t)} · {m.launch.assetStaged.replace('{n}', String(picks[t].length))}
+            {typeLabel(t)} · {m.launch.assetStaged.replace('{n}', String(picks[t].length))}
           </span>
           <div className="asset-picks">
             {picks[t].map((p, i) => (
@@ -299,6 +305,11 @@ const assetTypeLabel = (m: Messages, type: string): string =>
     : type === 'featureGraphic'
       ? m.launch.dashAssetFeature
       : m.launch.dashAssetPhoneShots
+
+// 기기 이름 — `APP_IPHONE_67` → `iphone 67`. 사전을 안 타는 이유는 이게 번역 대상이 아니라
+// **애플이 정한 식별자**이기 때문이다(콘솔에서 그대로 보인다). 새 기기가 추가돼도 그대로 나온다.
+const ascDeviceLabel = (type: string): string =>
+  type.replace(/^APP_/, '').replace(/_/g, ' ').toLowerCase()
 
 const ascShotLabel = (m: Messages, s: DashImageSet): string =>
   `${s.type.replace(/^APP_/, '').replace(/_/g, ' ').toLowerCase()} ${m.launch.dashShotCount.replace('{n}', String(s.urls.length))}`
@@ -857,12 +868,11 @@ function ApplyBar({
 
   if (pending.length === 0 && !results) return null
 
-  // 버전 잠금으로 실패한 iOS 항목들 (라이브 이름 등은 새 버전이 있어야 편집 가능)
+  // 버전 잠금으로 실패한 iOS 항목들 (라이브 이름·스크린샷 등은 새 버전이 있어야 편집 가능).
+  // **메시지 문구가 아니라 코드로 판정한다** — 전엔 영어 정규식이라 한국어 UI에선 이 바가
+  // 통째로 안 떴다(main이 자기 메시지를 로케일에 맞춰 만들기 때문). 판정은 main이 한다.
   const versionLocked = (results ?? []).filter(
-    (r) =>
-      !r.ok &&
-      edits[r.id]?.platform === 'ios' &&
-      /current state|editable version/i.test(r.message)
+    (r) => !r.ok && edits[r.id]?.platform === 'ios' && r.code === 'version-locked'
   )
 
   // 새 버전 생성(컨펌) → 편집 가능해진 뒤 iOS 대기 편집 재반영
@@ -1272,10 +1282,12 @@ function AndroidTree({
         <div className="dash-sub">
           {imageLocale ? (
             <AssetEditor
+              platform="android"
               locale={imageLocale}
               sets={g.images}
               edits={assetEdits}
               label={(s) => playAssetLabel(m, s)}
+              typeLabel={(t) => assetTypeLabel(m, t)}
               onStage={onStage}
               onOpen={onImage}
             />
@@ -1357,6 +1369,8 @@ function IosTree({
   file,
   metaDirty,
   surveys,
+  assetEdits,
+  onStage,
   onImage,
   onOpenMeta,
   onOpenSurvey
@@ -1365,6 +1379,8 @@ function IosTree({
   file: string
   metaDirty: boolean
   surveys: SurveyItem[]
+  assetEdits: Record<string, PendingEdit>
+  onStage: (e: PendingEdit) => void
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
   onOpenSurvey: (id: string) => void
@@ -1376,6 +1392,15 @@ function IosTree({
     .filter(Boolean)
     .join(' · ')
   const shotLabels = a.screenshots.map((s) => ascShotLabel(m, s))
+  const assetDirty = Object.values(assetEdits).some(
+    (e) => e.platform === 'ios' && e.section === 'assets'
+  )
+  // 스크린샷을 읽어온 로케일. `shotLocale`은 나중에 생긴 필드라 **그 전에 저장된 캐시엔 없다** —
+  // 없다고 편집을 숨기면 "새로고침 전까지 기능이 사라진" 것처럼 보인다. main과 같은 규칙으로 되짚는다.
+  const shotLocale =
+    a.shotLocale ||
+    (a.meta.find((l) => l.locale.toLowerCase().startsWith('ko')) ?? a.meta[0])?.locale ||
+    ''
   // API 연결 노드는 전역(타이틀 우측)으로 승격됨 — 트리에서는 생략
   return (
     <>
@@ -1399,12 +1424,35 @@ function IosTree({
           onOpenFull={onOpenMeta}
         />
       )}
-      <Node light={a.screenshots.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeAssets}>
+      <Node
+        light={assetDirty ? 'y' : a.screenshots.length > 0 ? 'g' : 'o'}
+        label={m.launch.dashNodeAssets}
+      >
         {[...shotLabels, m.launch.dashIosIconBuild].join(' · ')}
       </Node>
       {a.screenshots.length > 0 && (
         <div className="dash-sub">
-          <AssetStrip sets={a.screenshots} label={(s) => ascShotLabel(m, s)} onOpen={onImage} />
+          {shotLocale ? (
+            <AssetEditor
+              platform="ios"
+              locale={shotLocale}
+              sets={a.screenshots}
+              edits={assetEdits}
+              label={(s) => ascShotLabel(m, s)}
+              typeLabel={ascDeviceLabel}
+              onStage={onStage}
+              onOpen={onImage}
+            />
+          ) : (
+            <AssetStrip sets={a.screenshots} label={(s) => ascShotLabel(m, s)} onOpen={onImage} />
+          )}
+          {/* 교체는 대표 로케일 하나에만 적용된다 — 숨기면 다른 언어도 바뀐 줄 안다 */}
+          {shotLocale && (
+            <div className="asset-note">
+              {m.launch.assetLocaleNote.replace('{l}', shotLocale)} {m.launch.assetWholeSet}{' '}
+              {m.launch.assetIosVersionNote}
+            </div>
+          )}
           <div>
             <HistoryToggle
               file={file}
@@ -1633,6 +1681,8 @@ export default function AppDashboard({
                 file={file}
                 metaDirty={metaDirty('ios')}
                 surveys={surveysFor('ios')}
+                assetEdits={edits}
+                onStage={stage}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}
                 onOpenSurvey={openSurvey}

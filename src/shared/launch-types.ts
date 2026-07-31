@@ -103,6 +103,9 @@ export interface DashApple {
   category: string
   ageRating: string
   screenshots: DashImageSet[]
+  // 스크린샷도 Play 자산과 같은 이유로 **대표 로케일 하나**만 읽는다 → 어디에 쓰는지 같이 보낸다.
+  // 나중에 생긴 선택 필드라 옛 캐시엔 없다(렌더러가 되짚는다).
+  shotLocale?: string
   iap: LiveIapProduct[]
 }
 
@@ -253,6 +256,10 @@ export interface ApplyResult {
   id: string
   ok: boolean
   message: string
+  // 화면이 실패에 **반응**해야 할 때 쓰는 기계 판독 코드. 메시지 문구로 판정하면
+  // 로케일이 바뀌는 순간 조용히 안 맞는다(한국어 UI에서 잠금 해제 바가 안 뜨던 실제 버그).
+  // 'version-locked' = iOS 라이브 버전이라 편집 불가 → "새 버전 만들어 반영" 제안
+  code?: 'version-locked'
 }
 
 // 모듈 2 — 계정 인벤토리 항목 (메타데이터만. 비밀번호 필드는 설계상 존재하지 않는다 — SPEC §7.3)

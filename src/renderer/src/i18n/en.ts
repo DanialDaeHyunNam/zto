@@ -223,10 +223,12 @@ export const en = {
     assetReplace: 'Replace',
     assetStaged: '{n} picked — pending',
     assetRevert: 'Undo',
+    // 양대 스토어가 같은 성질이라 문구를 플랫폼 중립으로 둔다(전엔 Play만 가정한 문장이었다)
     assetLocaleNote:
-      'Play stores assets per language. Replacing here changes {l} only — other languages keep theirs.',
-    assetWholeSet:
-      'Uploads replace the whole set in order (Play orders screenshots by upload order).',
+      'Stores keep assets per language. Replacing here changes {l} only — other languages keep theirs.',
+    assetWholeSet: 'Uploads replace the whole set — the order you pick is the order shown.',
+    assetIosVersionNote:
+      'Screenshots apply to an editable (pre-review) version. If only a live version exists, create a new one first.',
     dashAssetIcon: 'icon',
     dashAssetFeature: 'feature graphic',
     dashAssetPhoneShots: 'screenshots',

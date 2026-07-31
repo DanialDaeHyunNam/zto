@@ -224,9 +224,12 @@ export const ko: Messages = {
     assetReplace: '교체',
     assetStaged: '{n}장 선택됨 — 대기',
     assetRevert: '되돌리기',
+    // 양대 스토어가 같은 성질이라 문구를 플랫폼 중립으로 둔다(전엔 Play만 가정한 문장이었다)
     assetLocaleNote:
-      'Play 자산은 언어별로 따로예요. 여기서 교체하면 {l}만 바뀌고 다른 언어는 그대로예요.',
-    assetWholeSet: '고른 순서대로 세트를 통째로 교체해요 (Play는 업로드 순서가 곧 노출 순서).',
+      '스토어 자산은 언어별로 따로예요. 여기서 교체하면 {l}만 바뀌고 다른 언어는 그대로예요.',
+    assetWholeSet: '고른 순서대로 세트를 통째로 교체해요 — 고른 순서가 곧 노출 순서예요.',
+    assetIosVersionNote:
+      '스크린샷은 심사 전(편집 가능한) 버전에만 반영돼요. 라이브 버전만 있으면 새 버전을 먼저 만들어야 해요.',
     dashAssetIcon: '아이콘',
     dashAssetFeature: '피처 그래픽',
     dashAssetPhoneShots: '스크린샷',

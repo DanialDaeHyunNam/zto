@@ -19,7 +19,14 @@ import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
 import { registerBrowserIpc } from './browser'
 import { probeAppContent, pullDataSafety } from './console-sync'
-import { imageInfo, PLAY_IMAGE_SPECS, replacePlayImages, validatePlayImage } from './store-assets'
+import {
+  imageInfo,
+  PLAY_IMAGE_SPECS,
+  replaceAscScreenshots,
+  replacePlayImages,
+  validateAscScreenshot,
+  validatePlayImage
+} from './store-assets'
 import {
   mailAppForEmail,
   PLATFORM_DOMAINS,
@@ -950,6 +957,7 @@ async function pullAppleDashboard(sheet: {
 
   const versions: AscVersionRow[] = []
   const screenshots: { type: string; urls: string[] }[] = []
+  let shotLocale = '' // 스크린샷을 읽어온 대표 로케일 — 편집이 이 로케일에만 적용된다
   // 최신 버전의 로케일별 설명·프로모션·키워드·릴리스 노트 (메타 병합용)
   const verLocs: { locale: string; whatsNew: string; full: string; promo: string; keywords: string }[] = []
   if (versR.ok) {
@@ -975,7 +983,7 @@ async function pullAppleDashboard(sheet: {
           `${A}/appStoreVersions/${row.id}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=${fields}`,
           { headers }
         )
-        if (!locR.ok) return { ...row, note: '', repLocId: '' }
+        if (!locR.ok) return { ...row, note: '', repLocId: '', repLocale: '' }
         const locJ = (await locR.json()) as {
           data?: {
             id: string
@@ -1003,11 +1011,18 @@ async function pullAppleDashboard(sheet: {
           }
         }
         const rep = items.find((l) => l.attributes?.locale?.startsWith('ko')) ?? items[0]
-        return { ...row, note: rep?.attributes?.whatsNew ?? '', repLocId: rep?.id ?? '' }
+        return {
+          ...row,
+          note: rep?.attributes?.whatsNew ?? '',
+          repLocId: rep?.id ?? '',
+          repLocale: rep?.attributes?.locale ?? ''
+        }
       })
     )
-    // 스크린샷 — 최신 버전의 대표 로케일에 올라간 세트(디스플레이 타입별)
+    // 스크린샷 — 최신 버전의 대표 로케일에 올라간 세트(디스플레이 타입별).
+    // 편집이 이 로케일에만 적용되므로 어느 로케일이었는지 화면까지 실어 보낸다(Play `imageLocale`과 같은 이유)
     const repLocId = withNotes[0]?.repLocId
+    shotLocale = withNotes[0]?.repLocale ?? ''
     if (repLocId) {
       const setsR = await fetch(
         `${A}/appStoreVersionLocalizations/${repLocId}/appScreenshotSets?include=appScreenshots`,
@@ -1153,7 +1168,9 @@ async function pullAppleDashboard(sheet: {
     .map((v) => ({ locale: v.locale, text: v.whatsNew }))
     .filter((v) => v.text)
 
-  return { data: { appId, versions, meta, releaseNotes, category, ageRating, screenshots, iap } }
+  return {
+    data: { appId, versions, meta, releaseNotes, category, ageRating, screenshots, shotLocale, iap }
+  }
 }
 
 // ---------- §4.5 P2 편집 적용 (실제 스토어 write) ----------
@@ -1322,10 +1339,12 @@ async function applyAscEdits(
     whatsNew: 'whatsNew'
   }
   const results: ApplyResult[] = []
-  const appInfoEdits = edits.filter((e) => e.field in APP_INFO_FIELDS)
-  const versionEdits = edits.filter((e) => e.field in VERSION_FIELDS)
+  // 자산은 필드가 **기기 디스플레이 타입**(APP_IPHONE_67 등)이라 필드명 표로 못 가른다 — 섹션으로 가른다
+  const assetEdits = edits.filter((e) => e.section === 'assets')
+  const appInfoEdits = edits.filter((e) => e.section !== 'assets' && e.field in APP_INFO_FIELDS)
+  const versionEdits = edits.filter((e) => e.section !== 'assets' && e.field in VERSION_FIELDS)
   for (const e of edits) {
-    if (!(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
+    if (e.section !== 'assets' && !(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
       results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
     }
   }
@@ -1358,7 +1377,9 @@ async function applyAscEdits(
         body: JSON.stringify({ data: { type: resourceType, id, attributes } })
       })
       const message = r.ok ? (ko ? '반영됨' : 'Applied') : await ascErrorMsg(r)
-      for (const e of es) results.push({ id: e.id, ok: r.ok, message })
+      // 라이브 버전이라 거부당한 경우(ASC가 "current state"로 알려준다) → 잠금 해제 제안 대상
+      const code = !r.ok && /current state/i.test(message) ? ('version-locked' as const) : undefined
+      for (const e of es) results.push({ id: e.id, ok: r.ok, message, code })
     }
   }
 
@@ -1405,49 +1426,142 @@ async function applyAscEdits(
     }
   }
 
-  // ---- version 레벨 (description·promotionalText·keywords·whatsNew) ----
-  if (versionEdits.length) {
+  // ---- 편집 가능한 버전 찾기 ----
+  // 버전 종속 메타(description 등)와 스크린샷이 **같은 관문**을 지난다: 라이브(READY_FOR_SALE)
+  // 버전에는 둘 다 못 쓴다. 판정이 두 벌이면 언젠가 어긋나므로 한 곳에 두고, 결과를 캐시해
+  // 메타·자산을 함께 적용할 때 같은 조회를 두 번 하지 않는다.
+  type VerLookup =
+    | { ok: true; id: string }
+    | { ok: false; message: string; code?: 'version-locked' }
+  let verCache: VerLookup | null = null
+  const editableVersion = async (): Promise<VerLookup> => {
+    if (verCache) return verCache
     const versR = await fetch(
       `${A}/apps/${appId}/appStoreVersions?limit=10&fields%5BappStoreVersions%5D=versionString,appStoreState,createdDate`,
       { headers }
     )
-    if (!versR.ok) {
-      for (const e of versionEdits) results.push({ id: e.id, ok: false, message: `HTTP ${versR.status}` })
+    if (!versR.ok) return (verCache = { ok: false, message: `HTTP ${versR.status}` })
+    const vJ = (await versR.json()) as {
+      data?: { id: string; attributes?: { appStoreState?: string; createdDate?: string } }[]
+    }
+    const rows = (vJ.data ?? []).map((d) => ({
+      id: d.id,
+      state: d.attributes?.appStoreState ?? '',
+      createdAt: d.attributes?.createdDate ?? ''
+    }))
+    rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    const editable = rows.find((r) => ASC_EDITABLE_VERSION_STATES.includes(r.state))
+    if (!editable) {
+      // 편집 가능한 버전이 아예 없다 = 라이브뿐이다 → 화면이 "새 버전 만들어 반영"을 제안한다
+      return (verCache = {
+        ok: false,
+        message: ko
+          ? '편집 가능한 버전 없음 (새 버전이 필요해요)'
+          : 'No editable version (a new version is needed)',
+        code: 'version-locked'
+      })
+    }
+    return (verCache = { ok: true, id: editable.id })
+  }
+  // 버전 로컬라이제이션 id (로케일 → id). 메타·자산이 같이 쓰므로 한 번만 조회한다
+  let locCache: Map<string, string> | null = null
+  const versionLocales = async (verId: string): Promise<Map<string, string>> => {
+    if (locCache) return locCache
+    const map = new Map<string, string>()
+    const locR = await fetch(
+      `${A}/appStoreVersions/${verId}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=locale&limit=50`,
+      { headers }
+    )
+    if (locR.ok) {
+      const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
+      for (const d of lJ.data ?? []) if (d.attributes?.locale) map.set(d.attributes.locale, d.id)
+    }
+    return (locCache = map)
+  }
+
+  // ---- version 레벨 (description·promotionalText·keywords·whatsNew) ----
+  if (versionEdits.length) {
+    const v = await editableVersion()
+    if (!v.ok) {
+      for (const e of versionEdits)
+        results.push({ id: e.id, ok: false, message: v.message, code: v.code })
     } else {
-      const vJ = (await versR.json()) as {
-        data?: { id: string; attributes?: { appStoreState?: string; createdDate?: string } }[]
-      }
-      const rows = (vJ.data ?? []).map((d) => ({
-        id: d.id,
-        state: d.attributes?.appStoreState ?? '',
-        createdAt: d.attributes?.createdDate ?? ''
-      }))
-      rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      const editable = rows.find((r) => ASC_EDITABLE_VERSION_STATES.includes(r.state))
-      if (!editable) {
-        for (const e of versionEdits)
+      await applyLocalized(
+        versionEdits,
+        await versionLocales(v.id),
+        'appStoreVersionLocalizations',
+        VERSION_FIELDS,
+        ko ? '해당 로케일 없음' : 'No such locale'
+      )
+    }
+  }
+
+  // ---- 자산 (기기별 스크린샷 세트) ----
+  // Play와 달리 원자성이 없다 — 기기 하나가 실패해도 다른 기기는 이미 올라간 뒤다.
+  // 그래서 결과를 **항목별로** 낸다(ASC 다른 섹션과 같은 부분 성공 모델).
+  if (assetEdits.length) {
+    const v = await editableVersion()
+    if (!v.ok) {
+      for (const e of assetEdits)
+        results.push({ id: e.id, ok: false, message: v.message, code: v.code })
+    } else {
+      const locMap = await versionLocales(v.id)
+      for (const e of assetEdits) {
+        const files = e.newValue.split('\n').map((x) => x.trim()).filter(Boolean)
+        if (files.length === 0) {
+          results.push({ id: e.id, ok: false, message: ko ? '올릴 파일이 없음' : 'No files to upload' })
+          continue
+        }
+        const locId = locMap.get(e.locale)
+        if (!locId) {
+          results.push({ id: e.id, ok: false, message: ko ? '해당 로케일 없음' : 'No such locale' })
+          continue
+        }
+        try {
+          // 이 기기의 세트를 찾는다. 없으면 만든다 — 스크린샷이 아직 없는 기기에 처음 올리는 경우다
+          const setsR = await fetch(
+            `${A}/appStoreVersionLocalizations/${locId}/appScreenshotSets`,
+            { headers }
+          )
+          if (!setsR.ok) throw new Error(`sets: HTTP ${setsR.status}`)
+          const setsJ = (await setsR.json()) as {
+            data?: { id: string; attributes?: { screenshotDisplayType?: string } }[]
+          }
+          let setId = (setsJ.data ?? []).find(
+            (s) => s.attributes?.screenshotDisplayType === e.field
+          )?.id
+          if (!setId) {
+            const mkR = await fetch(`${A}/appScreenshotSets`, {
+              method: 'POST',
+              headers: jsonHeaders,
+              body: JSON.stringify({
+                data: {
+                  type: 'appScreenshotSets',
+                  attributes: { screenshotDisplayType: e.field },
+                  relationships: {
+                    appStoreVersionLocalization: {
+                      data: { type: 'appStoreVersionLocalizations', id: locId }
+                    }
+                  }
+                }
+              })
+            })
+            if (!mkR.ok) throw new Error(await ascErrorMsg(mkR))
+            setId = ((await mkR.json()) as { data?: { id?: string } }).data?.id
+          }
+          if (!setId) throw new Error(ko ? '세트를 만들지 못함' : 'Could not create set')
+          await replaceAscScreenshots(A, tok, setId, files)
+          results.push({ id: e.id, ok: true, message: ko ? '반영됨' : 'Applied' })
+        } catch (err) {
+          const message = String(err).replace(/^Error:\s*/, '').slice(0, 160)
+          // 세트 생성이 라이브 버전에서 막히면 ASC가 "current state"로 답한다 — 같은 잠금 해제 대상
           results.push({
             id: e.id,
             ok: false,
-            message: ko ? '편집 가능한 버전 없음 (콘솔에서 새 버전 준비)' : 'No editable version (prepare one in console)'
+            message,
+            code: /current state/i.test(message) ? 'version-locked' : undefined
           })
-      } else {
-        const locMap = new Map<string, string>()
-        const locR = await fetch(
-          `${A}/appStoreVersions/${editable.id}/appStoreVersionLocalizations?fields%5BappStoreVersionLocalizations%5D=locale&limit=50`,
-          { headers }
-        )
-        if (locR.ok) {
-          const lJ = (await locR.json()) as { data?: { id: string; attributes?: { locale?: string } }[] }
-          for (const d of lJ.data ?? []) if (d.attributes?.locale) locMap.set(d.attributes.locale, d.id)
         }
-        await applyLocalized(
-          versionEdits,
-          locMap,
-          'appStoreVersionLocalizations',
-          VERSION_FIELDS,
-          ko ? '해당 로케일 없음' : 'No such locale'
-        )
       }
     }
   }
@@ -2067,14 +2181,23 @@ app.whenReady().then(() => {
   // 여기서 "512×512여야 하는데 1024×1024"까지 말해준다(문서 §8).
   // 미리보기는 파일을 userData/assets에 복사해 zto-asset:// 로 낸다 — 이미 있는 안전한 통로를
   // 재사용한다(경로 조작은 basename으로 막혀 있고, 렌더러에 8MB 바이트를 실어 보내지 않아도 된다).
-  ipcMain.handle('launch:pickAssets', async (_e, imageType: string) => {
+  // platform으로 갈린다: Play는 종류별 규격표(PLAY_IMAGE_SPECS), iOS는 **기기별 스크린샷**이라
+  // imageType이 곧 디스플레이 타입(APP_IPHONE_67 등)이다. 검증기가 다르므로 여기서 나눈다.
+  ipcMain.handle('launch:pickAssets', async (_e, imageType: string, platform?: string) => {
     const ko = appLocale === 'ko'
-    const spec = PLAY_IMAGE_SPECS[imageType]
-    if (!spec) return { ok: false, error: `unknown-type:${imageType}`, files: [] }
+    const ios = platform === 'ios'
+    const spec = ios ? undefined : PLAY_IMAGE_SPECS[imageType]
+    if (!ios && !spec) return { ok: false, error: `unknown-type:${imageType}`, files: [] }
     const picked = await dialog.showOpenDialog({
-      title: spec.label,
-      properties: spec.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
-      filters: [{ name: 'Images', extensions: spec.mimes.includes('image/jpeg') ? ['png', 'jpg', 'jpeg'] : ['png'] }]
+      title: spec?.label ?? imageType,
+      // iOS 스크린샷은 언제나 세트(여러 장)다
+      properties: ios || spec?.multiple ? ['openFile', 'multiSelections'] : ['openFile'],
+      filters: [
+        {
+          name: 'Images',
+          extensions: !spec || spec.mimes.includes('image/jpeg') ? ['png', 'jpg', 'jpeg'] : ['png']
+        }
+      ]
     })
     if (picked.canceled || picked.filePaths.length === 0) return { ok: false, canceled: true, files: [] }
 
@@ -2090,7 +2213,9 @@ app.whenReady().then(() => {
       if (!info) {
         return { ok: false, error: ko ? `${basename(f)}: PNG·JPEG만 읽을 수 있어요` : `${basename(f)}: only PNG/JPEG`, files: [] }
       }
-      const bad = validatePlayImage(imageType, info, ko)
+      const bad = ios
+        ? validateAscScreenshot(imageType, info, ko)
+        : validatePlayImage(imageType, info, ko)
       if (bad) return { ok: false, error: bad, files: [] }
       // 미리보기 사본 — 원본은 건드리지 않는다
       const key = createHash('sha1').update(f + info.bytes).digest('hex')

@@ -139,8 +139,9 @@ const api = {
   },
   launch: {
     // 자산 파일 고르기 — main이 규격까지 검증해서 돌려준다(통과 못 하면 ok:false + 사유)
-    pickAssets: (imageType: string): Promise<PickedAssets> =>
-      ipcRenderer.invoke('launch:pickAssets', imageType),
+    // platform은 검증기를 고른다 — 'ios'면 기기별 스크린샷 규격(+알파 채널 검사), 없으면 Play
+    pickAssets: (imageType: string, platform?: 'android' | 'ios'): Promise<PickedAssets> =>
+      ipcRenderer.invoke('launch:pickAssets', imageType, platform),
     listSheets: (): Promise<SheetSummary[]> => ipcRenderer.invoke('launch:listSheets'),
     checkCredentials: (file: string): Promise<CredentialStatus> =>
       ipcRenderer.invoke('launch:checkCredentials', file),
