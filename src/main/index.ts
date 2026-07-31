@@ -53,6 +53,7 @@ import {
   type DevAccountState,
   type IapSnapshotInfo,
   type LiveIapProduct,
+  parseIapFieldKey,
   type LockState,
   type MetaListing,
   type PendingEdit,
@@ -847,7 +848,7 @@ async function pullGoogleDashboard(sheet: {
     }
     interface GProduct {
       productId?: string
-      listings?: { title?: string }[]
+      listings?: { languageCode?: string; title?: string; description?: string }[]
       purchaseOptions?: { state?: string; regionalPricingAndAvailabilityConfigs?: GConfig[] }[]
     }
     const j = (await jsonOrEmpty(iapR)) as { oneTimeProducts?: GProduct[] }
@@ -862,7 +863,16 @@ async function pullGoogleDashboard(sheet: {
         priceLabel: cfg?.price?.units
           ? `${cfg.price.units} ${cfg.price.currencyCode ?? ''} · ${cfg.regionCode ?? ''}`
           : undefined,
-        kind: 'onetime'
+        kind: 'onetime',
+        productId: p.productId ?? '',
+        // 편집이 listings 배열을 통째로 덮어쓰므로 **전 로케일**을 읽어둔다
+        listings: (p.listings ?? [])
+          .filter((l) => l.languageCode)
+          .map((l) => ({
+            locale: l.languageCode ?? '',
+            title: l.title ?? '',
+            description: l.description ?? ''
+          }))
       })
     }
   }
@@ -1115,14 +1125,38 @@ async function pullAppleDashboard(sheet: {
   const iap: LiveIapProduct[] = []
   if (iapR.ok) {
     const j = (await iapR.json()) as {
-      data?: { attributes?: { productId?: string; name?: string; state?: string } }[]
+      data?: { id: string; attributes?: { productId?: string; name?: string; state?: string } }[]
     }
-    for (const d of j.data ?? []) {
+    const rows = (j.data ?? []).filter((d) => d.attributes?.productId)
+    // 로케일별 이름·설명은 별도 리소스다. ⚠️ 경로가 **`/v2/inAppPurchases/{id}/...`** — v1로
+    // 부르면 "relationship does not exist" 404다(2026-07-31 실측). `include=`도 안 먹혔다.
+    const locs = await Promise.all(
+      rows.map((d) =>
+        fetch(`${A.replace('/v1', '/v2')}/inAppPurchases/${d.id}/inAppPurchaseLocalizations`, {
+          headers
+        })
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+      )
+    )
+    for (let i = 0; i < rows.length; i++) {
+      const d = rows[i]
+      const lJ = locs[i] as {
+        data?: { attributes?: { locale?: string; name?: string; description?: string } }[]
+      } | null
       iap.push({
         id: d.attributes?.productId ?? '',
         title: d.attributes?.name ?? '',
         state: d.attributes?.state ?? '',
-        kind: 'onetime'
+        kind: 'onetime',
+        productId: d.attributes?.productId ?? '',
+        listings: (lJ?.data ?? [])
+          .filter((l) => l.attributes?.locale)
+          .map((l) => ({
+            locale: l.attributes?.locale ?? '',
+            title: l.attributes?.name ?? '',
+            description: l.attributes?.description ?? ''
+          }))
       })
     }
   }
@@ -1193,24 +1227,30 @@ async function applyPlayEdits(
     edits.filter((e) => e.section === 'releaseNotes'),
     ko ? '릴리스 노트는 콘솔에서 (트랙 릴리스 편집)' : 'Release notes: use console (track release)'
   )
+  // IAP는 edit 트랜잭션 밖이다 — 상품 API(`oneTimeProducts`)는 리스팅 edit과 무관하게 즉시 반영된다.
+  // 그래서 메타·자산의 원자적 커밋에 섞지 않고 **따로** 처리한다(섞으면 롤백 범위가 거짓말이 된다).
+  const iapResults = await applyPlayIapEdits(
+    sheet,
+    edits.filter((e) => e.section === 'iap')
+  )
   const metaEdits = edits.filter((e) => e.section === 'meta')
   // 자산은 메타와 **같은 edit 안에서** 처리한다 — commit 하나로 같이 원자적으로 반영된다.
   // (id = `android:assets:{locale}:{imageType}`, newValue = 파일 경로들을 개행으로 이은 것)
   const assetEdits = edits.filter((e) => e.section === 'assets')
-  if (metaEdits.length === 0 && assetEdits.length === 0) return noteResults
+  if (metaEdits.length === 0 && assetEdits.length === 0) return [...noteResults, ...iapResults]
   const writeEdits = [...metaEdits, ...assetEdits]
 
   const saPath = resolveGoogleSa(sheet)
-  if (!saPath) return [...noteResults, ...errored(writeEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
+  if (!saPath) return [...noteResults, ...iapResults, ...errored(writeEdits, ko ? '구글 인증 키 없음' : 'No Google key')]
   const tok = await googleTokenFor(saPath)
-  if (!tok) return [...noteResults, ...errored(writeEdits, ko ? '토큰 발급 실패' : 'Token failed')]
+  if (!tok) return [...noteResults, ...iapResults, ...errored(writeEdits, ko ? '토큰 발급 실패' : 'Token failed')]
   const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
   const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
 
   const editR = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
-  if (!editR.ok) return [...noteResults, ...errored(writeEdits, `HTTP ${editR.status}`)]
+  if (!editR.ok) return [...noteResults, ...iapResults, ...errored(writeEdits, `HTTP ${editR.status}`)]
   const editId = ((await editR.json()) as { id?: string }).id
-  if (!editId) return [...noteResults, ...errored(writeEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
+  if (!editId) return [...noteResults, ...iapResults, ...errored(writeEdits, ko ? 'edit 생성 실패' : 'edit create failed')]
 
   // 로케일별로 현재 리스팅을 읽어 변경 필드만 병합 후 전체 PUT — 다른 필드 유실 방지
   const byLocale = new Map<string, PendingEdit[]>()
@@ -1263,6 +1303,7 @@ async function applyPlayEdits(
       await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
       return [
         ...noteResults,
+        ...iapResults,
         ...writeEdits.map((e) => ({
           id: e.id,
           ok: false,
@@ -1272,13 +1313,114 @@ async function applyPlayEdits(
     }
     const commitR = await fetch(`${base}/edits/${editId}:commit`, { method: 'POST', headers })
     if (!commitR.ok) {
-      return [...noteResults, ...errored(writeEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
+      return [...noteResults, ...iapResults, ...errored(writeEdits, (ko ? '커밋 실패 HTTP ' : 'Commit failed HTTP ') + commitR.status)]
     }
-    return [...noteResults, ...applied(writeEdits)]
+    return [...noteResults, ...iapResults, ...applied(writeEdits)]
   } catch (err) {
     await fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
-    return [...noteResults, ...errored(writeEdits, String(err).slice(0, 120))]
+    return [...noteResults, ...iapResults, ...errored(writeEdits, String(err).slice(0, 120))]
   }
+}
+
+// Play 상품 API가 요구하는 지역 목록 버전. `launch/scripts/google/otp-upsert.js`와 같은 값을
+// 쓴다 — 구글이 지역을 추가하면 이 값을 올려야 하고, 두 곳이 어긋나면 한쪽만 실패한다
+const PLAY_REGIONS_VERSION = '2025/01'
+
+// ---------- Play IAP 편집 (일회성 상품의 로케일별 제목·설명) ----------
+// 가격·상태·구독은 **여기서 다루지 않는다**: 가격은 지역 173개를 통째로 실어 보내야 하는데
+// 우리는 대표 지역 하나만 읽고, 구독 가격은 기존 구독자에게 영향이 가 동의 절차가 따로다.
+// 읽은 것보다 넓게 쓰지 않는다 — 그게 이 화면이 지킬 수 있는 약속의 경계다.
+async function applyPlayIapEdits(
+  sheet: { app: { packageName: string }; credentials?: { googleSa?: string } },
+  edits: PendingEdit[]
+): Promise<ApplyResult[]> {
+  if (edits.length === 0) return []
+  const ko = appLocale === 'ko'
+  const errored = (msg: string): ApplyResult[] =>
+    edits.map((e) => ({ id: e.id, ok: false, message: msg }))
+
+  const saPath = resolveGoogleSa(sheet)
+  if (!saPath) return errored(ko ? '구글 인증 키 없음' : 'No Google key')
+  const tok = await googleTokenFor(saPath)
+  if (!tok) return errored(ko ? '토큰 발급 실패' : 'Token failed')
+  const pkg = sheet.app.packageName
+  const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(pkg)}`
+  const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+
+  // 현재 상품을 먼저 읽는다 — listings는 **배열 통째 교체**라 안 건드릴 로케일까지 다시 실어야 한다
+  const curR = await fetch(`${base}/oneTimeProducts`, { headers })
+  if (!curR.ok) return errored(`HTTP ${curR.status}`)
+  const curJ = (await jsonOrEmpty(curR)) as {
+    oneTimeProducts?: {
+      productId?: string
+      listings?: { languageCode?: string; title?: string; description?: string }[]
+    }[]
+  }
+  const byId = new Map((curJ.oneTimeProducts ?? []).map((p) => [p.productId ?? '', p]))
+
+  // (상품 × 로케일 × 필드) 편집을 상품 단위로 모은다 — batchUpdate가 상품 하나를 한 요청으로 받는다
+  const results: ApplyResult[] = []
+  const byProduct = new Map<string, PendingEdit[]>()
+  for (const e of edits) {
+    const parsed = parseIapFieldKey(e.field)
+    if (!parsed) {
+      results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
+      continue
+    }
+    const arr = byProduct.get(parsed.productId) ?? []
+    arr.push(e)
+    byProduct.set(parsed.productId, arr)
+  }
+
+  for (const [productId, group] of byProduct) {
+    const cur = byId.get(productId)
+    if (!cur) {
+      for (const e of group)
+        results.push({ id: e.id, ok: false, message: ko ? '상품을 찾을 수 없음' : 'Product not found' })
+      continue
+    }
+    const listings = (cur.listings ?? []).map((l) => ({
+      languageCode: l.languageCode ?? '',
+      title: l.title ?? '',
+      description: l.description ?? ''
+    }))
+    for (const e of group) {
+      const parsed = parseIapFieldKey(e.field)
+      if (!parsed) continue
+      let row = listings.find((l) => l.languageCode === e.locale)
+      if (!row) {
+        // 그 로케일 리스팅이 아직 없으면 만든다 — 새 언어를 추가하는 경우다
+        row = { languageCode: e.locale, title: '', description: '' }
+        listings.push(row)
+      }
+      if (parsed.field === 'title') row.title = e.newValue
+      else row.description = e.newValue
+    }
+    // updateMask를 `listings`로 좁혀 **가격·가용성(purchaseOptions)은 손대지 않는다**.
+    // allowMissing은 false — 상품 id가 틀렸을 때 유령 상품이 생기는 대신 실패해야 한다.
+    const r = await fetch(`${base}/oneTimeProducts:batchUpdate`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        requests: [
+          {
+            oneTimeProduct: { packageName: pkg, productId, listings },
+            updateMask: 'listings',
+            allowMissing: false,
+            regionsVersion: { version: PLAY_REGIONS_VERSION }
+          }
+        ]
+      })
+    })
+    if (r.ok) {
+      for (const e of group) results.push({ id: e.id, ok: true, message: ko ? '반영됨' : 'Applied' })
+    } else {
+      const body = (await jsonOrEmpty(r)) as { error?: { message?: string } }
+      const msg = (body.error?.message ?? `HTTP ${r.status}`).slice(0, 160)
+      for (const e of group) results.push({ id: e.id, ok: false, message: msg })
+    }
+  }
+  return results
 }
 
 // ASC 에러 본문(JSON:API)에서 사람이 읽을 사유 뽑기
@@ -1339,12 +1481,14 @@ async function applyAscEdits(
     whatsNew: 'whatsNew'
   }
   const results: ApplyResult[] = []
-  // 자산은 필드가 **기기 디스플레이 타입**(APP_IPHONE_67 등)이라 필드명 표로 못 가른다 — 섹션으로 가른다
+  // 자산·IAP는 필드명 표로 못 가른다(자산=기기 타입, IAP=상품id::필드) — 섹션으로 먼저 가른다
   const assetEdits = edits.filter((e) => e.section === 'assets')
-  const appInfoEdits = edits.filter((e) => e.section !== 'assets' && e.field in APP_INFO_FIELDS)
-  const versionEdits = edits.filter((e) => e.section !== 'assets' && e.field in VERSION_FIELDS)
-  for (const e of edits) {
-    if (e.section !== 'assets' && !(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
+  const iapEdits = edits.filter((e) => e.section === 'iap')
+  const plain = edits.filter((e) => e.section !== 'assets' && e.section !== 'iap')
+  const appInfoEdits = plain.filter((e) => e.field in APP_INFO_FIELDS)
+  const versionEdits = plain.filter((e) => e.field in VERSION_FIELDS)
+  for (const e of plain) {
+    if (!(e.field in APP_INFO_FIELDS) && !(e.field in VERSION_FIELDS)) {
       results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
     }
   }
@@ -1493,6 +1637,88 @@ async function applyAscEdits(
         VERSION_FIELDS,
         ko ? '해당 로케일 없음' : 'No such locale'
       )
+    }
+  }
+
+  // ---- IAP (로케일별 이름·설명) ----
+  // 상품은 버전에 매달리지 않는다(라이브 앱이어도 IAP는 따로 심사) → 버전 관문을 안 지난다.
+  // 가격·상태는 다루지 않는다(Play와 같은 이유 — 읽은 것보다 넓게 쓰지 않는다).
+  if (iapEdits.length) {
+    const listR = await fetch(`${A}/apps/${appId}/inAppPurchasesV2?limit=200`, { headers })
+    if (!listR.ok) {
+      for (const e of iapEdits) results.push({ id: e.id, ok: false, message: `HTTP ${listR.status}` })
+    } else {
+      const lJ = (await listR.json()) as {
+        data?: { id: string; attributes?: { productId?: string } }[]
+      }
+      const idOfProduct = new Map(
+        (lJ.data ?? []).map((d) => [d.attributes?.productId ?? '', d.id])
+      )
+      // 로케일 리소스 id는 상품마다 한 번만 조회해 재사용한다
+      const locCacheByProduct = new Map<string, Map<string, string>>()
+      const localesOf = async (iapId: string): Promise<Map<string, string>> => {
+        const hit = locCacheByProduct.get(iapId)
+        if (hit) return hit
+        const map = new Map<string, string>()
+        // ⚠️ v2 경로다 — v1로 부르면 relationship 없음 404 (2026-07-31 실측)
+        const r = await fetch(
+          `${A.replace('/v1', '/v2')}/inAppPurchases/${iapId}/inAppPurchaseLocalizations`,
+          { headers }
+        )
+        if (r.ok) {
+          const j = (await r.json()) as {
+            data?: { id: string; attributes?: { locale?: string } }[]
+          }
+          for (const d of j.data ?? []) if (d.attributes?.locale) map.set(d.attributes.locale, d.id)
+        }
+        locCacheByProduct.set(iapId, map)
+        return map
+      }
+
+      // 같은 (상품·로케일)의 이름·설명은 PATCH 한 번으로 묶는다 (메타와 같은 방식)
+      const grouped = new Map<string, PendingEdit[]>()
+      for (const e of iapEdits) {
+        const parsed = parseIapFieldKey(e.field)
+        if (!parsed) {
+          results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
+          continue
+        }
+        const key = `${parsed.productId} ${e.locale}`
+        const arr = grouped.get(key) ?? []
+        arr.push(e)
+        grouped.set(key, arr)
+      }
+      for (const [key, group] of grouped) {
+        const [productId, locale] = key.split(' ')
+        const iapId = idOfProduct.get(productId)
+        if (!iapId) {
+          for (const e of group)
+            results.push({ id: e.id, ok: false, message: ko ? '상품을 찾을 수 없음' : 'Product not found' })
+          continue
+        }
+        const locId = (await localesOf(iapId)).get(locale)
+        if (!locId) {
+          for (const e of group)
+            results.push({ id: e.id, ok: false, message: ko ? '해당 로케일 없음' : 'No such locale' })
+          continue
+        }
+        const attributes: Record<string, string> = {}
+        for (const e of group) {
+          const parsed = parseIapFieldKey(e.field)
+          if (!parsed) continue
+          // ASC는 제목을 `name`으로 부른다 — 화면·Play와 말을 맞추려고 우리 쪽에서 title로 쓴다
+          attributes[parsed.field === 'title' ? 'name' : 'description'] = e.newValue
+        }
+        const r = await fetch(`${A}/inAppPurchaseLocalizations/${locId}`, {
+          method: 'PATCH',
+          headers: jsonHeaders,
+          body: JSON.stringify({
+            data: { type: 'inAppPurchaseLocalizations', id: locId, attributes }
+          })
+        })
+        const message = r.ok ? (ko ? '반영됨' : 'Applied') : await ascErrorMsg(r)
+        for (const e of group) results.push({ id: e.id, ok: r.ok, message })
+      }
     }
   }
 

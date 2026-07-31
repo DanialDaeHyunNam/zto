@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
 import type {
   ApplyResult,
   DashApple,
@@ -16,6 +16,8 @@ import type {
   SheetSummary,
   StoreSnapshotEntry
 } from '../../../../shared/launch-types'
+// 값(런타임)으로 쓰는 것 — IAP 편집 필드 키 규칙을 main과 공유한다
+import { IAP_FIELD_SEP, iapFieldKey } from '../../../../shared/launch-types'
 import type { DataSafetyDoc } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
 import type { Messages } from '../../i18n/en'
@@ -507,26 +509,99 @@ function Lightbox({
 // ---------- IAP ----------
 // 일회성 상품과 구독이 한 목록에 섞여 온다(스토어는 별도 리소스지만 사용자에겐 다 'IAP'다).
 // 구독만 뱃지를 단다 — 대부분이 일회성이라 양쪽 다 달면 뱃지가 소음이 된다.
-function IapSub({ items }: { items: LiveIapProduct[] }): React.JSX.Element {
+//
+// 편집은 **일회성 상품의 로케일별 제목·설명**까지만 연다. 가격·상태·구독은 콘솔 몫이다
+// (가격은 지역 전체를 실어 보내야 하는데 우리는 대표 지역만 읽는다 — 읽은 것보다 넓게 쓰지 않는다).
+function IapSub({
+  items,
+  platform,
+  platLabel,
+  edits,
+  onStage
+}: {
+  items: LiveIapProduct[]
+  platform: EditPlatform
+  platLabel: string
+  edits?: Record<string, PendingEdit>
+  onStage?: (e: PendingEdit) => void
+}): React.JSX.Element {
   const { m } = useI18n()
+  const [open, setOpen] = useState<string | null>(null)
   return (
     <div className="dash-sub">
-      {items.map((p, i) => (
-        // 구독은 상품 하나가 요금제 여럿(월·연)으로 펴져 id가 겹칠 수 있어 인덱스를 함께 쓴다
-        <div key={`${p.id}:${i}`} className="dash-sub-row">
-          <code>{p.id}</code>
-          <span className="dash-sub-title">{p.title}</span>
-          {p.kind === 'subscription' && (
-            <span className="iap-kind">
-              {m.launch.iapSubscription}
-              {/* 사전에 없는 주기는 스토어 원문 그대로 — 못 알아본 걸 감추면 진단이 사라진다 */}
-              {p.period ? ` · ${m.launch.iapPeriod[p.period] ?? p.period}` : ''}
-            </span>
-          )}
-          {p.priceLabel && <span className="dash-price">{p.priceLabel}</span>}
-          <Chip label={p.state.toLowerCase().replace(/_/g, ' ')} tone={iapStateTone(p.state)} />
-        </div>
-      ))}
+      {items.map((p, i) => {
+        const editable = p.kind !== 'subscription' && !!p.productId && !!edits && !!onStage
+        const rowKey = `${p.id}:${i}`
+        // 대기 중인 편집이 이 상품에 있으면 접혀 있어도 앰버로 알린다
+        const dirty =
+          editable &&
+          Object.values(edits).some(
+            (e) => e.section === 'iap' && e.platform === platform && e.field.startsWith(`${p.productId}${IAP_FIELD_SEP}`)
+          )
+        return (
+          // 구독은 상품 하나가 요금제 여럿(월·연)으로 펴져 id가 겹칠 수 있어 인덱스를 함께 쓴다
+          <React.Fragment key={rowKey}>
+            <div className={`dash-sub-row${dirty ? ' iap-dirty' : ''}`}>
+              <code>{p.id}</code>
+              <span className="dash-sub-title">{p.title}</span>
+              {p.kind === 'subscription' && (
+                <span className="iap-kind">
+                  {m.launch.iapSubscription}
+                  {/* 사전에 없는 주기는 스토어 원문 그대로 — 못 알아본 걸 감추면 진단이 사라진다 */}
+                  {p.period ? ` · ${m.launch.iapPeriod[p.period] ?? p.period}` : ''}
+                </span>
+              )}
+              {p.priceLabel && <span className="dash-price">{p.priceLabel}</span>}
+              <Chip label={p.state.toLowerCase().replace(/_/g, ' ')} tone={iapStateTone(p.state)} />
+              {editable && (
+                <button
+                  className={`asset-swap ${open === rowKey || dirty ? 'on' : ''}`}
+                  onClick={() => setOpen(open === rowKey ? null : rowKey)}
+                  title={m.launch.iapEdit}
+                >
+                  ✎
+                </button>
+              )}
+            </div>
+            {editable && open === rowKey && (
+              <div className="iap-edit">
+                {(p.listings ?? []).length === 0 ? (
+                  <div className="asset-note">{m.launch.iapNoListings}</div>
+                ) : (
+                  (p.listings ?? []).map((l) => (
+                    <div key={l.locale} className="iap-edit-loc">
+                      <div className="iap-edit-loc-head">{l.locale}</div>
+                      <MetaField
+                        platform={platform}
+                        platLabel={platLabel}
+                        section="iap"
+                        locale={l.locale}
+                        fieldKey={iapFieldKey(p.productId ?? '', 'title')}
+                        label={m.launch.iapTitle}
+                        storeValue={l.title}
+                        edits={edits}
+                        stage={onStage}
+                      />
+                      <MetaField
+                        platform={platform}
+                        platLabel={platLabel}
+                        section="iap"
+                        locale={l.locale}
+                        fieldKey={iapFieldKey(p.productId ?? '', 'description')}
+                        label={m.launch.iapDescription}
+                        storeValue={l.description}
+                        multiline
+                        edits={edits}
+                        stage={onStage}
+                      />
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </React.Fragment>
+        )
+      })}
     </div>
   )
 }
@@ -1207,7 +1282,7 @@ function AndroidTree({
   file,
   metaDirty,
   surveys,
-  assetEdits,
+  pendingEdits,
   onStage,
   onImage,
   onOpenMeta,
@@ -1217,7 +1292,7 @@ function AndroidTree({
   file: string
   metaDirty: boolean
   surveys: SurveyItem[]
-  assetEdits: Record<string, PendingEdit>
+  pendingEdits: Record<string, PendingEdit>
   onStage: (e: PendingEdit) => void
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
@@ -1230,8 +1305,11 @@ function AndroidTree({
     .join(' · ')
   // 릴리스가 하나라도 있으면 선언은 통과한 것 (Play가 선언 없이는 출시를 막는다)
   const declaredDone = releases.length > 0
-  const assetDirty = Object.values(assetEdits).some(
+  const assetDirty = Object.values(pendingEdits).some(
     (e) => e.platform === 'android' && e.section === 'assets'
+  )
+  const iapDirty = Object.values(pendingEdits).some(
+    (e) => e.platform === 'android' && e.section === 'iap'
   )
   // 자산을 읽어온 로케일. `imageLocale`은 나중에 생긴 필드라 **그 전에 저장된 캐시엔 없다** —
   // 없다고 편집 행을 통째로 숨기면 "새로고침 전까지 기능이 사라진" 것처럼 보인다(2026-07-30 실제로 그랬다).
@@ -1285,7 +1363,7 @@ function AndroidTree({
               platform="android"
               locale={imageLocale}
               sets={g.images}
-              edits={assetEdits}
+              edits={pendingEdits}
               label={(s) => playAssetLabel(m, s)}
               typeLabel={(t) => assetTypeLabel(m, t)}
               onStage={onStage}
@@ -1310,14 +1388,23 @@ function AndroidTree({
           </div>
         </div>
       )}
-      <Node light={g.iap.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeIap}>
+      <Node
+        light={iapDirty ? 'y' : g.iap.length > 0 ? 'g' : 'o'}
+        label={m.launch.dashNodeIap}
+      >
         {g.iap.length > 0
           ? m.launch.dashIapLive.replace('{n}', String(g.iap.length))
           : m.launch.liveNone}
       </Node>
       {g.iap.length > 0 && (
         <>
-          <IapSub items={g.iap} />
+          <IapSub
+            items={g.iap}
+            platform="android"
+            platLabel={m.launch.dashAndroid}
+            edits={pendingEdits}
+            onStage={onStage}
+          />
           <div className="dash-sub">
             <div>
               <HistoryToggle
@@ -1369,7 +1456,7 @@ function IosTree({
   file,
   metaDirty,
   surveys,
-  assetEdits,
+  pendingEdits,
   onStage,
   onImage,
   onOpenMeta,
@@ -1379,7 +1466,7 @@ function IosTree({
   file: string
   metaDirty: boolean
   surveys: SurveyItem[]
-  assetEdits: Record<string, PendingEdit>
+  pendingEdits: Record<string, PendingEdit>
   onStage: (e: PendingEdit) => void
   onImage: (urls: string[], idx: number) => void
   onOpenMeta: () => void
@@ -1392,8 +1479,11 @@ function IosTree({
     .filter(Boolean)
     .join(' · ')
   const shotLabels = a.screenshots.map((s) => ascShotLabel(m, s))
-  const assetDirty = Object.values(assetEdits).some(
+  const assetDirty = Object.values(pendingEdits).some(
     (e) => e.platform === 'ios' && e.section === 'assets'
+  )
+  const iapDirty = Object.values(pendingEdits).some(
+    (e) => e.platform === 'ios' && e.section === 'iap'
   )
   // 스크린샷을 읽어온 로케일. `shotLocale`은 나중에 생긴 필드라 **그 전에 저장된 캐시엔 없다** —
   // 없다고 편집을 숨기면 "새로고침 전까지 기능이 사라진" 것처럼 보인다. main과 같은 규칙으로 되짚는다.
@@ -1437,7 +1527,7 @@ function IosTree({
               platform="ios"
               locale={shotLocale}
               sets={a.screenshots}
-              edits={assetEdits}
+              edits={pendingEdits}
               label={(s) => ascShotLabel(m, s)}
               typeLabel={ascDeviceLabel}
               onStage={onStage}
@@ -1465,14 +1555,23 @@ function IosTree({
           </div>
         </div>
       )}
-      <Node light={a.iap.length > 0 ? 'g' : 'o'} label={m.launch.dashNodeIap}>
+      <Node
+        light={iapDirty ? 'y' : a.iap.length > 0 ? 'g' : 'o'}
+        label={m.launch.dashNodeIap}
+      >
         {a.iap.length > 0
           ? m.launch.dashIapLive.replace('{n}', String(a.iap.length))
           : m.launch.liveNone}
       </Node>
       {a.iap.length > 0 && (
         <>
-          <IapSub items={a.iap} />
+          <IapSub
+            items={a.iap}
+            platform="ios"
+            platLabel={m.launch.dashIos}
+            edits={pendingEdits}
+            onStage={onStage}
+          />
           <div className="dash-sub">
             <div>
               <HistoryToggle
@@ -1666,7 +1765,7 @@ export default function AppDashboard({
                   file={file}
                   metaDirty={metaDirty('android')}
                   surveys={surveysFor('android')}
-                  assetEdits={edits}
+                  pendingEdits={edits}
                   onStage={stage}
                   onImage={(urls, idx) => setLightbox({ urls, idx })}
                   onOpenMeta={() => setMetaOpen(true)}
@@ -1681,7 +1780,7 @@ export default function AppDashboard({
                 file={file}
                 metaDirty={metaDirty('ios')}
                 surveys={surveysFor('ios')}
-                assetEdits={edits}
+                pendingEdits={edits}
                 onStage={stage}
                 onImage={(urls, idx) => setLightbox({ urls, idx })}
                 onOpenMeta={() => setMetaOpen(true)}

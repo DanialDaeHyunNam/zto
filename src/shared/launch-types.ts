@@ -49,6 +49,25 @@ export interface LiveIapProduct {
   priceLabel?: string
   kind?: 'onetime' | 'subscription'
   period?: string // 구독 주기 (P1M·ONE_MONTH 같은 스토어 원문을 사람 말로 바꿔 담는다)
+  productId?: string // 편집용 원본 상품 id (구독은 표시 id에 요금제가 붙어 있어 따로 필요하다)
+  // 로케일별 이름·설명. **편집하려면 전부 읽어야 한다** — Play는 listings 배열을 통째로
+  // 덮어쓰므로 일부만 갖고 쓰면 나머지 언어가 지워진다(읽기의 생략이 쓰기의 사고가 되는 자리)
+  listings?: { locale: string; title: string; description: string }[]
+}
+
+// IAP 편집은 (상품 × 필드)로 갈리는데 `PendingEdit.field`는 문자열 하나뿐이라 둘을 같이 싣는다.
+// 렌더러가 만들고 main이 푸는 규칙이라 **양쪽이 보는 한 곳**에 둔다.
+export const IAP_FIELD_SEP = '::'
+export const iapFieldKey = (productId: string, field: 'title' | 'description'): string =>
+  `${productId}${IAP_FIELD_SEP}${field}`
+export const parseIapFieldKey = (
+  key: string
+): { productId: string; field: 'title' | 'description' } | null => {
+  const at = key.lastIndexOf(IAP_FIELD_SEP)
+  if (at < 0) return null
+  const field = key.slice(at + IAP_FIELD_SEP.length)
+  if (field !== 'title' && field !== 'description') return null
+  return { productId: key.slice(0, at), field }
 }
 
 // Play 트랙별 현재 릴리스 — 트랙 안에 살아있는 릴리스만 온다 (과거 버전 이력 API는 없음)

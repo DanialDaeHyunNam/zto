@@ -236,6 +236,10 @@ export const ko: Messages = {
     dashShotCount: '{n}컷',
     dashIosIconBuild: '아이콘은 빌드 소속',
     dashNodeIap: 'IAP',
+    iapEdit: '이름·설명 편집',
+    iapTitle: '이름',
+    iapDescription: '설명',
+    iapNoListings: '이 상품엔 아직 언어별 이름·설명이 없어요. 콘솔에서 먼저 추가해야 해요.',
     dashIapLive: '{n}종 실황',
     // 구독 뱃지·주기 — 일회성은 뱃지를 안 단다(대부분이 일회성이라 붙이면 소음)
     iapSubscription: '구독',

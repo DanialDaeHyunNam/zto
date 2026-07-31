@@ -2912,6 +2912,28 @@ button {
   flex-shrink: 0;
 }
 
+/* IAP 인라인 편집 — 상품 행 아래로 펼친다. 카드를 새로 만들지 않는다(카드 속 카드 금지):
+   들여쓰기와 왼쪽 선만으로 "이 상품에 속한다"를 말한다. */
+.iap-edit {
+  margin: 6px 0 10px 14px;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.iap-edit-loc-head {
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+/* 접혀 있어도 대기 중인 편집이 있으면 알린다 — 펼쳐야만 보이면 놓친다 */
+.dash-sub-row.iap-dirty > code {
+  color: var(--warn);
+}
+
 /* 구독 표식 — 상태 칩(초록·앰버)과 경쟁하지 않게 테두리 없는 중립 텍스트로 둔다.
    여기에 색을 주면 "구독이라서 문제가 있나?"로 읽힌다. */
 .iap-kind {

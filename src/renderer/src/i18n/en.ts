@@ -235,6 +235,10 @@ export const en = {
     dashShotCount: '{n}',
     dashIosIconBuild: 'icon ships with the build',
     dashNodeIap: 'IAP',
+    iapEdit: 'Edit name & description',
+    iapTitle: 'Name',
+    iapDescription: 'Description',
+    iapNoListings: 'This product has no per-language name/description yet. Add one in the console first.',
     dashIapLive: '{n} live',
     // 구독 뱃지·주기 — 일회성은 뱃지를 안 단다(대부분이 일회성이라 붙이면 소음)
     iapSubscription: 'Subscription',
