@@ -26,6 +26,7 @@ import type {
   StoreSnapshotEntry
 } from '../shared/launch-types'
 import type { LicenseInfo } from '../shared/license-types'
+import type { UpdateStatus } from '../shared/update-types'
 import type { BrowserBounds, BrowserResult, BrowserState } from '../shared/browser-types'
 
 import type {
@@ -141,6 +142,17 @@ const api = {
       const l = (_e: unknown, p: { step: string; detail?: string }): void => cb(p)
       ipcRenderer.on('console:progress', l)
       return () => ipcRenderer.removeListener('console:progress', l)
+    }
+  },
+  // 자동 업데이트 — 다운로드는 자동, **재시작은 사용자가** 누른다
+  update: {
+    status: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:status'),
+    check: (): Promise<UpdateStatus> => ipcRenderer.invoke('update:check'),
+    install: (): Promise<void> => ipcRenderer.invoke('update:install'),
+    onStatus: (cb: (s: UpdateStatus) => void): (() => void) => {
+      const l = (_e: unknown, s: UpdateStatus): void => cb(s)
+      ipcRenderer.on('update:status', l)
+      return () => ipcRenderer.removeListener('update:status', l)
     }
   },
   // 라이선스 (SPEC §8) — 검증은 Lemon Squeezy 공개 API를 main이 직접 부른다(서버 없음)

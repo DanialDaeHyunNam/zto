@@ -45,6 +45,14 @@ win:
   # 코드 서명 인증서가 없으면 미서명으로 나간다(설치 시 SmartScreen 경고).
   # 인증서가 생기면 CSC_LINK · CSC_KEY_PASSWORD 환경변수로 붙인다
 
+# 업데이트 채널 — **호스트에 묶지 않는다.** 정적 파일(latest*.yml + 설치본)만 놓을 수 있으면
+# GitHub Releases든 오브젝트 스토리지든 상관없다. 릴리스할 때 환경변수로 주입한다:
+#   ZTO_UPDATE_URL=https://... npm run dist:mac
+# ⚠️ macOS 자동 업데이트는 **서명된 앱에서만** 동작한다(Squirrel.Mac 요구). 미서명 빌드는 못 받는다.
+publish:
+  provider: generic
+  url: ${env.ZTO_UPDATE_URL}
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

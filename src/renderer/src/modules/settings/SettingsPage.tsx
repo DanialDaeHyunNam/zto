@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { AiProviderId, AiProviderStatus, AiStatus } from '../../../../shared/launch-types'
 import type { LicenseInfo } from '../../../../shared/license-types'
+import type { UpdateStatus } from '../../../../shared/update-types'
 import { useI18n, type Locale } from '../../i18n'
 import AiUsage from './AiUsage'
 
@@ -102,6 +103,67 @@ function LicenseCard(): React.JSX.Element {
           {m.settings.licenseOffline.replace('{d}', String(daysLeft(info.offlineUntil)))}
         </p>
       )}
+    </div>
+  )
+}
+
+
+// ---------- 업데이트 ----------
+// 다운로드는 자동이지만 **재시작은 사용자가 누른다** — ZTO는 라이브 스토어를 비가역으로 바꾸는
+// 작업을 하므로, 반영 도중 앱이 스스로 재시작하면 무엇이 반영됐는지 모르는 상태가 된다.
+function UpdateCard(): React.JSX.Element {
+  const { m } = useI18n()
+  const [st, setSt] = useState<UpdateStatus | null>(null)
+  useEffect(() => {
+    window.zto.update.status().then(setSt)
+    return window.zto.update.onStatus(setSt)
+  }, [])
+
+  const label = (): string => {
+    if (!st) return '…'
+    if (st.disabled) return m.settings.updateDev
+    switch (st.phase) {
+      case 'checking':
+        return m.settings.updateChecking
+      case 'available':
+        return m.settings.updateFound.replace('{v}', st.newVersion ?? '')
+      case 'downloading':
+        return m.settings.updateDownloading.replace('{p}', String(st.percent ?? 0))
+      case 'ready':
+        return m.settings.updateReady.replace('{v}', st.newVersion ?? '')
+      case 'error':
+        return m.settings.updateError
+      default:
+        return m.settings.updateLatest
+    }
+  }
+
+  return (
+    <div className="settings-card">
+      <h2 className="settings-h2">{m.settings.updateTitle}</h2>
+      <div className="lic-row">
+        <span className="iap-kind">v{st?.version ?? ''}</span>
+        <span className="settings-intro" style={{ margin: 0 }}>
+          {label()}
+        </span>
+        {st?.phase === 'ready' ? (
+          <button className="choice small active" onClick={() => window.zto.update.install()}>
+            {m.settings.updateInstall}
+          </button>
+        ) : (
+          !st?.disabled && (
+            <button
+              className="ghost-btn mini"
+              disabled={st?.phase === 'checking' || st?.phase === 'downloading'}
+              onClick={() => window.zto.update.check().then(setSt)}
+            >
+              {m.settings.updateCheck}
+            </button>
+          )
+        )}
+      </div>
+      {/* 실패 사유는 여기서만 보여준다 — 배너로 띄우면 업데이트 서버가 잠깐 죽어도 매번 놀란다 */}
+      {st?.phase === 'error' && st.error && <div className="asset-edit-err">{st.error}</div>}
     </div>
   )
 }
@@ -250,6 +312,7 @@ export default function SettingsPage(): React.JSX.Element {
       <h1>{m.settings.title}</h1>
 
       <LicenseCard />
+      <UpdateCard />
 
       <div className="settings-card">
         <h2 className="settings-h2">{m.settings.aiTitle}</h2>

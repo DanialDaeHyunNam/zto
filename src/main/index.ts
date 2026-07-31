@@ -20,6 +20,7 @@ import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
 import { hostname } from 'os'
 import { createLicense } from './license'
+import { createUpdater } from './updater'
 import { registerBrowserIpc } from './browser'
 import { probeAppContent, pullDataSafety } from './console-sync'
 import {
@@ -84,6 +85,9 @@ const launchScript = (...seg: string[]): string => join(resourceDir(), 'scripts'
 const ANSWERS_DIR = app.isPackaged
   ? join(app.getPath('userData'), 'answers')
   : join(app.getAppPath(), 'launch', 'answers')
+
+// 자동 업데이트 — 다운로드는 자동, 재시작은 사람이(비가역 작업 중 재시작 금지)
+const updater = createUpdater(() => browserHostWindow)
 
 // 라이선스 — 파일은 userData, 키는 safeStorage로 암호화해 넣는다
 const license = createLicense(join(app.getPath('userData'), 'zto-license.json'))
@@ -2255,6 +2259,7 @@ function createWindow(): void {
     // 실사용(패키징) 때는 사용자가 직접 실행한 것이므로 앞으로 나오는 게 맞다.
     if (app.isPackaged) mainWindow.show()
     else mainWindow.showInactive()
+    updater.start() // 창이 뜬 뒤에 시작 — 첫 화면보다 먼저 네트워크를 쓰지 않는다
   })
 
   const saveBounds = (): void => {
@@ -2659,6 +2664,10 @@ app.whenReady().then(() => {
   // ---------- 라이선스 (SPEC §8) ----------
   // 게이트는 **쓰기와 AI만** 건다. 읽기(대시보드·계정 보기)는 열어둔다 — 체험이 끝났다고
   // 이미 내 계정에 있는 정보를 못 보게 하는 건 인질이지 판매가 아니다.
+  ipcMain.handle('update:status', () => updater.info())
+  ipcMain.handle('update:check', async () => await updater.check())
+  ipcMain.handle('update:install', () => updater.install())
+
   ipcMain.handle('license:info', async () => await license.revalidate())
   ipcMain.handle('license:activate', async (_e, key: string) => {
     const name = `${hostname()} · ${process.platform}`
