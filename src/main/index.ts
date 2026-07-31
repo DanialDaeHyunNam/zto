@@ -5,6 +5,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  nativeImage,
   net,
   powerMonitor,
   protocol,
@@ -378,6 +379,12 @@ function openAiCost(model: string, inTok: number, cachedTok: number, outTok: num
 // 이력은 메모리에만 — 앱을 끄면 사라진다(대화는 휘발성, 디스크에 남기지 않는다).
 // previous_response_id(서버 보관)를 안 쓰는 이유: 대화가 OpenAI 쪽에 남지 않게 하려고.
 // 대신 매 턴 이력을 재전송하는데, ZTO 대화 길이에선 요금 차이가 무시할 수준이다.
+// 이미지는 보내기 전에 이 크기로 줄인다 — 콘솔·소셜 화면을 읽는 데 원본 해상도가 필요 없다
+const IMAGE_MAX_EDGE = 1024
+// 이미지가 붙었을 때 피할 고단가 모델 → 대신 쓸 모델
+const IMAGE_HEAVY_MODELS = ['gpt-5.6-terra', 'gpt-5.6-sol']
+const IMAGE_FALLBACK_MODEL = 'gpt-5.6-luna'
+
 const openAiSessions = new Map<string, unknown[]>()
 const OPENAI_MAX_MESSAGES = 24 // 이력 폭주 방지 — 오래된 턴부터 버린다
 
@@ -385,6 +392,19 @@ interface OpenAiPart {
   type: string
   text?: string
 }
+// 이력용 — input_image 파트를 자리표시자 텍스트로 바꾼다(다음 턴에 재전송되지 않게)
+function stripImages(msg: unknown): unknown {
+  const m = msg as { role?: string; content?: { type?: string }[] }
+  if (!Array.isArray(m?.content)) return msg
+  if (!m.content.some((c) => c?.type === 'input_image')) return msg
+  return {
+    ...m,
+    content: m.content.map((c) =>
+      c?.type === 'input_image' ? { type: 'input_text', text: '[이 턴에 화면 이미지 첨부됨]' } : c
+    )
+  }
+}
+
 function openAiText(j: { output_text?: unknown; output?: { content?: OpenAiPart[] }[] }): string {
   if (typeof j.output_text === 'string' && j.output_text) return j.output_text
   const parts: string[] = []
@@ -459,7 +479,10 @@ async function chatOpenAi(
 
     const sid = opts?.resume ?? `oa-${randomUUID()}`
     const next = [...input, { role: 'assistant', content: [{ type: 'output_text', text }] }]
-    openAiSessions.set(sid, next.slice(-OPENAI_MAX_MESSAGES))
+    // **이력에는 이미지를 남기지 않는다.** Responses API는 무상태라 매 턴 이력을 통째로 다시
+    // 보내는데, 이미지가 남아 있으면 한 장이 창(24메시지) 동안 계속 재청구된다 — 붙인 장수가
+    // 아니라 이 곱셈이 비용을 지배한다. 자리표시자를 남겨 "그때 화면을 봤다"는 사실은 유지한다.
+    openAiSessions.set(sid, next.slice(-OPENAI_MAX_MESSAGES).map(stripImages))
     return { ok: true, text, sessionId: sid }
   } catch (e) {
     const aborted = ctrl.signal.aborted
@@ -2301,6 +2324,25 @@ app.whenReady().then(() => {
       return false
     }
   })
+  // ---------- 멀티모달 비용 제어 ----------
+  // 캡처는 원본 해상도(레티나면 3000px대)로 오는데, 콘솔 화면을 읽는 데 그만한 화질이 필요 없다.
+  // 긴 변 1024px로 줄이면 이미지 토큰이 1/2~1/3이 되고 전송·응답도 빨라진다.
+  // ⚠️ 이건 **요금 문제만이 아니다** — 큰 이미지는 매 턴 이력으로 재전송되며 곱해진다(아래 참조).
+  const shrinkImage = (im: {
+    mediaType: string
+    data: string
+  }): { mediaType: string; data: string } => {
+    try {
+      const img = nativeImage.createFromDataURL(`data:${im.mediaType};base64,${im.data}`)
+      const { width } = img.getSize()
+      if (!width || width <= IMAGE_MAX_EDGE) return im
+      const small = img.resize({ width: IMAGE_MAX_EDGE, quality: 'good' })
+      return { mediaType: 'image/png', data: small.toPNG().toString('base64') }
+    } catch {
+      return im // 줄이기에 실패해도 원본으로 보낸다 — 기능이 막히는 것보단 낫다
+    }
+  }
+
   // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
   // 이미지가 있으면 stream-json 입력으로 멀티모달(실증 확인) — 없으면 가벼운 --output-format json.
   ipcMain.handle(
@@ -2317,9 +2359,15 @@ app.whenReady().then(() => {
       const cfg = readAiConfig()
       const provider = cfg.active
       const mode = cfg.modes[provider]
-      const model = modelFor(cfg, provider)
+      let model = modelFor(cfg, provider)
       const feature: AiFeature = opts?.feature ?? 'other'
       const startedAt = Date.now()
+      // 보내기 전에 줄인다 — 모든 provider 경로의 공통 입구가 여기다
+      const images = opts?.images?.map(shrinkImage)
+      // 이미지가 붙으면 **비싼 모델로 보내지 않는다**. 고급 모델의 값어치는 문장을 짓는 데 있지
+      // 화면을 읽는 데 있지 않은데, 이미지는 입력 토큰을 수십 배로 부풀린다(Terra는 Luna의 10배 단가).
+      if (images?.length && IMAGE_HEAVY_MODELS.includes(model)) model = IMAGE_FALLBACK_MODEL
+      opts = opts ? { ...opts, images } : opts
       if (provider === 'chatgpt') {
         return mode === 'apikey'
           ? await chatOpenAi(prompt, model, { ...opts, feature })
