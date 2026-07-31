@@ -176,15 +176,19 @@ const AI_MODELS_BY_PROVIDER: Record<AiProviderId, AiModel[]> = {
     { id: 'claude-sonnet-5', label: 'Sonnet 5' },
     { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' }
   ],
-  // 2026-07-28 확인 — 둘 다 이미지 입력 지원(소셜 패널 첨부에 필수).
-  // mini가 기본: ZTO 사용량에선 nano와의 요금 차이가 월 1달러 수준이라, 그걸 아끼려고
-  // 지시 준수(추천: <옵션id> 파싱)와 한국어 문장 품질을 걸 이유가 없다.
-  // nano는 남긴다 — reverse-sync의 폼 필드→설문 문항 매핑이 nano 공식 용도(추출·랭킹)라 그때 쓴다.
-  // Luna·Terra는 뺐다: Terra의 '고품질' 자리는 Claude Opus·Fable과 중복이고,
-  // Luna는 mini보다 비싸면서 강점(1.05M 컨텍스트)이 이 워크로드에 무의미하다.
+  // **2026-07-31 재검토 — 앞선 판단(Luna 제외)이 뒤집혔다.**
+  // 7/29엔 Luna가 $1/$6이라 mini($0.75/$4.50)보다 비쌌고, 그래서 뺐다. 그런데 7/30 OpenAI가
+  // Luna를 80% 인하($0.20/$1.20)해 **mini보다 3.75배 싸졌다**. 세대도 5.6으로 위다.
+  // 가격이 근거였던 결정은 가격이 바뀌면 다시 봐야 한다 — 결정을 적어둔 덕에 무엇이 무효인지 알 수 있었다.
+  //
+  // Luna 기본: mini보다 싸고 새롭다. nano는 **제거** — Luna가 입력 동가($0.20)에 출력이 더 싸고
+  // (nano $1.25 vs Luna $1.20) 세대가 위라, nano를 고를 이유가 남지 않는다.
+  // Terra 추가: 소셜 카피라이팅처럼 문장 품질이 결과를 가르는 자리용. 실측상 이걸 써도
+  // 월 원가가 몇 달러 수준이라(사용량 대시보드 데이터 기준) 품질을 아낄 이유가 없다.
   chatgpt: [
-    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' },
-    { id: 'gpt-5.4-nano', label: 'GPT-5.4 nano (최저가)' }
+    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+    { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra (고품질)' },
+    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' }
   ],
   gemini: []
 }
@@ -351,7 +355,13 @@ function appendAiUsage(e: AiUsageEntry): void {
 
 // OpenAI 가격표 (1M 토큰당 USD, 2026-07-28 확인). 응답이 토큰만 주므로 여기서 환산한다.
 // 캐시된 입력은 10% — usage에 cached_tokens가 오면 그만큼 할인해 계산.
+// $/1M 토큰. 2026-07-30 인하 반영(Luna·Terra 80%↓). 옛 사용 기록은 저장 시점의 costUsd를
+// 그대로 쓰므로 이 표를 고쳐도 과거 금액이 바뀌지 않는다 — 지난 달 청구서가 소급 변경되면 안 된다.
 const OPENAI_PRICE: Record<string, { in: number; out: number }> = {
+  'gpt-5.6-luna': { in: 0.2, out: 1.2 },
+  'gpt-5.6-terra': { in: 2.0, out: 12.0 },
+  'gpt-5.6-sol': { in: 5.0, out: 30.0 },
+  // 목록에서 뺐어도 표에는 남긴다 — 예전에 이 모델로 부른 기록의 환산가를 계속 계산해야 한다
   'gpt-5.4-mini': { in: 0.75, out: 4.5 },
   'gpt-5.4-nano': { in: 0.2, out: 1.25 }
 }
