@@ -234,6 +234,16 @@ export const ko: Messages = {
     dashIosIconBuild: '아이콘은 빌드 소속',
     dashNodeIap: 'IAP',
     dashIapLive: '{n}종 실황',
+    // 구독 뱃지·주기 — 일회성은 뱃지를 안 단다(대부분이 일회성이라 붙이면 소음)
+    iapSubscription: '구독',
+    iapPeriod: {
+      P1W: '주간',
+      P1M: '월간',
+      P2M: '2개월',
+      P3M: '분기',
+      P6M: '반기',
+      P1Y: '연간'
+    } as Record<string, string>,
     dashClosedStarted: '시작됨',
     dashNodeClosed: '클로즈드 테스트',
     dashClosedNotStarted: '미시작',

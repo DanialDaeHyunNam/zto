@@ -38,11 +38,17 @@ export interface DevAccounts {
 
 // ---------- §4.5 앱 대시보드 (P1 읽기 전용) — 스토어 실황 pull 결과 ----------
 
+// 일회성 상품과 구독은 양대 스토어 모두 **다른 리소스**다(Play: oneTimeProducts↔subscriptions,
+// ASC: inAppPurchasesV2↔subscriptionGroups). 한쪽만 부르면 화면이 "등록된 IAP 없음"이라고
+// 단언하면서 실제로는 구독을 가진 앱을 만난다(2026-07-31 example 실사례).
+// `kind`·`period`는 나중에 생긴 선택 필드다 — 옛 캐시·스냅샷에는 없으므로 없을 때도 그려져야 한다.
 export interface LiveIapProduct {
   id: string
   title: string
   state: string
   priceLabel?: string
+  kind?: 'onetime' | 'subscription'
+  period?: string // 구독 주기 (P1M·ONE_MONTH 같은 스토어 원문을 사람 말로 바꿔 담는다)
 }
 
 // Play 트랙별 현재 릴리스 — 트랙 안에 살아있는 릴리스만 온다 (과거 버전 이력 API는 없음)

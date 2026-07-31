@@ -234,6 +234,17 @@ export const en = {
     dashIosIconBuild: 'icon ships with the build',
     dashNodeIap: 'IAP',
     dashIapLive: '{n} live',
+    // 구독 뱃지·주기 — 일회성은 뱃지를 안 단다(대부분이 일회성이라 붙이면 소음)
+    iapSubscription: 'Subscription',
+    // Record로 못박아 사전에 없는 주기(스토어가 새 값을 주는 날)를 원문으로 흘려보낸다
+    iapPeriod: {
+      P1W: 'Weekly',
+      P1M: 'Monthly',
+      P2M: '2 months',
+      P3M: 'Quarterly',
+      P6M: 'Half-yearly',
+      P1Y: 'Yearly'
+    } as Record<string, string>,
     dashNodeClosed: 'Closed test',
     dashClosedStarted: 'Started',
     dashClosedNotStarted: 'Not started',

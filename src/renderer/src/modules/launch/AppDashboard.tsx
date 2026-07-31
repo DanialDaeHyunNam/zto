@@ -72,8 +72,14 @@ function ascStateChip(state: string): { label: string; tone: Tone } {
   return { label, tone: 'warn' } // in review · waiting · pending · rejected 계열 — 손이 갈 수 있는 상태
 }
 
-const iapStateTone = (state: string): Tone =>
-  state.toUpperCase().includes('APPROVED') || state === 'ACTIVE' ? 'ok' : 'warn'
+// 앰버는 "손이 필요하다"는 뜻이다. 보관·비활성은 사람이 일부러 만든 **끝난 상태**라 중립으로 둔다
+// — 여기에 경고색을 쓰면 다 끝난 앱에도 영원히 노란 불이 켜진다(설정 노드에서 겪은 것과 같은 함정).
+const iapStateTone = (state: string): Tone => {
+  const s = state.toUpperCase()
+  if (s.includes('APPROVED') || s === 'ACTIVE') return 'ok'
+  if (s === 'ARCHIVED' || s === 'INACTIVE') return 'off'
+  return 'warn'
+}
 
 const playRank = (t: string): number =>
   t === 'production' ? 0 : t === 'beta' ? 1 : t === 'internal' ? 3 : 2
@@ -363,9 +369,15 @@ function HistoryToggle({
   )
 }
 
+// 이력 요약은 로케일 중립 문자열이다(저장된 기록을 나중에 다른 언어로 열 수 있다) —
+// 그래서 주기도 사전을 안 거치고 스토어 토큰(P1M) 그대로 적는다
 const summarizeIap = (iap: LiveIapProduct[]): string =>
   iap
-    .map((p) => `${p.id} ${p.state.toLowerCase().replace(/_/g, ' ')}${p.priceLabel ? ` · ${p.priceLabel}` : ''}`)
+    .map(
+      (p) =>
+        `${p.id} ${p.state.toLowerCase().replace(/_/g, ' ')}` +
+        `${p.period ? ` · ${p.period}` : ''}${p.priceLabel ? ` · ${p.priceLabel}` : ''}`
+    )
     .join('  |  ') || '—'
 
 const summarizeMeta = (meta: MetaListing[]): string =>
@@ -482,13 +494,24 @@ function Lightbox({
 }
 
 // ---------- IAP ----------
+// 일회성 상품과 구독이 한 목록에 섞여 온다(스토어는 별도 리소스지만 사용자에겐 다 'IAP'다).
+// 구독만 뱃지를 단다 — 대부분이 일회성이라 양쪽 다 달면 뱃지가 소음이 된다.
 function IapSub({ items }: { items: LiveIapProduct[] }): React.JSX.Element {
+  const { m } = useI18n()
   return (
     <div className="dash-sub">
-      {items.map((p) => (
-        <div key={p.id} className="dash-sub-row">
+      {items.map((p, i) => (
+        // 구독은 상품 하나가 요금제 여럿(월·연)으로 펴져 id가 겹칠 수 있어 인덱스를 함께 쓴다
+        <div key={`${p.id}:${i}`} className="dash-sub-row">
           <code>{p.id}</code>
           <span className="dash-sub-title">{p.title}</span>
+          {p.kind === 'subscription' && (
+            <span className="iap-kind">
+              {m.launch.iapSubscription}
+              {/* 사전에 없는 주기는 스토어 원문 그대로 — 못 알아본 걸 감추면 진단이 사라진다 */}
+              {p.period ? ` · ${m.launch.iapPeriod[p.period] ?? p.period}` : ''}
+            </span>
+          )}
           {p.priceLabel && <span className="dash-price">{p.priceLabel}</span>}
           <Chip label={p.state.toLowerCase().replace(/_/g, ' ')} tone={iapStateTone(p.state)} />
         </div>

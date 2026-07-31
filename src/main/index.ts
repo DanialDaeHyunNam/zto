@@ -696,6 +696,21 @@ async function jsonOrEmpty(r: Response): Promise<Record<string, unknown>> {
   }
 }
 
+// 구독 주기를 ISO 8601 기간 토큰으로 모은다. Play는 이미 ISO(`P1M`)를 주고, ASC는 열거형
+// (`ONE_MONTH`)을 준다. 렌더러 사전이 이 토큰을 사람 말로 바꾼다.
+const ASC_PERIOD: Record<string, string> = {
+  ONE_WEEK: 'P1W',
+  ONE_MONTH: 'P1M',
+  TWO_MONTHS: 'P2M',
+  THREE_MONTHS: 'P3M',
+  SIX_MONTHS: 'P6M',
+  ONE_YEAR: 'P1Y'
+}
+function normalizePeriod(raw?: string): string | undefined {
+  if (!raw) return undefined
+  return ASC_PERIOD[raw] ?? raw
+}
+
 // ---------- §4.5 앱 대시보드 pull (P1 읽기 전용) ----------
 
 // Play — 트랙·릴리스·국가별 메타는 edit 트랜잭션 안에서만 읽힌다: 생성→읽기→삭제 패턴
@@ -807,8 +822,17 @@ async function pullGoogleDashboard(sheet: {
     fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
   }
 
+  // 구독 주기 표기가 스토어마다 다르다: Play는 ISO 8601 기간(`P1M`), ASC는 열거형(`ONE_MONTH`).
+  // 여기서 **ISO 토큰 하나로 모으고**, 사람이 읽는 말로 바꾸는 건 렌더러 사전에 맡긴다
+  // (i18n 원칙 — 화면 문자열은 컴포넌트·main이 아니라 사전에서 나온다).
+  // 모르는 값은 원문 그대로 흘려보낸다: 못 알아본 걸 감추기보다 보여주는 쪽이 진단이 된다.
+  // IAP는 **두 리소스를 다 불러야** 한다 — Play는 2023년 상품 모델을 쪼개면서 일회성과 구독이
+  // 서로 다른 엔드포인트가 됐고, 한쪽만 부르면 구독만 파는 앱이 "IAP 없음"으로 보인다.
   const iap: LiveIapProduct[] = []
-  const iapR = await fetch(`${base}/oneTimeProducts`, { headers })
+  const [iapR, subR] = await Promise.all([
+    fetch(`${base}/oneTimeProducts`, { headers }),
+    fetch(`${base}/subscriptions?pageSize=100`, { headers })
+  ])
   if (iapR.ok) {
     interface GConfig {
       regionCode?: string
@@ -830,8 +854,63 @@ async function pullGoogleDashboard(sheet: {
         state: opt?.state ?? '',
         priceLabel: cfg?.price?.units
           ? `${cfg.price.units} ${cfg.price.currencyCode ?? ''} · ${cfg.regionCode ?? ''}`
-          : undefined
+          : undefined,
+        kind: 'onetime'
       })
+    }
+  }
+  // 구독 — 상품 하나가 기본 요금제(basePlan) 여럿을 가질 수 있다(월·연). 요금제마다 상태·가격·주기가
+  // 따로 놀아서 **요금제를 행으로 편다** — 상품만 보여주면 "월간은 살아있고 연간은 초안"이 사라진다.
+  if (subR.ok) {
+    interface SubRegional {
+      regionCode?: string
+      price?: { units?: string; nanos?: number; currencyCode?: string }
+    }
+    interface SubBasePlan {
+      basePlanId?: string
+      state?: string
+      regionalConfigs?: SubRegional[]
+      autoRenewingBasePlanType?: { billingPeriodDuration?: string }
+      prepaidBasePlanType?: { billingPeriodDuration?: string }
+    }
+    interface SubProduct {
+      productId?: string
+      basePlans?: SubBasePlan[]
+      listings?: { languageCode?: string; title?: string }[]
+      archived?: boolean
+    }
+    const j = (await jsonOrEmpty(subR)) as { subscriptions?: SubProduct[] }
+    for (const s of j.subscriptions ?? []) {
+      const ls = s.listings ?? []
+      const title = (ls.find((l) => l.languageCode?.startsWith('ko')) ?? ls[0])?.title ?? ''
+      const plans = s.basePlans ?? []
+      // 요금제가 없는 상품(초안)도 존재를 알려야 한다 — 빈 배열이면 상품 한 줄로 낸다
+      if (plans.length === 0) {
+        iap.push({
+          id: s.productId ?? '',
+          title,
+          state: s.archived ? 'ARCHIVED' : 'DRAFT',
+          kind: 'subscription'
+        })
+        continue
+      }
+      for (const bp of plans) {
+        const cfgs = bp.regionalConfigs ?? []
+        const cfg = cfgs.find((c) => c.regionCode === 'KR') ?? cfgs[0]
+        iap.push({
+          id: bp.basePlanId ? `${s.productId ?? ''} · ${bp.basePlanId}` : (s.productId ?? ''),
+          title,
+          state: s.archived ? 'ARCHIVED' : (bp.state ?? ''),
+          priceLabel: cfg?.price?.units
+            ? `${cfg.price.units} ${cfg.price.currencyCode ?? ''} · ${cfg.regionCode ?? ''}`
+            : undefined,
+          kind: 'subscription',
+          period: normalizePeriod(
+            bp.autoRenewingBasePlanType?.billingPeriodDuration ??
+              bp.prepaidBasePlanType?.billingPeriodDuration
+          )
+        })
+      }
     }
   }
   return { data: { releases, listings, details, images, imageLocale, iap, closedStarted } }
@@ -857,13 +936,16 @@ async function pullAppleDashboard(sheet: {
   const appId = ((await appsR.json()) as { data?: { id: string }[] }).data?.[0]?.id
   if (!appId) return { data: null, error: 'app-not-found' }
 
-  const [versR, infoR, iapR] = await Promise.all([
+  // 구독(subR)은 앱 바로 밑이 아니라 **구독 그룹 아래**에 있다 — `inAppPurchasesV2`에는 절대
+  // 안 섞이므로 따로 부른다. `include=subscriptions`로 그룹·구독을 한 번에 받는다.
+  const [versR, infoR, iapR, subR] = await Promise.all([
     fetch(
       `${A}/apps/${appId}/appStoreVersions?limit=10&fields%5BappStoreVersions%5D=versionString,appStoreState,createdDate`,
       { headers }
     ),
     fetch(`${A}/apps/${appId}/appInfos?include=primaryCategory`, { headers }),
-    fetch(`${A}/apps/${appId}/inAppPurchasesV2?limit=50`, { headers })
+    fetch(`${A}/apps/${appId}/inAppPurchasesV2?limit=50`, { headers }),
+    fetch(`${A}/apps/${appId}/subscriptionGroups?include=subscriptions&limit=50`, { headers })
   ])
 
   const versions: AscVersionRow[] = []
@@ -1024,7 +1106,28 @@ async function pullAppleDashboard(sheet: {
       iap.push({
         id: d.attributes?.productId ?? '',
         title: d.attributes?.name ?? '',
-        state: d.attributes?.state ?? ''
+        state: d.attributes?.state ?? '',
+        kind: 'onetime'
+      })
+    }
+  }
+  // 구독 — 그룹 응답의 `included`에 구독이 실려 온다. 가격은 또 별도 리소스(subscriptionPrices)라
+  // 여기선 주기까지만 낸다: 있는 것을 못 보여주는 문제부터 없애고, 가격은 필요해지면 붙인다.
+  if (subR.ok) {
+    const j = (await subR.json()) as {
+      included?: {
+        type?: string
+        attributes?: { productId?: string; name?: string; state?: string; subscriptionPeriod?: string }
+      }[]
+    }
+    for (const inc of j.included ?? []) {
+      if (inc.type !== 'subscriptions') continue
+      iap.push({
+        id: inc.attributes?.productId ?? '',
+        title: inc.attributes?.name ?? '',
+        state: inc.attributes?.state ?? '',
+        kind: 'subscription',
+        period: normalizePeriod(inc.attributes?.subscriptionPeriod)
       })
     }
   }
