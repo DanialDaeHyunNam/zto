@@ -372,6 +372,8 @@ export const ko: Messages = {
     applyRevertAll: '전체 취소',
     applyResultTitle: '적용 결과',
     applyFixInConsole: '콘솔에서 수정 →',
+    iosInReviewNote:
+      '심사 중인 버전이 있어 수정할 수 없어요. 새 버전을 만들어도 안 풀립니다 — App Store Connect에서 심사를 취소(Remove from review)하거나 결과를 기다리세요.',
     versionNeeded:
       '이 변경은 새 App Store 버전이 필요해요 — 라이브 앱 이름은 바로 못 바꿉니다. ZTO가 새 버전을 만들어 반영할 수 있어요 (빌드 업로드·제출은 직접).',
     createVersionApply: '새 버전 만들어 반영',

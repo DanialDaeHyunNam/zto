@@ -991,6 +991,11 @@ function ApplyBar({
   const versionLocked = (results ?? []).filter(
     (r) => !r.ok && edits[r.id]?.platform === 'ios' && r.code === 'version-locked'
   )
+  // 심사 중은 **새 버전으로 못 푼다** — 잠금 해제 바 대신 무엇을 해야 하는지만 말한다.
+  // 둘을 같은 처방으로 묶으면 심사 대기 중인 앱에 되지도 않는 길을 권하게 된다(2026-07-31 실측)
+  const inReview = (results ?? []).some(
+    (r) => !r.ok && edits[r.id]?.platform === 'ios' && r.code === 'in-review'
+  )
 
   // 실패 항목을 콘솔로 이어붙인다 — 밖의 브라우저가 아니라 ZTO 브라우저 + AI(모드 B).
   // 안내에 **무엇을 왜 못 했는지**를 그대로 실어 보낸다: 화면만 열어주고 침묵하면
@@ -1079,6 +1084,7 @@ function ApplyBar({
                 )
               })}
             </div>
+            {inReview && <div className="version-fix in-review">{m.launch.iosInReviewNote}</div>}
             {versionLocked.length > 0 && (
               <div className="version-fix">
                 <p className="version-fix-note">{m.launch.versionNeeded}</p>

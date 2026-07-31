@@ -55,6 +55,7 @@ import {
   type IapSnapshotInfo,
   type LiveIapProduct,
   ASC_EDITABLE_VERSION_STATES,
+  isAscInReview,
   isEditableNoteTrack,
   parseIapFieldKey,
   parseNoteFieldKey,
@@ -1685,7 +1686,7 @@ async function applyAscEdits(
   // 메타·자산을 함께 적용할 때 같은 조회를 두 번 하지 않는다.
   type VerLookup =
     | { ok: true; id: string }
-    | { ok: false; message: string; code?: 'version-locked' }
+    | { ok: false; message: string; code?: 'version-locked' | 'in-review' }
   let verCache: VerLookup | null = null
   const editableVersion = async (): Promise<VerLookup> => {
     if (verCache) return verCache
@@ -1705,7 +1706,19 @@ async function applyAscEdits(
     rows.sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     const editable = rows.find((r) => ASC_EDITABLE_VERSION_STATES.includes(r.state))
     if (!editable) {
-      // 편집 가능한 버전이 아예 없다 = 라이브뿐이다 → 화면이 "새 버전 만들어 반영"을 제안한다
+      // **왜 막혔는지로 처방이 갈린다.** 심사 중인 버전이 있으면 새 버전을 만들 수 없으므로
+      // "새 버전 만들어 반영"을 제안하면 안 된다 — 되지도 않는 길로 보내는 것이다.
+      const inReview = rows.find((r) => isAscInReview(r.state))
+      if (inReview) {
+        return (verCache = {
+          ok: false,
+          message: ko
+            ? `${inReview.state.toLowerCase().replace(/_/g, ' ')} — 심사 중이라 수정할 수 없어요`
+            : `${inReview.state.toLowerCase().replace(/_/g, ' ')} — cannot edit while in review`,
+          code: 'in-review'
+        })
+      }
+      // 라이브뿐 → 새 버전을 만들면 풀린다
       return (verCache = {
         ok: false,
         message: ko

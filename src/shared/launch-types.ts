@@ -301,6 +301,22 @@ export const ASC_EDITABLE_VERSION_STATES = [
 export const isAscEditableVersion = (state: string): boolean =>
   ASC_EDITABLE_VERSION_STATES.includes(state)
 
+// 편집이 막혔을 때 **왜 막혔는지**가 처방을 가른다 (2026-07-31 실측에서 드러남):
+//  - 라이브뿐 → 새 버전을 만들면 풀린다
+//  - **심사 중 → 새 버전을 만들 수 없다.** 심사에서 빼거나 결과를 기다려야 한다
+// 둘을 뭉뚱그려 "새 버전 만들기"를 제안하면, 심사 대기 중인 앱에 **되지도 않는 처방**을 준다.
+const ASC_IN_REVIEW_STATES = [
+  'READY_FOR_REVIEW',
+  'WAITING_FOR_REVIEW',
+  'IN_REVIEW',
+  'PENDING_APPLE_RELEASE',
+  'PENDING_DEVELOPER_RELEASE',
+  'PROCESSING_FOR_APP_STORE',
+  'WAITING_FOR_EXPORT_COMPLIANCE',
+  'ACCEPTED'
+]
+export const isAscInReview = (state: string): boolean => ASC_IN_REVIEW_STATES.includes(state)
+
 export interface CopilotTask {
   goal: string // 사용자가 하러 온 일 — 화면에 쓰인 라벨 그대로
   app?: string // "실측 앱 (com.example.app)" — 알면 반드시 넘긴다. 되묻게 하지 않는다
@@ -316,7 +332,9 @@ export interface ApplyResult {
   // 화면이 실패에 **반응**해야 할 때 쓰는 기계 판독 코드. 메시지 문구로 판정하면
   // 로케일이 바뀌는 순간 조용히 안 맞는다(한국어 UI에서 잠금 해제 바가 안 뜨던 실제 버그).
   // 'version-locked' = iOS 라이브 버전이라 편집 불가 → "새 버전 만들어 반영" 제안
-  code?: 'version-locked'
+  //  version-locked = 라이브뿐이라 잠김 → 새 버전을 만들면 풀린다
+  //  in-review      = 심사 중이라 잠김 → **새 버전으로 못 푼다**. 심사에서 빼야 한다
+  code?: 'version-locked' | 'in-review'
 }
 
 // 모듈 2 — 계정 인벤토리 항목 (메타데이터만. 비밀번호 필드는 설계상 존재하지 않는다 — SPEC §7.3)

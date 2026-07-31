@@ -372,6 +372,8 @@ export const en = {
     applyRevertAll: 'Discard all',
     applyResultTitle: 'Apply result',
     applyFixInConsole: 'Fix in console →',
+    iosInReviewNote:
+      'A version is in review, so this cannot be edited. Creating a new version will not help — remove it from review in App Store Connect, or wait for the result.',
     versionNeeded:
       'This change needs a new App Store version — the live app name can’t be edited directly. ZTO can create one and apply your changes (you upload a build & submit).',
     createVersionApply: 'Create version & apply',

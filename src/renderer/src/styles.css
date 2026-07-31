@@ -1169,6 +1169,13 @@ button {
   gap: 6px;
 }
 
+/* 심사 중 안내 — 해결 버튼이 없는 상태다. 행동 유도 대신 사실만 말한다 */
+.version-fix.in-review {
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--warn);
+}
+
 /* 계정 식별자 — 편집 아닐 땐 읽는 값으로 */
 .acc-id-view {
   font-size: 13px;
