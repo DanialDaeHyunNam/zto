@@ -126,6 +126,9 @@ function Chip({ label, tone }: { label: string; tone: Tone }): React.JSX.Element
   return <span className={`status-chip ${tone}`}>{label}</span>
 }
 
+// 콘솔로 점프하는 노드. **밖의 브라우저가 아니라 ZTO 브라우저**로 연다(모드 B — 진짜 콘솔 폼
+// 옆에 AI가 붙는 샌드위치). 밖으로 던지면 우리가 거들 수 있는 게 아무것도 없고, 사용자는
+// "여기서 뭘 하라는 거였지"를 혼자 기억해야 한다. 안내는 브라우저 밖(guide)에 띄운다.
 function Node({
   light,
   label,
@@ -137,13 +140,19 @@ function Node({
   url?: string
   children?: React.ReactNode
 }): React.JSX.Element {
+  const { m } = useI18n()
+  const overlay = useBrowserOverlay()
+  const openGuided = (u: string): void => {
+    overlay.open(u, { copilot: true })
+    overlay.setGuide({ text: m.launch.guideNode.replace('{n}', label), tone: 'ask' })
+  }
   return (
     <div className="dash-node">
       <span className={`dash-dot ${light}`} />
       <span className="dash-lbl">{label}</span>
       <span className="dash-val">{children}</span>
       {url && (
-        <button className="dash-go" onClick={() => window.zto.launch.openExternal(url)}>
+        <button className="dash-go" onClick={() => openGuided(url)} title={m.launch.guideOpen}>
           ↗
         </button>
       )}
@@ -952,6 +961,7 @@ function ApplyBar({
   suggestedVersion: string // 버전 잠금 해제용 제안 버전 번호 (라이브보다 높게)
 }): React.JSX.Element | null {
   const { m } = useI18n()
+  const overlay = useBrowserOverlay()
   const [phase, setPhase] = useState<'idle' | 'confirm' | 'running'>('idle')
   const [results, setResults] = useState<ApplyResult[] | null>(null)
   const [verInput, setVerInput] = useState(suggestedVersion)
@@ -967,6 +977,17 @@ function ApplyBar({
   const versionLocked = (results ?? []).filter(
     (r) => !r.ok && edits[r.id]?.platform === 'ios' && r.code === 'version-locked'
   )
+
+  // 실패 항목을 콘솔로 이어붙인다 — 밖의 브라우저가 아니라 ZTO 브라우저 + AI(모드 B).
+  // 안내에 **무엇을 왜 못 했는지**를 그대로 실어 보낸다: 화면만 열어주고 침묵하면
+  // 사용자는 열린 콘솔 앞에서 "그래서 뭘 고치라는 거지"를 다시 조립해야 한다.
+  const openGuided = (e: PendingEdit, url: string): void => {
+    // 결과 패널을 먼저 닫는다 — 모달이 브라우저 위에 남으면 정작 콘솔이 안 보인다.
+    // 대기 항목은 그대로 남으므로 콘솔에서 처리한 뒤 [콘솔에서 처리함]으로 정리하면 된다
+    setResults(null)
+    overlay.open(url, { copilot: true })
+    overlay.setGuide({ text: m.launch.guideFix.replace('{n}', e.label), tone: 'ask' })
+  }
 
   // 새 버전 생성(컨펌) → 편집 가능해진 뒤 iOS 대기 편집 재반영
   const createVersionAndApply = async (): Promise<void> => {
@@ -1022,13 +1043,19 @@ function ApplyBar({
                     <span className={`dash-dot ${r.ok ? 'g' : 'y'}`} />
                     <span className="result-label">{e?.label ?? r.id}</span>
                     <span className="result-msg">{r.message}</span>
-                    {url && (
-                      <button
-                        className="result-fix"
-                        onClick={() => window.zto.launch.openExternal(url)}
-                      >
-                        {m.launch.applyFixInConsole}
-                      </button>
+                    {/* API로 못 한 것은 **여기서 끝내지 않고** 콘솔로 이어붙인다(모드 B):
+                        ZTO 브라우저로 그 화면을 열고 옆에 AI를 세운다. 그리고 사람이
+                        콘솔에서 처리했다면 대기에서 뺄 수 있어야 한다 — 안 그러면 이미 끝난
+                        일이 영원히 "수정 대기 1건"으로 남아 다음 적용 때마다 또 실패한다 */}
+                    {url && e && (
+                      <>
+                        <button className="result-fix" onClick={() => openGuided(e, url)}>
+                          {m.launch.applyFixInConsole}
+                        </button>
+                        <button className="ghost-btn mini" onClick={() => onApplied([r.id])}>
+                          {m.launch.applyDidInConsole}
+                        </button>
+                      </>
                     )}
                   </div>
                 )
