@@ -13,9 +13,19 @@
   --border-strong: rgba(255, 255, 255, 0.14);
   --fg: #ececf1;
   --muted: #8b8b99;
-  --accent: #8b5cf6;
-  --gradient: linear-gradient(135deg, #7c3aed 0%, #a855f7 55%, #6366f1 100%);
-  --glow: 0 4px 24px rgba(139, 92, 246, 0.35);
+  /* ---------- 브랜드 스케일 — 색을 바꿀 땐 이 블록만 만진다 (2026-08-01 보라→파랑) ----------
+     -rgb는 rgba(var(--brand-rgb), .x) 꼴 투명도 조합용. 아바타 팔레트(AccountsPage)는
+     브랜드가 아니라 이메일 해시 색이므로 여기 따라오지 않는다. */
+  --brand-deeper: #1d4ed8;
+  --brand-deep: #2563eb;
+  --brand: #3b82f6;
+  --brand-tail: #0ea5e9;
+  --brand-soft: #60a5fa;
+  --brand-text: #93c5fd;
+  --brand-rgb: 59, 130, 246;
+  --accent: var(--brand);
+  --gradient: linear-gradient(135deg, var(--brand-deep) 0%, var(--brand) 55%, var(--brand-tail) 100%);
+  --glow: 0 4px 24px rgba(var(--brand-rgb), 0.35);
   --ok: #34d399;
   --warn: #fbbf24;
   --radius: 14px;
@@ -35,7 +45,7 @@ body {
 }
 
 ::selection {
-  background: rgba(139, 92, 246, 0.4);
+  background: rgba(var(--brand-rgb), 0.4);
 }
 
 ::-webkit-scrollbar {
@@ -464,8 +474,8 @@ button {
   background: rgba(255, 255, 255, 0.06);
 }
 .br-tab.active {
-  background: rgba(139, 92, 246, 0.12);
-  border-color: rgba(139, 92, 246, 0.4);
+  background: rgba(var(--brand-rgb), 0.12);
+  border-color: rgba(var(--brand-rgb), 0.4);
   color: var(--text, #e8e8ef);
 }
 .br-tab-title {
@@ -541,7 +551,7 @@ button {
   font-size: 12px;
   font-family: ui-monospace, monospace;
   color: var(--muted, #a9a9be);
-  background: rgba(139, 92, 246, 0.08);
+  background: rgba(var(--brand-rgb), 0.08);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
   overflow: hidden;
@@ -681,7 +691,7 @@ button {
 }
 .ai-msg.user {
   align-self: flex-end;
-  background: var(--gradient, linear-gradient(135deg, #7c3aed, #a855f7));
+  background: var(--gradient, linear-gradient(135deg, var(--brand-deep), var(--brand)));
   color: #fff;
 }
 .ai-msg.assistant {
@@ -742,7 +752,7 @@ button {
 }
 
 .ai-msg.assistant a {
-  color: #c4b5fd;
+  color: var(--brand-text);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -957,7 +967,7 @@ button {
   box-shadow:
     inset 0 0 0 1.5px var(--accent),
     var(--glow);
-  background: rgba(139, 92, 246, 0.08);
+  background: rgba(var(--brand-rgb), 0.08);
 }
 
 .tile-ic {
@@ -1267,13 +1277,13 @@ button {
 }
 
 .ghost-btn.on {
-  background: rgba(139, 92, 246, 0.15);
+  background: rgba(var(--brand-rgb), 0.15);
   color: var(--fg);
 }
 
 /* 앱 내 저장된 비밀번호 있음 — 항상 또렷한 보라 틴트 */
 .ghost-btn.stored {
-  background: rgba(139, 92, 246, 0.12);
+  background: rgba(var(--brand-rgb), 0.12);
   color: #b9a2ff;
 }
 
@@ -1282,8 +1292,8 @@ button {
 }
 
 .ghost-btn.stored:hover {
-  background: rgba(139, 92, 246, 0.2);
-  color: #cbb8ff;
+  background: rgba(var(--brand-rgb), 0.2);
+  color: var(--brand-text);
 }
 
 /* 직접 입력 상세 카드 — Apple 암호 앱 스타일 */
@@ -1472,8 +1482,8 @@ button {
   font-size: 13px;
   padding: 4px 10px;
   border-radius: 8px;
-  background: rgba(139, 92, 246, 0.15);
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  background: rgba(var(--brand-rgb), 0.15);
+  border: 1px solid rgba(var(--brand-rgb), 0.35);
   user-select: all;
 }
 
@@ -1498,7 +1508,7 @@ button {
 
 .choice.toggled:hover {
   border-color: var(--accent);
-  background: rgba(139, 92, 246, 0.18);
+  background: rgba(var(--brand-rgb), 0.18);
 }
 
 .choice.active {
@@ -1539,7 +1549,7 @@ button {
 /* 토글 열림 상태 — 주 CTA(gradient)보다 한 단계 낮은 위계 */
 .choice.toggled {
   border-color: var(--accent);
-  background: rgba(139, 92, 246, 0.12);
+  background: rgba(var(--brand-rgb), 0.12);
   color: var(--fg);
 }
 
@@ -1609,7 +1619,7 @@ button {
 .seg button.active {
   background: var(--gradient);
   color: #fff;
-  box-shadow: 0 2px 10px rgba(139, 92, 246, 0.35);
+  box-shadow: 0 2px 10px rgba(var(--brand-rgb), 0.35);
 }
 
 .seg.wide {
@@ -1669,7 +1679,7 @@ button {
 .mode-card:hover {
   border-color: var(--accent);
   transform: translateY(-2px);
-  box-shadow: 0 10px 34px rgba(139, 92, 246, 0.18);
+  box-shadow: 0 10px 34px rgba(var(--brand-rgb), 0.18);
 }
 
 .guide.no-indent {
@@ -1722,7 +1732,7 @@ button {
   color: #fff;
   font-size: 12px;
   font-weight: 800;
-  box-shadow: 0 2px 12px rgba(139, 92, 246, 0.4);
+  box-shadow: 0 2px 12px rgba(var(--brand-rgb), 0.4);
   flex-shrink: 0;
 }
 
@@ -2516,8 +2526,8 @@ button {
 
 /* 실패 항목을 콘솔에서 직접 고치러 가는 아웃링크 */
 .result-fix {
-  border: 1px solid rgba(139, 92, 246, 0.45);
-  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(var(--brand-rgb), 0.45);
+  background: rgba(var(--brand-rgb), 0.1);
   color: var(--text, #e8e8ef);
   font-size: 12px;
   padding: 4px 10px;
@@ -2526,7 +2536,7 @@ button {
   white-space: nowrap;
 }
 .result-fix:hover {
-  background: rgba(139, 92, 246, 0.18);
+  background: rgba(var(--brand-rgb), 0.18);
 }
 
 .result-row:first-child {
@@ -2667,15 +2677,15 @@ button {
 }
 
 .survey-help.on {
-  background: rgba(139, 92, 246, 0.15);
+  background: rgba(var(--brand-rgb), 0.15);
 }
 
 /* 질문별 AI 팝오버 (대화형 도우미) */
 .qhelp {
   margin: 8px 0 4px;
-  border: 1px solid rgba(139, 92, 246, 0.35);
+  border: 1px solid rgba(var(--brand-rgb), 0.35);
   border-radius: 10px;
-  background: rgba(139, 92, 246, 0.05);
+  background: rgba(var(--brand-rgb), 0.05);
   padding: 10px 12px;
 }
 
@@ -2750,8 +2760,8 @@ button {
   line-height: 1.55;
   margin: 0 0 8px;
   padding: 8px 12px;
-  background: rgba(139, 92, 246, 0.06);
-  border-left: 2px solid rgba(139, 92, 246, 0.4);
+  background: rgba(var(--brand-rgb), 0.06);
+  border-left: 2px solid rgba(var(--brand-rgb), 0.4);
   border-radius: 6px;
 }
 
@@ -2909,7 +2919,7 @@ button {
 /* IAP 상품 상세 — 노드 아래 들여쓴 가지 */
 .dash-sub {
   margin: 2px 0 8px 19px;
-  border-left: 2px solid rgba(139, 92, 246, 0.35);
+  border-left: 2px solid rgba(var(--brand-rgb), 0.35);
   padding-left: 12px;
   display: flex;
   flex-direction: column;
@@ -3236,7 +3246,7 @@ button {
 .email-input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
+  box-shadow: 0 0 0 3px rgba(var(--brand-rgb), 0.25);
 }
 
 /* ---------- 앱 선택 칩 ---------- */
@@ -3303,14 +3313,14 @@ button {
 
 .app-chip.active {
   border-color: transparent;
-  background: rgba(139, 92, 246, 0.18);
+  background: rgba(var(--brand-rgb), 0.18);
   box-shadow: inset 0 0 0 1.5px var(--accent);
 }
 
 /* [+ 앱 추가] 열림 — 선택된 앱 칩보다 한 급 낮게 (인셋 링 없이 얇은 보라 테두리+옅은 틴트) */
 .app-chip.add.open {
-  border-color: rgba(139, 92, 246, 0.5);
-  background: rgba(139, 92, 246, 0.08);
+  border-color: rgba(var(--brand-rgb), 0.5);
+  background: rgba(var(--brand-rgb), 0.08);
 }
 
 .no-apps {
@@ -3462,7 +3472,7 @@ button {
 .empty-state {
   margin-top: 28px;
   max-width: 820px;
-  border: 1px dashed rgba(139, 92, 246, 0.35);
+  border: 1px dashed rgba(var(--brand-rgb), 0.35);
   border-radius: var(--radius);
   padding: 44px 24px;
   display: flex;
@@ -3472,7 +3482,7 @@ button {
   text-align: center;
   color: var(--muted);
   font-size: 13px;
-  background: rgba(139, 92, 246, 0.04);
+  background: rgba(var(--brand-rgb), 0.04);
 }
 
 /* ---------- AI 사용량 대시보드 (설정) ---------- */
@@ -3558,7 +3568,7 @@ button {
 
 .usage-chip.on {
   border-color: var(--accent);
-  background: rgba(139, 92, 246, 0.14);
+  background: rgba(var(--brand-rgb), 0.14);
   color: var(--fg);
 }
 
@@ -3710,8 +3720,8 @@ button {
 }
 
 .br-tab.active .br-tab-key {
-  background: rgba(139, 92, 246, 0.22);
-  color: #cbb8ff;
+  background: rgba(var(--brand-rgb), 0.22);
+  color: var(--brand-text);
 }
 
 /* 드래그로 순서 변경 */
@@ -3733,7 +3743,7 @@ button {
   padding: 7px 14px;
   font-size: 11.5px;
   color: var(--muted);
-  background: rgba(139, 92, 246, 0.1);
+  background: rgba(var(--brand-rgb), 0.1);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
 }
@@ -3775,8 +3785,8 @@ button {
 
 /* ZTO가 진행 중 — 차분한 보라 */
 .overlay-guide.run {
-  background: rgba(139, 92, 246, 0.14);
-  color: #cbb8ff;
+  background: rgba(var(--brand-rgb), 0.14);
+  color: var(--brand-text);
 }
 .overlay-guide.run .overlay-guide-dot {
   background: var(--accent);
@@ -4026,8 +4036,8 @@ button {
 }
 
 .ai-follow.on {
-  border-color: rgba(139, 92, 246, 0.55);
-  background: rgba(139, 92, 246, 0.14);
+  border-color: rgba(var(--brand-rgb), 0.55);
+  background: rgba(var(--brand-rgb), 0.14);
   color: inherit;
 }
 
