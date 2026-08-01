@@ -28,6 +28,11 @@
     --brand-soft-rgb:96,165,250;
     --grad:linear-gradient(135deg,var(--brand-deep) 0%,var(--brand) 55%,var(--brand-tail) 100%);
 
+    /* 앱 미러링 변수 — 미리보기 창이 PIP로 body에 옮겨져도 살아 있어야 하므로 :root에 둔다
+       (.story에 두면 portal 순간 범위를 벗어나 파랑이 빠진다 — 2026-08-02 실측) */
+    --agrad:var(--grad);
+    --afg:#ececf1; --amut:#8b8b99; --abd:rgba(255,255,255,.08); --abds:rgba(255,255,255,.14);
+
     --bg:#0a0a0f; --bg2:#101018; --card:rgba(255,255,255,.035);
     --line:rgba(255,255,255,.09); --line2:rgba(255,255,255,.16);
     --text:#f2f1f7; --muted:#9694a6; --dim:#5f5d6e;
@@ -36,9 +41,13 @@
   }
   *{box-sizing:border-box}
   html{scroll-behavior:smooth}
+  /* overflow-x는 **html과 body 양쪽에, clip으로**. body에 hidden만 주면 모바일에서
+     히어로 글로우 가상요소(inset 음수)가 레이아웃 뷰포트를 434px로 벌렸다(2026-08-02 실측 —
+     playwright로 innerWidth 측정해 확인). clip은 스크롤 컨테이너를 만들지 않고 진짜로 자른다 */
+  html,body{overflow-x:clip}
   body{margin:0;background:var(--bg);color:var(--text);
     font:15px/1.7 -apple-system,BlinkMacSystemFont,"Pretendard","Apple SD Gothic Neo",Segoe UI,sans-serif;
-    -webkit-font-smoothing:antialiased;overflow-x:hidden}
+    -webkit-font-smoothing:antialiased}
   a{color:inherit}
   .wrap{max-width:1060px;margin:0 auto;padding:0 24px}
 
@@ -146,9 +155,7 @@
   /* ---------- 스토리 — 좌 고정 미리보기 + 우 스크롤 ----------
      미리보기는 실제 앱 styles.css 값을 그대로 이식했다(그라데이션·사이드바·아바타·노드).
      "거의 100% 동일하게"가 요구사항 — 여기 값을 바꾸려면 앱 쪽과 함께 바꿔야 한다. */
-  .story{--agrad:var(--grad);
-    --afg:#ececf1;--amut:#8b8b99;--abd:rgba(255,255,255,.08);--abds:rgba(255,255,255,.14);
-    display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;
+  .story{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:56px;
     align-items:start;margin-top:110px}
   .preview{position:sticky;top:96px}
   .win{border:1px solid var(--abds);border-radius:14px;overflow:hidden;background:#0a0a0f;
@@ -174,8 +181,11 @@
   .tab.on small{color:rgba(255,255,255,.8)}
   .panes{position:relative}
   .pane{position:absolute;inset:0;padding:16px;opacity:0;transform:translateY(8px);
-    transition:opacity .45s ease,transform .45s ease;pointer-events:none;display:flex;flex-direction:column}
-  .pane.on{opacity:1;transform:none;pointer-events:auto}
+    visibility:hidden;
+    transition:opacity .45s ease,transform .45s ease,visibility 0s .45s;
+    pointer-events:none;display:flex;flex-direction:column}
+  .pane.on{opacity:1;transform:none;visibility:visible;pointer-events:auto;
+    transition:opacity .45s ease,transform .45s ease}
   .pane img.real{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:top left;display:none}
   .pane.has-img img.real{display:block}
   .pane.has-img .sketch{display:none}
@@ -261,18 +271,64 @@
     -webkit-background-clip:text;background-clip:text;color:transparent;
     filter:drop-shadow(0 0 22px rgba(var(--brand-rgb),.5))}
 
+  /* PIP — 전환 시 JS가 창을 body 직속으로 옮긴다(portal). 조상 transform/filter가
+     fixed 기준을 뒤틀 가능성을 원천 차단하기 위해서다(자리 앵커 방식 두 번 실패, 2026-08-01).
+     폭은 실제 250px + max-width로 화면을 절대 못 넘는다 */
+  .win.pipwin{position:fixed;right:12px;bottom:12px;left:auto;top:auto;
+    width:250px;max-width:calc(100vw - 24px);z-index:80;
+    box-shadow:0 12px 50px rgba(0,0,0,.75), 0 0 0 1px rgba(var(--brand-rgb),.3);
+    animation:pipIn .25s ease}
+  .pipwin .win-side{flex-direction:row;border-right:0;border-bottom:1px solid rgba(255,255,255,.08);
+    padding:6px;gap:3px}
+  .pipwin .win-logo{display:none}
+  .pipwin .win-body{grid-template-columns:1fr;min-height:0}
+  .pipwin .tab{flex:1;align-items:center;text-align:center;font-size:9.5px;padding:6px 2px;border-radius:8px}
+  .pipwin .tab small{display:none}
+  .pipwin .panes{height:160px}
+  .pipwin .pane{padding:10px;overflow:hidden}
+  .pipwin .sketch{transform:scale(.8);transform-origin:top left;width:125%}
+  @keyframes pipIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+
   @media (max-width:900px){
-    .story{grid-template-columns:1fr;gap:0;margin-top:72px}
-    .preview{position:static;margin-bottom:8px}
-    .steps .step{min-height:0;padding:44px 0;opacity:1}
+    .story{grid-template-columns:1fr;gap:0;margin-top:64px}
+    /* 미리보기: 인라인 위치를 지나면 유튜브 미니플레이어처럼 우하단 PIP로 축소된다.
+       transform:scale이라 내부 레이아웃은 그대로 — 같은 창이 작아진 것처럼 보인다 */
+    .preview{position:static;margin-bottom:4px}
+
+    .win-body{grid-template-columns:1fr;min-height:0}
+    .win-side{flex-direction:row;border-right:0;border-bottom:1px solid var(--abd);
+      padding:8px;gap:4px}
+    .win-logo{display:none}
+    .tab{flex:1;align-items:center;text-align:center;padding:8px 4px;font-size:11px}
+    .tab small{display:none}
+    .panes{height:250px}
+    .pane{padding:12px}
+    .steps .step{min-height:0;padding:40px 0 10px;opacity:.35}
+    .steps .step.on{opacity:1}
+    .steps .step:first-child{padding-top:28px;min-height:0}
   }
 
   @media (max-width:840px){
     .nav-links{display:none}
+    .nav-in{gap:8px}
     .cols{grid-template-columns:1fr}
     .plans{grid-template-columns:1fr}
-    .hero{padding:72px 0 20px}
-    section{padding:72px 0 0}
+    .hero{padding:56px 0 16px}
+    section{padding:64px 0 0}
+    .quote{padding:64px 0 0}
+    .ending{padding:88px 0 72px}
+    /* CTA는 한 손 조작 폭으로 — 좁은 화면에서 두 버튼이 옆으로 찌그러지지 않게 */
+    .cta{flex-direction:column;align-items:center}
+    .cta .btn{width:100%;max-width:320px;text-align:center}
+  }
+  @media (max-width:640px){
+    .nav-cta{padding:7px 12px;font-size:12px}
+    h1{line-height:1.32}
+    /* 데이터 표는 세로로 푼다 — 두 칸을 좁은 화면에 우겨넣으면 둘 다 못 읽는다 */
+    #data td{display:block;width:100%;padding:2px 0}
+    #data td:first-child{padding:12px 0 0;border-bottom:0}
+    #data td:last-child{padding-bottom:12px}
+    .footc{padding:26px 20px 16px}
   }
 </style>
 </head>
@@ -456,7 +512,7 @@
 
 <!-- ============ 데이터 ============ -->
 <section id="data" class="sec">
-  <h2 data-i18n="dataTitle">내 데이터는 어디에 있나</h2>
+  <h2 data-i18n="dataTitle">데이터 보안이 걱정돼요</h2>
   <p class="desc" data-i18n="dataSub">ZTO는 로컬 앱입니다. ZTO 서버도, 만들 계정도 없습니다.</p>
   <table>
     <tr><td data-i18n="d1t">계정 메모 · 앱 시트 · 스토어 기록</td><td data-i18n="d1d">이 컴퓨터 안에만</td></tr>
@@ -502,7 +558,7 @@
       <div>
         <div class="foot-h" data-i18n="footProduct">제품</div>
         <a href="#pricing" data-i18n="footPricing">요금제</a>
-        <a href="#data" data-i18n="footData">내 데이터는 어디에</a>
+        <a href="#data" data-i18n="footData">데이터 보안</a>
         <a href="#windows" data-i18n="footWin">Windows 경고 안내</a>
         <a href="mailto:libertas.kr@gmail.com" data-i18n="footContact">문의하기</a>
       </div>
@@ -538,20 +594,57 @@
       panes.forEach(p=>p.classList.toggle("on",p.dataset.pane===n));
       steps.forEach(st=>st.classList.toggle("on",st.dataset.step===n));
     }
-    activate("1");
-    const io=new IntersectionObserver(es=>{
-      es.forEach(e=>{ if(e.isIntersecting) activate(e.target.dataset.step); });
-    },{rootMargin:"-42% 0px -42% 0px"});
-    steps.forEach(st=>io.observe(st));
-  })();    if (img.complete && img.naturalWidth > 0) f.hidden = false;
-  });
+    // 스크롤 위치 기반 — 화면 중앙에 가장 가까운 스텝이 항상 켜진다.
+    // IntersectionObserver("띠에 들어온 순간"만 반응)는 역방향·빠른 스크롤에서 진입을
+    // 놓치면 아무것도 안 켜진 상태가 남았다(2026-08-01 실측). 이 방식은 빈 상태가 불가능하다.
+    function pick(){
+      const mid=window.innerHeight*0.5;
+      let best="1", bd=Infinity;
+      steps.forEach(st=>{
+        const r=st.getBoundingClientRect();
+        const d=Math.abs(r.top+r.height/2-mid);
+        if(d<bd){bd=d;best=st.dataset.step;}
+      });
+      activate(best);
+    }
+    // PIP (모바일) — 인라인 슬롯이 화면 위로 사라지면 창을 우하단으로 띄운다.
+    // .preview에 min-height를 남겨 자리를 지키므로 스크롤 점프가 없다.
+    const prev=document.querySelector(".preview");
+    const win=prev&&prev.querySelector(".win");
+    const story=document.querySelector(".story");
+    const mq=window.matchMedia("(max-width:900px)");
+    function pip(){
+      if(!prev||!win)return;
+      const inPip = win.parentElement===document.body;
+      const slot=prev.getBoundingClientRect();
+      const st=story.getBoundingClientRect();
+      const on = mq.matches && slot.bottom<70 && st.bottom>window.innerHeight*0.45;
+      if(on && !inPip){
+        prev.style.minHeight=win.offsetHeight+"px"; // 자리 유지 — 스크롤 점프 방지
+        document.body.appendChild(win);             // portal — fixed가 확실히 뷰포트 기준이 된다
+        win.classList.add("pipwin");
+      }else if(!on && inPip){
+        win.classList.remove("pipwin");
+        prev.appendChild(win);
+        prev.style.minHeight="";
+      }
+    }
+    let ticking=false;
+    window.addEventListener("scroll",()=>{
+      if(ticking)return;
+      ticking=true;
+      requestAnimationFrame(()=>{pick();pip();ticking=false;});
+    },{passive:true});
+    window.addEventListener("resize",()=>{pick();pip();});
+    pick();pip();
+  })();
 
   // ko/en — 한국어가 원문(마크업), 영어는 여기. 로드 시 DOM에서 KO 스냅샷을 떠서 중복이 없다.
   (() => {
     const EN = {
       navAccounts: "Accounts",
       footDesc: "Every new app adds more to manage — accounts, both app stores, promo posts. One place for all of it. Runs locally, no server.",
-      footProduct: "Product", footPricing: "Pricing", footData: "Where your data lives",
+      footProduct: "Product", footPricing: "Pricing", footData: "Data security",
       footWin: "About the Windows warning", footContact: "Contact",
       footFollow: "FOLLOW THE MAKER",
       footNote: "Building in public — a follow means a lot 🙌",
@@ -618,7 +711,7 @@
       f4: "Every feature", f5: "No keys, no second bill", f6: "macOS · Windows",
       trialNote: "<strong>3-day full trial.</strong> The clock starts when you first connect a store — not at install. Making a service account key takes an afternoon, and that shouldn't count against you.",
 
-      dataTitle: "Where your data lives", dataSub: "ZTO is a local app. No ZTO server, no account to create.",
+      dataTitle: "Worried about your data?", dataSub: "ZTO is a local app. No ZTO server, no account to create.",
       d1t: "Account notes · app sheets · store snapshots", d1d: "On this computer only",
       d2t: "Password encryption key", d2d: "OS keychain — macOS Keychain, Windows DPAPI",
       d3t: "Stored passwords", d3d: "Ciphertext only. Viewing one passes biometric auth every time",
