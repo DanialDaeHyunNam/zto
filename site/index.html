@@ -13,15 +13,17 @@
 <style>
   :root{
     /* ---------- 브랜드 스케일 — 색을 바꿀 땐 여기만 만진다 ----------
+       ⚠️ 이 블록 안은 반드시 리터럴이어야 한다. 변수로 치환하면 자기 참조가 되어
+       브라우저가 전부 무효 처리한다(2026-08-01 실제로 그랬다 — 화면에서 브랜드색 전멸).
        -rgb 변수는 rgba(var(--brand-rgb), .x) 꼴의 투명도 조합용 */
-    --brand-deeper:var(--brand-deeper);      /* 가장 진함 — 눌린 상태·선택 텍스트 */
-    --brand-deep:var(--brand-deep);        /* 그라데이션 시작 */
-    --brand:var(--brand);             /* 기본 */
-    --brand-tail:var(--brand-tail);        /* 그라데이션 꼬리 (스카이) */
-    --brand-soft:var(--brand-soft);        /* 연한 강조 */
-    --brand-text:var(--brand-text);        /* 브랜드색 텍스트·링크 */
-    --brand-tint:var(--brand-tint);        /* 발광 텍스트 최상단 */
-    --brand-wash:var(--brand-wash);        /* 라이트 배경 위 워시 */
+    --brand-deeper:#1d4ed8;      /* 가장 진함 — 눌린 상태·선택 텍스트 */
+    --brand-deep:#2563eb;        /* 그라데이션 시작 */
+    --brand:#3b82f6;             /* 기본 */
+    --brand-tail:#0ea5e9;        /* 그라데이션 꼬리 (스카이) */
+    --brand-soft:#60a5fa;        /* 연한 강조 */
+    --brand-text:#93c5fd;        /* 브랜드색 텍스트·링크 */
+    --brand-tint:#bfdbfe;        /* 발광 텍스트 최상단 */
+    --brand-wash:#eff6ff;        /* 라이트 배경 위 워시 */
     --brand-rgb:59,130,246;
     --brand-soft-rgb:96,165,250;
     --grad:linear-gradient(135deg,var(--brand-deep) 0%,var(--brand) 55%,var(--brand-tail) 100%);
@@ -330,7 +332,6 @@
         <div class="panes">
           <!-- 1 계정 -->
           <div class="pane" data-pane="1">
-            <img class="real" src="/assets/shot-accounts.png" alt="" />
             <div class="sketch">
               <div class="p-tiles">
                 <div class="p-tile"><span class="ic all">@</span><b>7</b><span data-i18n="ptAcc">계정</span></div>
@@ -344,7 +345,6 @@
           </div>
           <!-- 2 스토어 -->
           <div class="pane" data-pane="2">
-            <img class="real" src="/assets/shot-store.png" alt="" />
             <div class="sketch">
               <div class="p-chips"><span class="on">My Game</span><span>Example</span><span>＋</span></div>
               <div class="p-seg"><span class="on">Android</span><span>iOS</span></div>
@@ -357,7 +357,6 @@
           </div>
           <!-- 3 소셜 -->
           <div class="pane" data-pane="3">
-            <img class="real" src="/assets/shot-social.png" alt="" />
             <div class="sketch">
               <div class="p-aihead"><b>AI</b><span>GPT-5.6 Luna</span></div>
               <div class="p-msgs">
@@ -544,19 +543,7 @@
       es.forEach(e=>{ if(e.isIntersecting) activate(e.target.dataset.step); });
     },{rootMargin:"-42% 0px -42% 0px"});
     steps.forEach(st=>io.observe(st));
-    // 진짜 스크린샷이 있으면 스케치 대신 그걸 보여준다
-    panes.forEach(p=>{
-      const img=p.querySelector("img.real");
-      img.addEventListener("load",()=>p.classList.add("has-img"));
-      if(img.complete&&img.naturalWidth>0)p.classList.add("has-img");
-    });
-  })();
-
-  // 스크린샷이 실제로 있으면 프레임을 켠다 — 깨진 이미지 프레임을 보여주느니 없는 게 낫다
-  document.querySelectorAll(".shot").forEach((f) => {
-    const img = f.querySelector("img");
-    img.addEventListener("load", () => { f.hidden = false; });
-    if (img.complete && img.naturalWidth > 0) f.hidden = false;
+  })();    if (img.complete && img.naturalWidth > 0) f.hidden = false;
   });
 
   // ko/en — 한국어가 원문(마크업), 영어는 여기. 로드 시 DOM에서 KO 스냅샷을 떠서 중복이 없다.
