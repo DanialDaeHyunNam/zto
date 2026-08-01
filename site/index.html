@@ -290,8 +290,8 @@
     </div>
     <div class="nav-right">
       <div class="lang" role="group" aria-label="Language">
-        <button type="button" data-lang="ko" class="on">KO</button>
-        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="en" class="on">EN</button>
+        <button type="button" data-lang="ko">KO</button>
       </div>
       <a class="nav-cta" href="mailto:libertas.kr@gmail.com?subject=ZTO%20%EC%B6%9C%EC%8B%9C%20%EC%95%8C%EB%A6%BC%20%EC%8B%A0%EC%B2%AD" data-i18n="navCta">출시 알림 받기</a>
     </div>
@@ -402,7 +402,7 @@
 
     <div class="step" data-step="3" id="ai">
       <div class="num">03 · <span data-i18n="numAi">AI 패널</span></div>
-      <h2 data-i18n="aiTitle">소셜미디어 글 올릴 때도,<br />AI를 비서처럼 사용해요</h2>
+      <h2 data-i18n="aiTitle">소셜미디어에 마케팅할 때,<br />AI를 비서처럼 사용해요</h2>
       <p class="desc" data-i18n="aiSub">
         캡션에 어떤 스토리텔링이 담기냐에 따라 성패가 갈립니다.
         AI와 논의해서 더 좋은 성적을 거두세요.
@@ -616,7 +616,7 @@
       s3t: "The history stores don't keep", s3d: "Every read is snapshotted, so you can see what changed and when.",
 
       numAi: "AI panel",
-      aiTitle: "Posting to social?<br />Treat the AI as your assistant",
+      aiTitle: "Marketing every app on social?<br />Treat the AI as your assistant",
       aiSub: "The storytelling in a caption decides how it performs. Talk it through with the AI and post the better version.",
       ai1t: "History is the context", ai1d: "Apps, accounts and store records live in one place, so the advice is about you — not about apps in general.",
       ai2t: "Reads only when you allow it", ai2d: "Letting the AI see the page is a switch that starts off. Your feed holds other people's posts and DMs.",
@@ -658,7 +658,7 @@
       b.addEventListener("click", () => apply(b.dataset.lang)));
 
     const saved = (() => { try { return localStorage.getItem("zto-lang"); } catch (e) { return null; } })();
-    apply(saved || ((navigator.language || "").toLowerCase().startsWith("ko") ? "ko" : "en"));
+    apply(saved || "en"); // 디폴트 영어 — 브라우저 언어 감지 대신 고정(Dan 2026-08-01)
   })();
 </script>
 </body>
