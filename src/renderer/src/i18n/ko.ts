@@ -538,6 +538,7 @@ export const ko: Messages = {
     done: '완료',
     filterLabel: '앱 필터',
     catConsole: '개발자 콘솔',
+    catSaas: 'SaaS·인프라',
     catMail: '메일',
     catSocial: '소셜',
     all: '전체',

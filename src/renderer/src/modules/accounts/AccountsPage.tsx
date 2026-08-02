@@ -35,6 +35,7 @@ function AppPicker({
   const { m } = useI18n()
   const groups = [
     { key: 'console', label: m.accounts.catConsole },
+    { key: 'saas', label: m.accounts.catSaas },
     { key: 'mail', label: m.accounts.catMail },
     { key: 'social', label: m.accounts.catSocial }
   ] as const

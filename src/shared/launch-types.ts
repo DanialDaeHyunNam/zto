@@ -361,8 +361,8 @@ export interface LockState {
   remainingMs: number
 }
 
-// 연결 가능한 앱 카탈로그 — 개발자 콘솔 2종 + Postiz(github.com/gitroomhq/postiz-app) 지원 플랫폼 전체
-export type PlatformCategory = 'console' | 'mail' | 'social'
+// 연결 가능한 앱 카탈로그 — 개발자 콘솔 2종 + 메일 + 소셜(Postiz 지원 플랫폼) + 솔로파운더 SaaS
+export type PlatformCategory = 'console' | 'mail' | 'social' | 'saas'
 
 export interface PlatformDef {
   id: string
@@ -400,7 +400,22 @@ export const PLATFORMS: PlatformDef[] = [
   { id: 'lemmy', name: 'Lemmy', category: 'social' },
   { id: 'nostr', name: 'Nostr', category: 'social' },
   { id: 'vk', name: 'VK', category: 'social' },
-  { id: 'kick', name: 'Kick', category: 'social' }
+  { id: 'kick', name: 'Kick', category: 'social' },
+  // SaaS — 솔로파운더가 계정을 흩뿌리게 되는 서비스들 (2026-08-02 Dan 요청)
+  { id: 'lemonsqueezy', name: 'Lemon Squeezy', category: 'saas' },
+  { id: 'stripe', name: 'Stripe', category: 'saas' },
+  { id: 'paypal', name: 'PayPal', category: 'saas' },
+  { id: 'vercel', name: 'Vercel', category: 'saas' },
+  { id: 'supabase', name: 'Supabase', category: 'saas' },
+  { id: 'firebase', name: 'Firebase', category: 'saas' },
+  { id: 'cloudflare', name: 'Cloudflare', category: 'saas' },
+  { id: 'aws', name: 'AWS', category: 'saas' },
+  { id: 'googlecloud', name: 'Google Cloud', category: 'saas' },
+  { id: 'github', name: 'GitHub', category: 'saas' },
+  { id: 'openai', name: 'OpenAI', category: 'saas' },
+  { id: 'anthropic', name: 'Anthropic', category: 'saas' },
+  { id: 'notion', name: 'Notion', category: 'saas' },
+  { id: 'figma', name: 'Figma', category: 'saas' }
 ]
 
 // 이메일 도메인 → 메일 서비스 앱. ID가 이메일이면 이 앱이 유저 설정 없이 강제 연결되고 항상 맨 앞.

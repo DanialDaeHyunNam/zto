@@ -24,7 +24,19 @@ import {
   siTiktok,
   siVk,
   siX,
-  siYoutube
+  siYoutube,
+  siLemonsqueezy,
+  siStripe,
+  siPaypal,
+  siVercel,
+  siSupabase,
+  siFirebase,
+  siCloudflare,
+  siGooglecloud,
+  siGithub,
+  siAnthropic,
+  siNotion,
+  siFigma
 } from 'simple-icons'
 import { PLATFORMS } from '../../shared/launch-types'
 
@@ -55,7 +67,19 @@ const ICONS: Record<string, { path: string; hex: string }> = {
   warpcast: siFarcaster,
   lemmy: siLemmy,
   vk: siVk,
-  kick: siKick
+  kick: siKick,
+  lemonsqueezy: siLemonsqueezy,
+  stripe: siStripe,
+  paypal: siPaypal,
+  vercel: siVercel,
+  supabase: siSupabase,
+  firebase: siFirebase,
+  cloudflare: siCloudflare,
+  googlecloud: siGooglecloud,
+  github: siGithub,
+  anthropic: siAnthropic,
+  notion: siNotion,
+  figma: siFigma
 }
 
 // simple-icons에 없는 브랜드(정책상 제외)의 대체 브랜드색
@@ -65,7 +89,10 @@ const FALLBACK_COLORS: Record<string, string> = {
   nostr: '#662482',
   outlook: '#0F6CBD',
   yahoo: '#6001D2',
-  daum: '#EC4E36'
+  daum: '#EC4E36',
+  // simple-icons 미보유 SaaS
+  openai: '#412991',
+  aws: '#FF9900'
 }
 
 export const PLATFORM_NAMES: Record<string, string> = Object.fromEntries(

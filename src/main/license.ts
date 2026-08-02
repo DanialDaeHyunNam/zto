@@ -16,10 +16,13 @@ const API = 'https://api.lemonsqueezy.com/v1/licenses'
 
 // 스토어 개설 후 채운다. **비어 있으면 상품 대조를 건너뛴다**(개발 중 앱이 잠기지 않도록) —
 // 배포 빌드에서 비어 있으면 안 된다.
-export const LS_STORE_ID = ''
+// libertas (all-libertas.lemonsqueezy.com) — 2026-08-02 개설
+export const LS_STORE_ID = '443985'
 export const LS_VARIANTS: Record<string, 'byo' | 'plus'> = {
-  // '<variant_id>': 'byo',
-  // '<variant_id>': 'plus'
+  '1973935': 'byo', // BYO · Monthly $5
+  '1973938': 'byo', // BYO · Yearly $50
+  '1973940': 'plus', // Plus · Monthly $15
+  '1973941': 'plus' // Plus · Yearly $150
 }
 
 export type Plan = 'byo' | 'plus'

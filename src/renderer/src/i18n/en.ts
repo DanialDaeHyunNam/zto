@@ -538,6 +538,7 @@ export const en = {
     done: 'Done',
     filterLabel: 'Filter by app',
     catConsole: 'Developer consoles',
+    catSaas: 'SaaS & infra',
     catMail: 'Mail',
     catSocial: 'Social',
     all: 'All',
