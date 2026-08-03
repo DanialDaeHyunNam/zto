@@ -531,7 +531,7 @@
         <button type="button" data-lang="en" class="on">EN</button>
         <button type="button" data-lang="ko">KO</button>
       </div>
-      <a class="nav-cta" href="#pricing" data-i18n="navCta">3일 무료 체험</a>
+      <a class="nav-cta" href="https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.0/ZTO-0.1.0-arm64.dmg" data-i18n="navCta">3일 무료 체험</a>
     </div>
   </div>
 </nav>
@@ -544,8 +544,9 @@
     <span class="a" data-i18n="h1a">ZTO에서 전부 관리하세요</span>
   </h1>
   <div class="cta">
-    <a class="btn" href="#pricing" data-i18n="ctaMain">3일 무료로 시작하기</a>
+    <a class="btn" href="https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.0/ZTO-0.1.0-arm64.dmg" data-i18n="ctaMain">3일 무료로 시작하기</a>
   </div>
+  <p class="fine" data-i18n="dlFine">macOS · 3일 전체 기능 체험 · Apple Silicon 기준 — <a href="https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.0/ZTO-0.1.0.dmg">Intel Mac용</a> · <a href="https://github.com/DanialDaeHyunNam/zto/releases" target="_blank" rel="noopener">전체 릴리스·체크섬</a></p>
 </header>
 
 <svg style="display:none" aria-hidden="true"><defs>
@@ -718,7 +719,7 @@
       <ul>
         <li data-i18n="f4">모든 기능</li>
         <li data-i18n="f5">키 발급도, 두 번째 청구서도 없이</li>
-        <li data-i18n="f6">macOS · Windows</li>
+        <li data-i18n="f6">macOS</li>
       </ul>
     </div>
   </div>
@@ -744,24 +745,13 @@
   </p>
 </section>
 
-<!-- ============ 윈도우 ============ -->
-<section id="windows" class="sec">
-  <h2 class="rv" data-i18n="winTitle">Windows에서 뜨는 경고에 대해</h2>
-  <p class="note rv" style="margin-top:22px" data-i18n="winBody">
-    <strong>macOS 빌드는 애플 공증을 거쳐</strong> 경고 없이 열립니다.
-    <strong>Windows 설치 파일은 아직 코드 서명이 없어</strong> 첫 실행에 "Windows의 PC 보호"가 뜹니다.
-    서명이 없다는 안내이지 악성코드 탐지가 아닙니다 — 인증서는 매년 비용이 들어서 아직 안 샀을 뿐이에요.
-    <strong>추가 정보 → 실행</strong>을 누르면 Windows가 기억합니다.
-    릴리스마다 SHA-256 체크섬을 올리니 직접 검증할 수도 있습니다.
-  </p>
-</section>
 
 <div class="ending rv">
   <p class="end-h" data-i18n="endH">ZTO에서 전부 관리하세요</p>
   <div class="cta">
-    <a class="btn" href="#pricing" data-i18n="endCta">3일 무료로 시작하기</a>
+    <a class="btn" href="https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.0/ZTO-0.1.0-arm64.dmg" data-i18n="endCta">3일 무료로 시작하기</a>
   </div>
-  <p class="fine" data-i18n="endFine">macOS · Windows · 3일 전체 기능 체험</p>
+  <p class="fine" data-i18n="endFine">macOS · 3일 전체 기능 체험</p>
 </div>
 
 <footer class="wrap">
@@ -779,7 +769,6 @@
         <a href="#pricing" data-i18n="footPricing">요금제</a>
         <a href="#data" data-i18n="footData">데이터 보안</a>
         <a href="https://github.com/DanialDaeHyunNam/zto" target="_blank" rel="noopener" data-i18n="footGh">GitHub — 소스 공개</a>
-        <a href="#windows" data-i18n="footWin">Windows 경고 안내</a>
         <a href="mailto:libertas.kr@gmail.com" data-i18n="footContact">문의하기</a>
       </div>
       <div>
@@ -803,16 +792,6 @@
 
 <script>
 
-  // Windows 경고 섹션 — Windows 방문자에게만. mac 사용자에겐 남의 얘기라 지운다(Dan 2026-08-02)
-  (() => {
-    const plat = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
-    if (!/win/i.test(plat)) {
-      const sec = document.getElementById("windows");
-      if (sec) sec.remove();
-      const link = document.querySelector('a[data-i18n="footWin"]');
-      if (link) link.remove();
-    }
-  })();
 
   // 스토리 스크롤 — 화면 중앙에 온 스텝에 맞춰 미리보기의 탭·페인이 넘어간다.
   (() => {
@@ -901,13 +880,14 @@
       footDesc: "Every new app adds more to manage — accounts, both app stores, promo posts. One place for all of it. Runs locally, no server.",
       footProduct: "Product", footPricing: "Pricing", footData: "Data security",
       footGh: "GitHub — open source",
-      footWin: "About the Windows warning", footContact: "Contact",
+      dlFine: "macOS · 3-day full trial · Apple Silicon build — <a href=\"https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.0/ZTO-0.1.0.dmg\">Intel Mac</a> · <a href=\"https://github.com/DanialDaeHyunNam/zto/releases\" target=\"_blank\" rel=\"noopener\">all releases & checksums</a>",
+      footContact: "Contact",
       footFollow: "FOLLOW THE MAKER",
       footNote: "Building in public — a follow means a lot 🙌",
       footRights: "© 2026 ZTO · DaeHyun Nam. All rights reserved.",
       endH: "Run it all from ZTO",
       endCta: "Start the free 3-day trial",
-      endFine: "macOS · Windows · 3-day full trial",
+      endFine: "macOS · 3-day full trial",
       tabAcc: "Accounts", tabAccD: "Every account at a glance",
       tabStoreD: "Live store status & automation", tabSocialD: "Embedded browser + AI copilot",
       pSys: "X compose screen",
@@ -963,7 +943,7 @@
       fOss: "Open source — build it yourself for free; $5 is for the signed build",
       planPlus: "AI included", perMo2: "/ month", perYr2: "/ year",
       yr15: "Yearly is $150 — 2 months free", yrNote15: "That's $12.50 a month — 2 months free",
-      f4: "Every feature", f5: "No keys, no second bill", f6: "macOS · Windows",
+      f4: "Every feature", f5: "No keys, no second bill", f6: "macOS",
       trialNote: "<strong>3-day full trial.</strong> The clock starts when you first connect a store — not at install. Making a service account key takes an afternoon, and that shouldn't count against you.",
 
       dataTitle: "Worried about your data?", dataSub: "ZTO is a local app. No ZTO server, no account to create.",
@@ -972,8 +952,6 @@
       d3t: "Stored passwords", d3d: "Ciphertext only. Viewing one passes biometric auth every time",
       d4t: "AI conversations", d4d: "Sent straight to the provider you chose",
       dataNote: "Exactly four network calls — store APIs, the AI you chose, license check, update check. No telemetry. And it's not just a promise: <a href=\"https://github.com/DanialDaeHyunNam/zto\" target=\"_blank\" rel=\"noopener\"><strong>the source is public</strong></a>, so you can verify it yourself.",
-      winTitle: "About the Windows warning",
-      winBody: "<strong>macOS builds are notarized by Apple</strong> and open with no warning. <strong>The Windows installer isn't code-signed yet</strong>, so its first run shows “Windows protected your PC”. That's a missing-signature notice, not a malware detection — the certificate costs money every year and we haven't bought one yet. Click <strong>More info → Run anyway</strong> and Windows remembers. Every release ships with SHA-256 checksums you can verify."
     };
 
     const els = [...document.querySelectorAll("[data-i18n]")];
