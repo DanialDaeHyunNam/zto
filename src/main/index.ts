@@ -89,8 +89,13 @@ const ANSWERS_DIR = app.isPackaged
 // 자동 업데이트 — 다운로드는 자동, 재시작은 사람이(비가역 작업 중 재시작 금지)
 const updater = createUpdater(() => browserHostWindow)
 
-// 라이선스 — 파일은 userData, 키는 safeStorage로 암호화해 넣는다
-const license = createLicense(join(app.getPath('userData'), 'zto-license.json'))
+// 라이선스 — 파일은 userData, 키는 safeStorage로 암호화해 넣는다.
+// 게이트는 **공식 배포 빌드에만** 존재한다 — 공식 릴리스는 MAIN_VITE_OFFICIAL=1로 빌드하고,
+// 소스에서 직접 빌드하면 플래그가 없어 게이트 없는 앱이 나온다(LICENSE.md의 "직접 빌드 = 무료" 그대로)
+const license = createLicense(
+  join(app.getPath('userData'), 'zto-license.json'),
+  import.meta.env.MAIN_VITE_OFFICIAL === '1'
+)
 
 // 전역 로컬 상태 (개발자 계정 보유 여부 등) — 비밀 없음, 메타데이터만
 const stateFile = (): string => join(app.getPath('userData'), 'zto-state.json')
@@ -2391,10 +2396,14 @@ app.whenReady().then(() => {
         feature?: AiFeature
       }
     ): Promise<AiChatResult> => {
-      // AI도 유료 기능이다. **자기 키를 쓰는 BYO여도** 앱 자체가 유료다 — 키를 넣었다고
-      // 앱값을 안 내도 되는 건 아니다(그 구분이 흐려지면 $5 티어가 존재할 이유가 없어진다)
-      if (!license.info().entitled) {
-        return { ok: false, text: '', error: 'license-required' }
+      // AI도 유료 기능이다(공식 빌드 한정). **자기 키를 쓰는 BYO여도** 앱 자체가 유료다 —
+      // 키를 넣었다고 앱값을 안 내도 되는 건 아니다(그 구분이 흐려지면 $5 티어가 존재할 이유가
+      // 없어진다). 소스 빌드는 자기 키로 자유 — 대신 hosted AI(Plus)는 서버가 키를 검증한다
+      {
+        const li = license.info()
+        if (li.official && !li.entitled) {
+          return { ok: false, text: '', error: 'license-required' }
+        }
       }
       const cfg = readAiConfig()
       const provider = cfg.active
@@ -2996,7 +3005,7 @@ app.whenReady().then(() => {
     'launch:applyEdits',
     async (_e, file: string, edits: PendingEdit[]): Promise<ApplyResult[]> => {
       // 체험 만료 + 미결제 → 항목별로 사유를 돌려준다(결과 패널이 이미 항목별 메시지를 그린다)
-      if (!license.info().entitled) {
+      if (license.info().official && !license.info().entitled) {
         return edits.map((e) => ({
           id: e.id,
           ok: false,
@@ -3042,6 +3051,15 @@ app.whenReady().then(() => {
       versionString: string
     ): Promise<{ ok: boolean; error?: string; versionId?: string }> => {
       const ko = appLocale === 'ko'
+      // 스토어 쓰기 = 유료(공식 빌드) — applyEdits·runIap과 같은 규칙
+      if (license.info().official && !license.info().entitled) {
+        return {
+          ok: false,
+          error: ko
+            ? '체험이 끝났어요 — 설정에서 라이선스를 등록하면 실행됩니다'
+            : 'Trial ended — add a license in Settings to run this'
+        }
+      }
       let sheet: {
         app: { bundleId: string }
         credentials?: { asc?: { keyPath?: string; keyId?: string; issuerId?: string } }
@@ -3147,6 +3165,16 @@ app.whenReady().then(() => {
   ipcMain.handle(
     'launch:runIap',
     async (_e, file: string, action: 'upsert' | 'activate'): Promise<RunResult> => {
+      // 스토어 쓰기 = 유료(공식 빌드) — 렌더러 오버레이가 뚫려도 여기서 한 번 더 막는다
+      if (license.info().official && !license.info().entitled) {
+        return {
+          ok: false,
+          output:
+            appLocale === 'ko'
+              ? '체험이 끝났어요 — 설정에서 라이선스를 등록하면 실행됩니다'
+              : 'Trial ended — add a license in Settings to run this'
+        }
+      }
       const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
       const saPath = resolveGoogleSa(sheet)
       if (!saPath) return { ok: false, output: 'google-sa-missing' }

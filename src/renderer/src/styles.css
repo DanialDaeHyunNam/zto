@@ -451,6 +451,67 @@ button {
   flex: 1;
   overflow-y: auto;
   padding: 40px 48px 60px;
+  /* 만료 게이트 오버레이의 기준 좌표 — 오버레이는 콘텐츠 영역만 덮는다(사이드바는 산다) */
+  position: relative;
+}
+
+/* ---------- 만료 게이트 (공식 빌드 전용) ---------- */
+/* 뒤 화면은 흐리게 살려둔다 — 뭘 잃는지 보여야 결제할 이유가 보인다 */
+.gate-blur {
+  filter: blur(7px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.gate-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 10, 15, 0.55);
+}
+
+.gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  max-width: 400px;
+  padding: 36px 40px;
+  background: #14141b;
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  text-align: center;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+
+.gate-title {
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.gate-body {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+/* 계정 인벤토리 상단 안내 — 잠금이 아니라 예외임을 말해준다(열람은 계속) */
+.gate-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.07);
+  border-radius: 10px;
+  font-size: 13px;
+  color: var(--fg);
 }
 
 /* 브라우저 모듈 — 임베드 뷰가 최대 공간을 쓰도록 패딩·스크롤 제거 */

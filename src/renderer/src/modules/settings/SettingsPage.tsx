@@ -76,9 +76,12 @@ function LicenseCard({
         </div>
       ) : (
         <>
-          {/* 체험은 **첫 스토어 연결부터** 센다 — 아직 연결 전이면 시작조차 안 한 것이다 */}
+          {/* 체험은 **첫 스토어 연결부터** 센다 — 아직 연결 전이면 시작조차 안 한 것이다.
+              소스 빌드는 체험 개념이 없다(무료) — 키 입력은 Plus 구독용으로만 남긴다 */}
           <div className="lic-row">
-            {info.trialActive ? (
+            {!info.official ? (
+              <span className="status-chip ok">{m.settings.licenseSourceBuild}</span>
+            ) : info.trialActive ? (
               <span className="status-chip warn">
                 {m.settings.licenseTrialLeft.replace('{d}', String(daysLeft(info.trialEndsAt)))}
               </span>

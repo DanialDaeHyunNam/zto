@@ -13,5 +13,8 @@ export interface LicenseInfo {
   trialEndsAt?: string
   trialActive: boolean
   entitled: boolean
+  // 공식 배포 빌드인가(빌드 타임 MAIN_VITE_OFFICIAL). 게이트는 공식 빌드에만 있다 —
+  // 소스 빌드는 LICENSE.md가 이미 무료를 허용하므로 잠글 이유가 없다(잠금은 방어가 아니라 퍼널)
+  official: boolean
   error?: string
 }

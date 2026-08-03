@@ -15,6 +15,13 @@ export const ko: Messages = {
     planTrial: '체험 D-{d}',
     planTrialOver: '체험 종료'
   },
+  gate: {
+    title: '체험이 끝났어요',
+    body: 'ZTO를 써봐주셔서 감사해요.',
+    cta: '요금제 보고 구매하기',
+    haveKey: '라이선스 키가 있어요',
+    accountsNote: '체험 종료 — 계정과 비밀번호는 계속 볼 수 있어요. 계정 추가는 라이선스가 필요합니다.'
+  },
   browser: {
     urlPlaceholder: 'URL 또는 검색어 입력…',
     go: '이동',
@@ -86,6 +93,7 @@ export const ko: Messages = {
     licenseTrialLeft: '체험 {d}일 남음',
     licenseTrialOver: '체험 종료',
     licenseTrialNotStarted: '체험 시작 전 — 스토어를 처음 연결하면 시작돼요',
+    licenseSourceBuild: '소스 빌드 — 키 없이 무료로 쓸 수 있어요. 키는 ZTO Plus(hosted AI)에만 필요합니다.',
     licensePlaceholder: '라이선스 키',
     licenseActivate: '등록',
     licenseChecking: '확인 중…',

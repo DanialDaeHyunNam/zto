@@ -36,6 +36,15 @@ export default function App(): React.JSX.Element {
   // 정상·확인중은 유저에게 노이즈라 숨기고, 진짜 IPC 오류일 때만 노출
   const ipcError = ipcStatus !== 'ok' && ipcStatus !== 'checking' ? ipcStatus : null
 
+  // 만료 잠금 — **공식 빌드에서, 체험이 시작됐다가 끝난** 경우만. 소스 빌드는 게이트 자체가
+  // 없고(LICENSE.md), 체험 시작 전(스토어 연결 전)은 준비 기간이라 무료다(SPEC §8.6).
+  // 예외 화면 2곳: 설정(키 등록 입구가 없으면 산 사람도 못 들어온다), 계정 인벤토리(맡겨둔
+  // 비밀번호를 결제 뒤에 가두면 인질이다 — 열람은 항상 된다)
+  const gated = !!lic && lic.official && !lic.entitled && !!lic.trialStartedAt
+  const gateCovers = gated && active !== 'settings' && active !== 'accounts'
+
+  const buyUrl = 'https://zto-umber.vercel.app/#pricing'
+
   const navBtn = (id: ModuleId, label: string, desc: string): React.JSX.Element => (
     <button
       key={id}
@@ -65,7 +74,7 @@ export default function App(): React.JSX.Element {
                 >
                   {lic.plan === 'plus' ? 'ZTO Plus' : 'ZTO'}
                 </button>
-              ) : lic.trialActive ? (
+              ) : !lic.official ? null : lic.trialActive ? ( // 소스 빌드 — 체험 칩은 거짓말이라 안 단다
                 <button className="plan-chip trial" onClick={() => setActive('settings')}>
                   {m.nav.planTrial.replace(
                     '{d}',
@@ -89,10 +98,42 @@ export default function App(): React.JSX.Element {
           </div>
         </nav>
         <main className={`content ${active === 'social' ? 'flush' : ''}`}>
-          {active === 'launch' && <LaunchPage />}
-          {active === 'accounts' && <AccountsPage />}
-          {active === 'social' && <SocialPage />}
-          {active === 'settings' && <SettingsPage />}
+          {gated && active === 'accounts' && (
+            <div className="gate-banner">
+              <span>{m.gate.accountsNote}</span>
+              <button
+                className="ghost-btn mini"
+                onClick={() => window.zto.launch.openExternal(buyUrl)}
+              >
+                {m.gate.cta}
+              </button>
+            </div>
+          )}
+          {/* 잠금 중엔 뒤 화면을 흐려서 보여준다 — 뭘 잃는지가 보여야 결제할 이유가 보인다.
+              소셜만은 통째로 뺀다: 네이티브 WebContentsView는 DOM 위에 떠서 blur가 못 덮는다 */}
+          <div className={gateCovers ? 'gate-blur' : undefined}>
+            {active === 'launch' && <LaunchPage />}
+            {active === 'accounts' && <AccountsPage gated={gated} />}
+            {active === 'social' && !gateCovers && <SocialPage />}
+            {active === 'settings' && <SettingsPage />}
+          </div>
+          {gateCovers && (
+            <div className="gate-overlay">
+              <div className="gate-card">
+                <div className="gate-title">{m.gate.title}</div>
+                <p className="gate-body">{m.gate.body}</p>
+                <button
+                  className="choice active"
+                  onClick={() => window.zto.launch.openExternal(buyUrl)}
+                >
+                  {m.gate.cta}
+                </button>
+                <button className="ghost-btn" onClick={() => setActive('settings')}>
+                  {m.gate.haveKey}
+                </button>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </BrowserOverlayProvider>

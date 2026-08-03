@@ -13,6 +13,13 @@ export const en = {
     planTrial: 'Trial D-{d}',
     planTrialOver: 'Trial ended'
   },
+  gate: {
+    title: 'Your trial has ended',
+    body: 'Thanks for trying ZTO.',
+    cta: 'See plans & buy',
+    haveKey: 'I have a license key',
+    accountsNote: 'Trial ended — your accounts and passwords stay accessible. Adding accounts needs a license.'
+  },
   browser: {
     urlPlaceholder: 'Enter a URL or search…',
     go: 'Go',
@@ -84,6 +91,7 @@ export const en = {
     licenseTrialLeft: '{d} days left in trial',
     licenseTrialOver: 'Trial ended',
     licenseTrialNotStarted: 'Trial not started — it begins when you first connect a store',
+    licenseSourceBuild: 'Source build — free to use, no key needed. A key is only for ZTO Plus (hosted AI).',
     licensePlaceholder: 'License key',
     licenseActivate: 'Activate',
     licenseChecking: 'Checking…',

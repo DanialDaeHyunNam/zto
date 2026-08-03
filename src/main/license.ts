@@ -46,6 +46,9 @@ export interface LicenseInfo {
   trialActive: boolean
   // 지금 이 앱을 쓸 수 있는가 = 라이선스 유효 or 체험 중
   entitled: boolean
+  // 공식 배포 빌드인가. 게이트(만료 잠금·AI 차단)는 공식 빌드에만 건다 —
+  // 소스 빌드는 LICENSE.md가 개인 사용을 무료로 허용하므로 잠글 이유가 없다
+  official: boolean
   error?: string
 }
 
@@ -67,7 +70,7 @@ const RECHECK_HOURS = 24
 
 const days = (n: number): number => n * 24 * 60 * 60 * 1000
 
-export function createLicense(file: string) {
+export function createLicense(file: string, official: boolean) {
   const read = (): Stored => {
     try {
       return existsSync(file) ? (JSON.parse(readFileSync(file, 'utf8')) as Stored) : {}
@@ -119,7 +122,8 @@ export function createLicense(file: string) {
       trialStartedAt: s.trialStartedAt,
       trialEndsAt: trialEnds ? new Date(trialEnds).toISOString() : undefined,
       trialActive,
-      entitled: licensed || trialActive
+      entitled: licensed || trialActive,
+      official
     }
   }
 

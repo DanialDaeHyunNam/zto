@@ -753,7 +753,9 @@ function AddAccountForm({
   )
 }
 
-export default function AccountsPage(): React.JSX.Element {
+// gated = 체험 만료(공식 빌드) — 열람·복사·검색은 그대로 두고 **계정 추가만** 잠근다.
+// 이미 맡긴 데이터는 사용자 것이라 결제 뒤에 가두지 않는다(인질 금지)
+export default function AccountsPage({ gated = false }: { gated?: boolean }): React.JSX.Element {
   const { m } = useI18n()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [showForm, setShowForm] = useState(false)
@@ -823,7 +825,7 @@ export default function AccountsPage(): React.JSX.Element {
           >
             {m.accounts.security}
           </button>
-          {!showForm && accounts.length > 0 && (
+          {!showForm && accounts.length > 0 && !gated && (
             <button className="choice active nowrap" onClick={() => setShowForm(true)}>
               {m.accounts.addAccount}
             </button>
@@ -888,9 +890,11 @@ export default function AccountsPage(): React.JSX.Element {
       {accounts.length === 0 && !showForm ? (
         <div className="empty-state">
           <p>{m.accounts.empty}</p>
-          <button className="choice active" onClick={() => setShowForm(true)}>
-            {m.accounts.addAccount}
-          </button>
+          {!gated && (
+            <button className="choice active" onClick={() => setShowForm(true)}>
+              {m.accounts.addAccount}
+            </button>
+          )}
         </div>
       ) : (
         <div className="panel">
