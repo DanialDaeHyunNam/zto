@@ -185,6 +185,11 @@ function unlinkStoreFromAccount(email: string, storeApp: string): void {
 // 모델은 provider별로 다르다 — active provider의 목록만 렌더러에 내보낸다.
 // (섞어두면 ChatGPT가 active일 때 claude-* 모델 id를 OpenAI로 보내게 된다.)
 // 각 목록의 첫 항목이 그 provider의 기본값.
+const GPT_API_MODELS: AiModel[] = [
+  { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
+  { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra (고품질)' },
+  { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' }
+]
 const AI_MODELS_BY_PROVIDER: Record<AiProviderId, AiModel[]> = {
   claude: [
     { id: 'claude-fable-5', label: 'Fable 5' },
@@ -201,12 +206,10 @@ const AI_MODELS_BY_PROVIDER: Record<AiProviderId, AiModel[]> = {
   // (nano $1.25 vs Luna $1.20) 세대가 위라, nano를 고를 이유가 남지 않는다.
   // Terra 추가: 소셜 카피라이팅처럼 문장 품질이 결과를 가르는 자리용. 실측상 이걸 써도
   // 월 원가가 몇 달러 수준이라(사용량 대시보드 데이터 기준) 품질을 아낄 이유가 없다.
-  chatgpt: [
-    { id: 'gpt-5.6-luna', label: 'GPT-5.6 Luna' },
-    { id: 'gpt-5.6-terra', label: 'GPT-5.6 Terra (고품질)' },
-    { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini' }
-  ],
-  gemini: []
+  chatgpt: GPT_API_MODELS,
+  gemini: [],
+  // hosted(Plus) = ZTO 프록시 뒤의 OpenAI — 고를 수 있는 모델은 chatgpt API와 같다
+  hosted: GPT_API_MODELS
 }
 
 // provider 구독 = 로컬 CLI (Claude=claude, ChatGPT=codex). 감지 결과 캐시.
@@ -303,7 +306,8 @@ function readAiConfig(): AiConfig {
     modes: {
       claude: c.modes?.claude ?? 'subscription',
       chatgpt: c.modes?.chatgpt ?? 'subscription',
-      gemini: 'apikey'
+      gemini: 'apikey',
+      hosted: 'subscription'
     }
   }
 }
@@ -656,6 +660,19 @@ function aiStatus(fresh = false): AiStatus {
       subscriptionVersion: '',
       hasKey: !!keys.gemini,
       mode: 'apikey'
+    },
+    {
+      // hosted = Plus에 포함된 ZTO 중계 AI. BYO 카드들과 나란한 "선택지 하나"다 —
+      // Plus라고 BYO를 숨기거나 뺏지 않는다(2026-08-03 Dan: "돈을 더 냈는데 선택지가 줄면 역설")
+      id: 'hosted',
+      supportsSubscription: false,
+      subscriptionAvailable: (() => {
+        const li = license.info()
+        return li.state === 'active' && li.plan === 'plus'
+      })(),
+      subscriptionVersion: '',
+      hasKey: false,
+      mode: 'subscription'
     }
   ]
   // 쓸 수 있는 provider만 — 구독 방식이면 CLI 감지, API 키 방식이면 키 저장이 조건.
@@ -2420,13 +2437,14 @@ app.whenReady().then(() => {
       // 화면을 읽는 데 있지 않은데, 이미지는 입력 토큰을 수십 배로 부풀린다(Terra는 Luna의 10배 단가).
       if (images?.length && IMAGE_HEAVY_MODELS.includes(model)) model = IMAGE_FALLBACK_MODEL
       opts = opts ? { ...opts, images } : opts
-      // Plus — provider 설정과 무관하게 ZTO 프록시로. 키가 없어도 되는 게 이 티어의 존재 이유다.
-      {
+      // hosted(Plus) — **active로 골랐을 때만** 프록시로. Plus여도 BYO를 골랐다면 그대로 존중
+      if (provider === 'hosted') {
         const lic = license.info()
-        if (lic.state === 'active' && lic.plan === 'plus') {
-          const plusModel = model.startsWith('gpt-') ? model : 'gpt-5.6-luna'
-          return await chatOpenAi(prompt, plusModel, { ...opts, feature, plus: true })
+        if (!(lic.state === 'active' && lic.plan === 'plus')) {
+          return { ok: false, text: '', error: 'license-required' }
         }
+        const plusModel = model.startsWith('gpt-') ? model : 'gpt-5.6-luna'
+        return await chatOpenAi(prompt, plusModel, { ...opts, feature, plus: true })
       }
       if (provider === 'chatgpt') {
         return mode === 'apikey'
@@ -2703,7 +2721,10 @@ app.whenReady().then(() => {
   ipcMain.handle('license:info', async () => await license.revalidate())
   ipcMain.handle('license:activate', async (_e, key: string) => {
     const name = `${hostname()} · ${process.platform}`
-    return await license.activate(key, name)
+    const r = await license.activate(key, name)
+    // Plus를 산 순간엔 hosted가 기본이 되는 게 기대에 맞다 — 이후 BYO로 자유 전환
+    if (r.state === 'active' && r.plan === 'plus') writeAiConfig({ active: 'hosted' })
+    return r
   })
   ipcMain.handle('license:deactivate', async () => await license.deactivate())
 

@@ -174,7 +174,7 @@ export interface AiModel {
   label: string
 }
 
-export type AiProviderId = 'claude' | 'chatgpt' | 'gemini'
+export type AiProviderId = 'claude' | 'chatgpt' | 'gemini' | 'hosted'
 export type AiMode = 'subscription' | 'apikey'
 
 export interface AiProviderStatus {

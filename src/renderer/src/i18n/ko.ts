@@ -83,9 +83,11 @@ export const ko: Messages = {
     geminiSub: 'API 키로',
     geminiSoon: '곧 지원 — 키는 이 컴퓨터에만 암호화 저장돼요',
     apiKeyPlaceholder: 'API 키 (곧 지원)',
-    aiPlusBanner: 'ZTO Plus — AI가 포함돼 있어요. 키도, 설정도 없이 그냥 됩니다.',
     aiUpsell: '키 관리가 번거롭다면 — ZTO Plus에는 hosted AI가 포함돼요 ($15/월).',
     aiUpsellCta: '구독하기',
+    hostedVia: 'Plus에 포함',
+    hostedIncluded: 'Plus에 포함돼 있어요 — 키도 설정도 필요 없음',
+    licenseManageSub: '구독 관리·해지',
     aiPlusPrivacy:
       '프라이버시: Plus에서는 AI 요청이 ZTO 중계 서버를 거쳐 제공자에게 전달됩니다. 중계 서버는 내용을 저장하지 않아요.',
     licenseTitle: '라이선스',

@@ -8,7 +8,8 @@ import Markdown from './Markdown'
 const PROVIDER_LABEL: Record<AiProviderId, string> = {
   claude: 'Claude',
   chatgpt: 'ChatGPT',
-  gemini: 'Gemini'
+  gemini: 'Gemini',
+  hosted: 'ZTO Hosted'
 }
 
 // 소셜 코파일럿의 우측 AI 패널 — active provider로 대화(구독 CLI/API 키). resume로 맥락 이어감.

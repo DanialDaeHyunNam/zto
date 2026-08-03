@@ -81,9 +81,11 @@ export const en = {
     geminiSub: 'via API key',
     geminiSoon: 'Coming soon — the key is encrypted on this computer only',
     apiKeyPlaceholder: 'API key (coming soon)',
-    aiPlusBanner: 'ZTO Plus — AI is included. No keys, no setup: it just works.',
     aiUpsell: 'Tired of managing keys? ZTO Plus includes hosted AI — $15/mo.',
     aiUpsellCta: 'Subscribe',
+    hostedVia: 'included with Plus',
+    hostedIncluded: 'Included in your Plus — no keys, no setup',
+    licenseManageSub: 'Manage subscription',
     aiPlusPrivacy:
       'Privacy note: on Plus, AI requests pass through the ZTO relay server to reach the provider. The relay does not store your content.',
     licenseTitle: 'License',

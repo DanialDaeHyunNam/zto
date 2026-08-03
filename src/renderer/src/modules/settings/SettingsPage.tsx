@@ -10,14 +10,21 @@ const LOCALES: Locale[] = ['ko', 'en']
 const PROVIDER_LABEL: Record<AiProviderId, string> = {
   claude: 'Claude',
   chatgpt: 'ChatGPT',
-  gemini: 'Gemini'
+  gemini: 'Gemini',
+  hosted: 'ZTO Hosted'
 }
 // provider 구독 = 어느 CLI인지 (안내 문구용)
 const PROVIDER_CLI: Record<AiProviderId, string> = {
   claude: 'claude',
   chatgpt: 'codex',
-  gemini: ''
+  gemini: '',
+  hosted: ''
 }
+
+const PLUS_CHECKOUT =
+  'https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940'
+// Lemon Squeezy 고객 포털 — 구독 해지·영수증은 여기서 셀프 서비스
+const LS_BILLING = 'https://all-libertas.lemonsqueezy.com/billing' 
 
 // ZTO 서비스 config — AI provider(BYO 2방식: 구독 CLI / API 키), 언어.
 
@@ -73,6 +80,14 @@ function LicenseCard({
           <button className="ghost-btn mini" disabled={busy} onClick={remove}>
             {m.settings.licenseRemove}
           </button>
+          {info.plan === 'plus' && (
+            <button
+              className="ghost-btn mini"
+              onClick={() => window.zto.launch.openExternal(LS_BILLING)}
+            >
+              {m.settings.licenseManageSub}
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -191,9 +206,6 @@ export default function SettingsPage(): React.JSX.Element {
   const { m, locale, setLocale } = useI18n()
   const [ai, setAi] = useState<AiStatus | null>(null)
   const [keyDraft, setKeyDraft] = useState<Record<string, string>>({})
-  // AI 섹션이 plan(byo/plus)에 따라 갈린다 — plus면 provider 연결 자체가 필요 없다.
-  // 값은 LicenseCard가 등록·해제 순간 콜백으로 밀어준다(재진입 없이 즉시 반영).
-  const [plan, setPlan] = useState<LicenseInfo['plan']>(undefined)
 
   const refresh = (fresh?: boolean): void => {
     window.zto.ai.status(fresh).then(setAi)
@@ -223,9 +235,68 @@ export default function SettingsPage(): React.JSX.Element {
   const ready = (p: AiProviderStatus): boolean =>
     p.mode === 'subscription' ? p.subscriptionAvailable : p.hasKey
 
+  const modelPicker = (isActive: boolean): React.JSX.Element | null =>
+    isActive && ai && ai.models.length > 0 ? (
+      <div className="ai-models">
+        {ai.models.map((mod) => (
+          <button
+            key={mod.id}
+            className={`ai-model ${mod.id === ai.model ? 'sel' : ''}`}
+            onClick={() => pickModel(mod.id)}
+          >
+            {mod.id === ai.model ? '●' : '○'} {mod.label}
+          </button>
+        ))}
+      </div>
+    ) : null
+
   const providerCard = (p: AiProviderStatus): React.JSX.Element => {
     const name = PROVIDER_LABEL[p.id]
     const isActive = ai?.active === p.id
+    // hosted(Plus 포함)는 BYO와 다른 문법이라 카드도 다르다 — 구독이 곧 연결이다
+    if (p.id === 'hosted') {
+      const ready = p.subscriptionAvailable
+      return (
+        <div key={p.id} className={`ai-provider ${isActive ? 'active' : ''}`}>
+          <div className="ai-provider-head">
+            <div className="ai-provider-name">
+              {name}
+              <span className="ai-provider-via">{m.settings.hostedVia}</span>
+            </div>
+          </div>
+          {ready ? (
+            <div className="ai-provider-status ok">
+              <span className="settings-dot g" /> {m.settings.hostedIncluded}
+            </div>
+          ) : (
+            <div className="ai-key-row">
+              <span className="ai-provider-status warn">{m.settings.aiUpsell}</span>
+              <button
+                className="ghost-btn mini"
+                onClick={() => window.zto.launch.openExternal(PLUS_CHECKOUT)}
+              >
+                {m.settings.aiUpsellCta}
+              </button>
+            </div>
+          )}
+          <div className="ai-provider-foot">
+            {isActive ? (
+              <span className="ai-inuse">✓ {m.settings.inUse}</span>
+            ) : (
+              <button className="choice small" disabled={!ready} onClick={() => setActive(p.id)}>
+                {m.settings.use}
+              </button>
+            )}
+            {modelPicker(isActive)}
+          </div>
+          {ready && (
+            <p className="settings-intro" style={{ margin: '8px 0 0' }}>
+              {m.settings.aiPlusPrivacy}
+            </p>
+          )}
+        </div>
+      )
+    }
     return (
       <div key={p.id} className={`ai-provider ${isActive ? 'active' : ''}`}>
         <div className="ai-provider-head">
@@ -311,19 +382,7 @@ export default function SettingsPage(): React.JSX.Element {
             </button>
           )}
           {/* active provider가 모델을 제공하면 모델 선택 (목록은 main이 provider별로 내려준다) */}
-          {isActive && ai && ai.models.length > 0 && (
-            <div className="ai-models">
-              {ai.models.map((mod) => (
-                <button
-                  key={mod.id}
-                  className={`ai-model ${mod.id === ai.model ? 'sel' : ''}`}
-                  onClick={() => pickModel(mod.id)}
-                >
-                  {mod.id === ai.model ? '●' : '○'} {mod.label}
-                </button>
-              ))}
-            </div>
-          )}
+          {modelPicker(isActive)}
         </div>
       </div>
     )
@@ -333,46 +392,17 @@ export default function SettingsPage(): React.JSX.Element {
     <section>
       <h1>{m.settings.title}</h1>
 
-      <LicenseCard onInfo={(i) => setPlan(i.state === 'active' ? i.plan : undefined)} />
+      {/* 라이선스가 바뀌면 hosted 카드 가용성·기본 선택이 바뀐다 — AI 상태를 다시 읽는다 */}
+      <LicenseCard onInfo={() => refresh()} />
       <UpdateCard />
 
       <div className="settings-card">
         <h2 className="settings-h2">{m.settings.aiTitle}</h2>
-        {plan === 'plus' ? (
-          /* Plus 구독자 — AI는 ZTO가 제공하므로 provider 연결이 아예 필요 없다 */
-          <>
-            <div className="lic-row">
-              <span className="status-chip ok">{m.settings.aiPlusBanner}</span>
-            </div>
-            {/* 프라이버시 — Plus는 BYO와 달리 우리 중계 서버를 지난다. 숨기지 않는다 */}
-            <p className="settings-intro" style={{ marginTop: 10 }}>
-              {m.settings.aiPlusPrivacy}
-            </p>
-          </>
+        <p className="settings-intro">{m.settings.aiIntro}</p>
+        {ai ? (
+          <div className="ai-providers">{ai.providers.map(providerCard)}</div>
         ) : (
-          <>
-            <p className="settings-intro">{m.settings.aiIntro}</p>
-            {ai ? (
-              <div className="ai-providers">{ai.providers.map(providerCard)}</div>
-            ) : (
-              <p className="settings-intro">…</p>
-            )}
-            <div className="lic-row" style={{ marginTop: 14 }}>
-              <span className="settings-intro" style={{ margin: 0 }}>
-                {m.settings.aiUpsell}
-              </span>
-              <button
-                className="ghost-btn mini"
-                onClick={() =>
-                  window.zto.launch.openExternal(
-                    'https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940'
-                  )
-                }
-              >
-                {m.settings.aiUpsellCta}
-              </button>
-            </div>
-          </>
+          <p className="settings-intro">…</p>
         )}
       </div>
 
