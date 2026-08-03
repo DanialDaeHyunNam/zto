@@ -706,7 +706,7 @@
       <ul>
         <li data-i18n="f1">모든 기능</li>
         <li data-i18n="f2">쓰던 API 키나 구독 그대로</li>
-        <li data-i18n="f3">macOS · Windows</li>
+        <li data-i18n="fOss">소스 공개 — 직접 빌드하면 무료, $5는 서명된 빌드 값</li>
       </ul>
     </div>
     <div class="plan hi">
@@ -739,7 +739,8 @@
     <tr><td data-i18n="d4t">AI 대화</td><td data-i18n="d4d">고른 제공자에게 직접 전송</td></tr>
   </table>
   <p class="note rv" style="margin-top:22px" data-i18n="dataNote">
-    스토어 API 호출과 AI 요청 말고는 네트워크를 쓰지 않습니다. 사용 통계 수집도 없습니다.
+    네트워크는 딱 네 곳 — 스토어 API, 내가 고른 AI, 라이선스 확인, 업데이트 확인. 사용 통계 수집은 없습니다.
+    말로만 하는 약속이 아닙니다 — <a href="https://github.com/DanialDaeHyunNam/zto" target="_blank" rel="noopener"><strong>소스가 공개돼 있어</strong></a> 직접 확인할 수 있습니다.
   </p>
 </section>
 
@@ -777,6 +778,7 @@
         <div class="foot-h" data-i18n="footProduct">제품</div>
         <a href="#pricing" data-i18n="footPricing">요금제</a>
         <a href="#data" data-i18n="footData">데이터 보안</a>
+        <a href="https://github.com/DanialDaeHyunNam/zto" target="_blank" rel="noopener" data-i18n="footGh">GitHub — 소스 공개</a>
         <a href="#windows" data-i18n="footWin">Windows 경고 안내</a>
         <a href="mailto:libertas.kr@gmail.com" data-i18n="footContact">문의하기</a>
       </div>
@@ -898,6 +900,7 @@
       navAccounts: "Accounts",
       footDesc: "Every new app adds more to manage — accounts, both app stores, promo posts. One place for all of it. Runs locally, no server.",
       footProduct: "Product", footPricing: "Pricing", footData: "Data security",
+      footGh: "GitHub — open source",
       footWin: "About the Windows warning", footContact: "Contact",
       footFollow: "FOLLOW THE MAKER",
       footNote: "Building in public — a follow means a lot 🙌",
@@ -956,7 +959,8 @@
       billMo: "Monthly", billYr: "Yearly",
       planByo: "Bring your own AI",
       perOnce: "one-time", onceNote: "Not a subscription — yours for life, 1.x updates included",
-      f1: "Every feature", f2: "Your existing key or subscription", f3: "macOS · Windows",
+      f1: "Every feature", f2: "Your existing key or subscription",
+      fOss: "Open source — build it yourself for free; $5 is for the signed build",
       planPlus: "AI included", perMo2: "/ month", perYr2: "/ year",
       yr15: "Yearly is $150 — 2 months free", yrNote15: "That's $12.50 a month — 2 months free",
       f4: "Every feature", f5: "No keys, no second bill", f6: "macOS · Windows",
@@ -967,7 +971,7 @@
       d2t: "Password encryption key", d2d: "OS keychain — macOS Keychain, Windows DPAPI",
       d3t: "Stored passwords", d3d: "Ciphertext only. Viewing one passes biometric auth every time",
       d4t: "AI conversations", d4d: "Sent straight to the provider you chose",
-      dataNote: "Apart from store API calls and AI requests, ZTO makes no network calls. No telemetry.",
+      dataNote: "Exactly four network calls — store APIs, the AI you chose, license check, update check. No telemetry. And it's not just a promise: <a href=\"https://github.com/DanialDaeHyunNam/zto\" target=\"_blank\" rel=\"noopener\"><strong>the source is public</strong></a>, so you can verify it yourself.",
       winTitle: "About the Windows warning",
       winBody: "<strong>macOS builds are notarized by Apple</strong> and open with no warning. <strong>The Windows installer isn't code-signed yet</strong>, so its first run shows “Windows protected your PC”. That's a missing-signature notice, not a malware detection — the certificate costs money every year and we haven't bought one yet. Click <strong>More info → Run anyway</strong> and Windows remembers. Every release ships with SHA-256 checksums you can verify."
     };
