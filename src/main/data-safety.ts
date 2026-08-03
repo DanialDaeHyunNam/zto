@@ -2,7 +2,7 @@
 // 구글이 콘솔에서 Export/Import CSV를 공식 제공한다(2026-07-29 발견). 그래서 이 설문만은
 // DOM을 긁지 않는다 — 기계 판독 ID가 그대로 들어 있어 콘솔 개편에 면역이고, 쓰기도 파일 하나면 된다.
 //
-// 실측 형태(실측 앱, 782행): 컬럼 5개
+// 실측 형태(782행): 컬럼 5개
 //   Question ID (machine readable) | Response ID (machine readable) | Response value
 //   | Answer requirement | Human-friendly question label
 // 행 규칙:

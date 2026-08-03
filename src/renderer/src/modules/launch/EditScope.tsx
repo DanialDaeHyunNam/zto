@@ -90,7 +90,7 @@ export default function EditScope({
   platform: 'android' | 'ios'
   file: string | null // 선택된 앱 시트 — 수확된 콘솔 링크를 찾는 열쇠
   ascAppId?: string
-  appLabel?: string // "실측 앱 (com.example.app)" — AI가 되묻지 않게 같이 넘긴다
+  appLabel?: string // "MyApp (com.example.app)" — AI가 되묻지 않게 같이 넘긴다
   // 지금 편집할 수 있는 iOS 버전 번호(없으면 라이브뿐이라는 뜻). 표가 **일반론이 아니라
   // 이 앱의 지금**을 말하게 하는 값이다 — "새 버전이 필요합니다"와 "1.2.0에 반영됩니다"는 다르다
   iosEditableVersion?: string

@@ -893,7 +893,7 @@ function MetaModal({
   const al = a ? pickByLang(a.meta, lang) : undefined
   const aNote = a ? pickByLang(a.releaseNotes, lang)?.text : undefined
   // 노트를 **쓸 트랙**을 고른다. 전엔 `notes.length > 0`인 트랙만 골랐는데, 그러면 노트가 아직
-  // 없는 앱에는 영영 쓸 수 없었다(2026-07-31 실측 앱 실측 — internal·alpha 둘 다 노트가 없었다).
+  // 없는 앱에는 영영 쓸 수 없었다(2026-07-31 실측 — internal·alpha 둘 다 노트가 없었다).
   // 보여줄 값이 있는 곳이 아니라 **고칠 수 있는 곳**을 골라야 한다.
   const gRelease = g
     ? [...g.releases].sort((x, y) => playRank(x.track) - playRank(y.track))[0]

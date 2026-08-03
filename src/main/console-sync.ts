@@ -629,7 +629,7 @@ export async function probeAppContent(
     }
 
     // 목차를 '선언 행이 보이는 상태'로 만든다 — 탭이 갈려 있어서 한 탭만 보면 안 된다.
-    // 선언을 다 끝낸 앱은 "Need attention"이 비고 "Actioned"에 다 있다(실측 앱이 그랬다).
+    // 선언을 다 끝낸 앱은 "Need attention"이 비고 "Actioned"에 다 있다(실측에서 그랬다).
     // 반대인 앱도 있으므로 행이 나올 때까지 탭을 돌아본다.
     const tabScans: { label: string; selected: string | null; textLen: number; rows: number }[] = []
     const openDeclList = async (): Promise<Decl[]> => {

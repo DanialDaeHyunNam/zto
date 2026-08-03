@@ -26,16 +26,16 @@
 - [x] Claude 구독 방식 — 로컬 `claude` CLI 감지(`--version`)·모델 선택(Fable/Opus/Sonnet/Haiku)
 - [x] **provider 토글 `[구독 | API 키]`** — Claude·ChatGPT 둘 다 (2026-07-23). active provider 선택 + 모델 선택
 - [x] ChatGPT 구독 = `codex` CLI 감지(claude와 대칭, 미감지 안내), Gemini는 API 키 전용
-- [x] API 키 모드 = 키체인(safeStorage) 저장 `zto-ai-keys.json`(암호문만)·삭제. `ai:setKey`/`hasKey`. 실측 앱 환경서 저장·삭제 검증
-- [x] `ai:chat` — Claude 구독 경로 구현(`claude -p --output-format json --model --resume`, is_error 전달). 실측 앱 환경서 대화·resume·추천 파싱 검증 (2026-07-23). codex 구독·API 키 경로는 잔여
+- [x] API 키 모드 = 키체인(safeStorage) 저장 `zto-ai-keys.json`(암호문만)·삭제. `ai:setKey`/`hasKey`. 실기에서 저장·삭제 검증
+- [x] `ai:chat` — Claude 구독 경로 구현(`claude -p --output-format json --model --resume`, is_error 전달). 실기에서 대화·resume·추천 파싱 검증 (2026-07-23). codex 구독·API 키 경로는 잔여
 
 ### 2. 앱 콘텐츠 설문 위저드 (콘솔 전용 L2 설정) — 🔨 결정형 코어 완료
 - [x] 결정형 위저드 — 질문 세트 **버전 관리 JSON**(`launch/questionnaires/`). 파일럿 = ASC 연령 등급(14문항, ageRatingDeclaration 필드명 그대로 → 후에 API 자동 적용까지). `launch:questionnaire`/`getConsoleAnswers`/`setConsoleAnswers` (2026-07-23)
-- [x] 답 → 시트 `console_answers[id]`(version·answers·completedAt) 저장, iOS 설정 노드에 "앱 콘텐츠 설문 ✓ 작성됨" + 콘솔 딥링크. 실측 앱 검증(14문항 저장·완료·재로드)
+- [x] 답 → 시트 `console_answers[id]`(version·answers·completedAt) 저장, iOS 설정 노드에 "앱 콘텐츠 설문 ✓ 작성됨" + 콘솔 딥링크. 실기 검증(14문항 저장·완료·재로드)
 - [x] 질문별 "?" 도움(현재 help 텍스트) — 팝오버 자리 마련됨
-- [x] **질문별 AI 팝오버** (2026-07-23) — "?" → 대화 팝오버(`QuestionHelp`): 숨은 컨텍스트(설문·현재 질문·선택지·이미 답한 것)를 첫 턴에 주입, resume로 이어감, 답변 끝 `추천: <옵션id>` 파싱 → "이 답으로 설정" 한 번에 위저드 반영. 실측 앱 실검증(도트 SRPG 설명 → INFREQUENT_OR_MILD 추천 → 반영)
+- [x] **질문별 AI 팝오버** (2026-07-23) — "?" → 대화 팝오버(`QuestionHelp`): 숨은 컨텍스트(설문·현재 질문·선택지·이미 답한 것)를 첫 턴에 주입, resume로 이어감, 답변 끝 `추천: <옵션id>` 파싱 → "이 답으로 설정" 한 번에 위저드 반영. 실기 검증(게임 설명 → INFREQUENT_OR_MILD 추천 → 반영)
 - [x] Play 콘텐츠 등급(IARC) 설문 + Android 설정 노드 버튼 (2026-07-23)
-- [x] **기존 앱 프리필 비대칭** (2026-07-23) — iOS 연령 등급은 스토어에서 읽힘(`ageRatingDeclaration`, 필드 그대로) → 기존 앱 설문 **자동 프리필**(실측 앱 실검증: 만화폭력·무기=자주·강함 등 15/15). Play는 콘텐츠 등급·데이터안전·타깃연령에 read API 없음 → 프리필 불가, "자동 못 가져옴 + 콘솔 어디서 보는지" 안내로 처리. `launch:ageRatingDeclaration`
+- [x] **기존 앱 프리필 비대칭** (2026-07-23) — iOS 연령 등급은 스토어에서 읽힘(`ageRatingDeclaration`, 필드 그대로) → 기존 앱 설문 **자동 프리필**(실기 검증: 15/15 프리필). Play는 콘텐츠 등급·데이터안전·타깃연령에 read API 없음 → 프리필 불가, "자동 못 가져옴 + 콘솔 어디서 보는지" 안내로 처리. `launch:ageRatingDeclaration`
 - [x] 나머지 설문 인코딩 (2026-07-23) — `play-data-safety`(14문)·`play-target-audience`(6문)·`asc-app-privacy`(12문) JSON 추가(요지, 콘솔 개정 시 파일만 갱신). **설문 N개/플랫폼 일반화**: `launch:questionnaireList`(디렉터리 스캔)→설정 노드가 설문별 라벨 버튼(`SurveyButtons`)로 렌더. iOS 연령 등급만 스토어 프리필, 나머지는 read API 없어 자동조회 불가 안내(문구 provider-중립화 + 콘솔 딥링크). 로컬 저장·재로드 검증
 - [x] **OpenAI API 키 경로 (2026-07-29)** — `ai:chat`에 `chatgpt:apikey` 분기(`chatOpenAi`, Responses API). 이미지가 있으면 `input_image`(base64 data URL)로 멀티모달. **대화 이어가기는 main 메모리 이력 재전송** — OpenAI의 `previous_response_id`(서버 보관)를 안 쓰는 건 대화를 저쪽에 남기지 않기 위해서고, ZTO 대화 길이에선 재전송 요금이 무시할 수준이다. 실패는 API 메시지를 그대로 올린다(키·모델명·한도가 각각 다른 문구로 오므로 뭉개면 진단 불가). **모델은 provider별로 분리**(`AI_MODELS_BY_PROVIDER`) — 안 그러면 ChatGPT가 active일 때 `claude-*` id를 OpenAI로 보낸다. ChatGPT 목록 = `gpt-5.4-mini`(기본)·`gpt-5.4-nano`. Luna·Terra는 제외(Terra의 '고품질'은 Claude Opus·Fable과 중복, Luna는 mini보다 비싼데 강점인 1.05M 컨텍스트가 이 워크로드에 무의미). ⚠️ 실응답 미검증
 - [x] **codex(ChatGPT 구독) 경로 (2026-07-29)** — `codex exec --json`의 JSONL 이벤트를 읽는다(`thread.started.thread_id`=세션 id, `agent_message` 아이템=최종 답변, `turn.completed.usage`=토큰). 이어가기는 `codex exec resume <id> --json`. **모델은 지정하지 않는다** — `--model` 플래그가 문서에서 확인되지 않았고 구독 모델 id는 API 목록(gpt-5.4-*)과 다르므로, 구독 모드에선 모델 선택지를 `Codex` 하나로 두고 codex 자체 기본값을 쓴다(고를 수 없는 걸 고르게 하면 거짓말). **이미지는 명시적으로 거절**(`codex exec`에 문서화된 방법 없음) — 조용히 버리면 "AI가 화면을 못 봤다"는 사실이 감춰진다. ⚠️ **실행 미검증**: 개발 기기에 codex 미설치·구독 없음. 그래서 파서를 관대하게 쓰고 실패 시 stderr를 그대로 올린다 — 추측이 틀렸을 때 빈 답이 아니라 원인이 보이도록. **구독 보유자에게서 첫 실행 검증 필요**
@@ -55,7 +55,7 @@
 - [ ] **reverse-sync 엔진** — 콘솔 폼 페이지에서 `eval`로 필드·선택지·현재값을 긁어 설문 JSON 스키마에 매핑(읽어 싱크). 폼 개정 시 다시 읽어 흡수
 - [ ] 폼 채우기 — 설문 답을 콘솔 폼에 입력(CDP 합성 입력으로 사이트 검증 통과). 비가역 제출은 사람 컨펌
   - [x] **데이터 안전 = CSV 가져오기 실동작 (2026-07-30)** — 버튼 하나로 콘솔 열기→로그인/계정선택 핸드오프→폼 이동→Export 클릭→다운로드 수신→217문항 파싱→화면 표시까지 완주. 손 인코딩 `play-data-safety.json`(14문항 근사)은 **폐기** — 정본이 생겼는데 근사를 남기면 둘이 어긋난다. **콘텐츠 등급(IARC)·타깃 연령은 CSV가 없어 여전히 손 인코딩 설문**(공식 기계 경로 없음)
-  - [x] **앱 콘텐츠 선언 정찰 완료 (2026-07-30)** — 목차(`app-content/overview`)가 **탭으로 갈려 있고**(Need attention | Actioned) 선언 행이 **링크가 아니라 `[Manage]` 버튼**이라, 경로를 수확하는 게 아니라 **눌러서 도착한 URL에서 슬러그를 읽는다**(문서 §1의 가장 순수한 형태). 실측 앱 10개 전부 회수 → `userData/zto-app-content-{package}.json`:
+  - [x] **앱 콘텐츠 선언 정찰 완료 (2026-07-30)** — 목차(`app-content/overview`)가 **탭으로 갈려 있고**(Need attention | Actioned) 선언 행이 **링크가 아니라 `[Manage]` 버튼**이라, 경로를 수확하는 게 아니라 **눌러서 도착한 URL에서 슬러그를 읽는다**(문서 §1의 가장 순수한 형태). 선언 10개 전부 회수 → `userData/zto-app-content-{package}.json`:
     `ad-id-declaration`(radio 1) · `health`(check 19) · `finance`(check 22) · `government-apps`(radio 1) · `data-privacy-security`(0, CSV로 해결) · `target-audience-content`(check 6) · `content-rating-overview`(**0**) · `testing-credentials`(0) · `ads-declaration`(radio 1) · `privacy-policy`(textbox 1)
   - **콘텐츠 등급(IARC) reverse-sync = 하지 않는다 (2026-07-30 Dan 확정).** 정찰 결과 `content-rating-overview`는 **결과 요약 페이지**(헤딩 = Your current ratings / Previous questionnaires, 컨트롤 0개)이고 12문항은 위저드 뒤에 있다. 완료된 앱에서 설문에 재진입하는 건 **새 설문 시작**이라 기존 등급을 무효화·재제출시킬 수 있다(SPEC §3 비가역). 편집할 생각이 없으면 읽어봐야 값이 없고 위험만 남는다 → **읽기·쓰기 모두 포기**, 필요하면 콘솔 딥링크로 핸드오프. 읽고 싶다면 요약 페이지의 **현재 등급**만(설문 답 아님)
   - **타깃 연령 정본화 = 보류, 방아쇠 두 개 (2026-07-30 Dan 확정).** 라이브 폼 1페이지는 **연령대 체크박스 6개**(5 and under / 6-8 / 9-12 / 13-15 / 16-17 / 18 and over)로, 손 인코딩 `play-target-audience.json`의 예/아니오 3문항(어린이·청소년·성인)과 **구조가 다르다**(문항 수 6이 같은 건 우연). 나머지 문항은 위저드 다음 스텝에 있어 미회수. 다시 쓰는 값은 **① 신규 앱을 Play에 처음 올릴 때**(선언 10개를 빈 상태에서 채우는 유일한 순간) 또는 **② 콘솔이 폼을 개정했을 때** 생긴다. 이미 채워둔 앱에선 정본을 만들어도 쓸 데가 없으므로 그 전엔 안 한다

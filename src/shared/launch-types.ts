@@ -319,7 +319,7 @@ export const isAscInReview = (state: string): boolean => ASC_IN_REVIEW_STATES.in
 
 export interface CopilotTask {
   goal: string // 사용자가 하러 온 일 — 화면에 쓰인 라벨 그대로
-  app?: string // "실측 앱 (com.example.app)" — 알면 반드시 넘긴다. 되묻게 하지 않는다
+  app?: string // "MyApp (com.example.app)" — 알면 반드시 넘긴다. 되묻게 하지 않는다
   platform?: 'android' | 'ios'
   why?: string // 왜 여기서(콘솔에서) 해야 하는지 — AI가 "ZTO에서 하세요"라고 되돌려보내지 않도록
   exact?: boolean // 목적지 화면까지 데려갔는지. false면 AI가 먼저 길찾기를 도와야 한다
