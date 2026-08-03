@@ -390,7 +390,9 @@ export default function AiPanel({
           onChange={(e) => setInput(e.target.value)}
           onPaste={onPaste}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // IME 조합 중 Enter는 확정이지 전송이 아니다 — 조합 확정분이 비운 입력창에
+            // 도로 꽂히는 버그(2026-08-03 실측: 전송됐는데 텍스트가 남음)의 원인
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               send()
             }

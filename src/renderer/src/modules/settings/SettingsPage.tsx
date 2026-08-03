@@ -24,11 +24,20 @@ const PROVIDER_CLI: Record<AiProviderId, string> = {
 // ---------- 라이선스 (SPEC §8) ----------
 // 상태를 **사실 그대로** 보여준다: 체험 중이면 남은 날짜, 등록됐으면 마스킹된 키와 마지막 확인,
 // 오프라인이면 언제까지 쓸 수 있는지. 결제 유도 문구보다 "지금 내 상태가 뭔가"가 먼저다.
-function LicenseCard(): React.JSX.Element {
+function LicenseCard({
+  onInfo
+}: {
+  onInfo?: (i: LicenseInfo) => void
+}): React.JSX.Element {
   const { m } = useI18n()
-  const [info, setInfo] = useState<LicenseInfo | null>(null)
+  const [info, setInfoRaw] = useState<LicenseInfo | null>(null)
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
+  // 등록·해제 순간 부모(AI 섹션 분기)도 같이 갈아탄다 — 재진입 없이 배너가 바뀌게
+  const setInfo = (i: LicenseInfo): void => {
+    setInfoRaw(i)
+    onInfo?.(i)
+  }
 
   const load = (): void => {
     window.zto.license.info().then(setInfo)
@@ -173,16 +182,13 @@ export default function SettingsPage(): React.JSX.Element {
   const [ai, setAi] = useState<AiStatus | null>(null)
   const [keyDraft, setKeyDraft] = useState<Record<string, string>>({})
   // AI 섹션이 plan(byo/plus)에 따라 갈린다 — plus면 provider 연결 자체가 필요 없다.
-  // info는 24h 스로틀 재검증이라 LicenseCard와 중복 호출해도 디스크만 읽는다.
+  // 값은 LicenseCard가 등록·해제 순간 콜백으로 밀어준다(재진입 없이 즉시 반영).
   const [plan, setPlan] = useState<LicenseInfo['plan']>(undefined)
 
   const refresh = (fresh?: boolean): void => {
     window.zto.ai.status(fresh).then(setAi)
   }
   useEffect(() => refresh(), [])
-  useEffect(() => {
-    window.zto.license.info().then((i) => setPlan(i.state === 'active' ? i.plan : undefined))
-  }, [])
 
   const setMode = (p: AiProviderId, mode: 'subscription' | 'apikey'): void => {
     window.zto.ai.setMode(p, mode).then(() => refresh())
@@ -317,7 +323,7 @@ export default function SettingsPage(): React.JSX.Element {
     <section>
       <h1>{m.settings.title}</h1>
 
-      <LicenseCard />
+      <LicenseCard onInfo={(i) => setPlan(i.state === 'active' ? i.plan : undefined)} />
       <UpdateCard />
 
       <div className="settings-card">
