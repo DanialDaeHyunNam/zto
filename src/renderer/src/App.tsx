@@ -5,6 +5,7 @@ import SocialPage from './modules/social/SocialPage'
 import SettingsPage from './modules/settings/SettingsPage'
 import { BrowserOverlayProvider } from './browser-overlay'
 import { useI18n } from './i18n'
+import type { LicenseInfo } from '../../shared/license-types'
 
 type ModuleId = 'accounts' | 'launch' | 'social' | 'settings'
 
@@ -12,6 +13,11 @@ export default function App(): React.JSX.Element {
   const { m } = useI18n()
   const [active, setActive] = useState<ModuleId>('accounts')
   const [ipcStatus, setIpcStatus] = useState<'checking' | 'ok' | string>('checking')
+  // 사이드바 플랜 칩 — "내가 지금 뭘 쓰고 있나"를 항상 한눈에 (Dan 2026-08-03)
+  const [lic, setLic] = useState<LicenseInfo | null>(null)
+  useEffect(() => {
+    window.zto.license.info().then(setLic)
+  }, [active]) // 설정에서 등록·해제하고 나오면 자연히 갱신된다
 
   useEffect(() => {
     window.zto
@@ -50,6 +56,34 @@ export default function App(): React.JSX.Element {
           </div>
           {modules.map((mod) => navBtn(mod.id, mod.label, mod.desc))}
           <div className="sidebar-bottom">
+            {lic &&
+              (lic.state === 'active' && lic.plan ? (
+                <button
+                  className={`plan-chip ${lic.plan}`}
+                  onClick={() => setActive('settings')}
+                  title={m.nav.planTitle}
+                >
+                  {lic.plan === 'plus' ? 'ZTO Plus' : 'ZTO'}
+                </button>
+              ) : lic.trialActive ? (
+                <button className="plan-chip trial" onClick={() => setActive('settings')}>
+                  {m.nav.planTrial.replace(
+                    '{d}',
+                    String(
+                      Math.max(
+                        0,
+                        Math.ceil(
+                          (new Date(lic.trialEndsAt ?? 0).getTime() - Date.now()) / 86400000
+                        )
+                      )
+                    )
+                  )}
+                </button>
+              ) : lic.trialStartedAt ? (
+                <button className="plan-chip over" onClick={() => setActive('settings')}>
+                  {m.nav.planTrialOver}
+                </button>
+              ) : null)}
             {navBtn('settings', m.nav.settings, m.nav.settingsDesc)}
             {ipcError && <div className="sidebar-footer error">{ipcError}</div>}
           </div>

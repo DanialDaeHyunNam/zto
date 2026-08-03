@@ -330,9 +330,15 @@ export default function SettingsPage(): React.JSX.Element {
         <h2 className="settings-h2">{m.settings.aiTitle}</h2>
         {plan === 'plus' ? (
           /* Plus 구독자 — AI는 ZTO가 제공하므로 provider 연결이 아예 필요 없다 */
-          <div className="lic-row">
-            <span className="status-chip ok">{m.settings.aiPlusBanner}</span>
-          </div>
+          <>
+            <div className="lic-row">
+              <span className="status-chip ok">{m.settings.aiPlusBanner}</span>
+            </div>
+            {/* 프라이버시 — Plus는 BYO와 달리 우리 중계 서버를 지난다. 숨기지 않는다 */}
+            <p className="settings-intro" style={{ marginTop: 10 }}>
+              {m.settings.aiPlusPrivacy}
+            </p>
+          </>
         ) : (
           <>
             <p className="settings-intro">{m.settings.aiIntro}</p>
@@ -341,14 +347,20 @@ export default function SettingsPage(): React.JSX.Element {
             ) : (
               <p className="settings-intro">…</p>
             )}
-            {/* byo 업셀 — hosted AI는 프록시 완성 전이라 "곧 제공"만. 열리면 아래 체크아웃으로 연결:
-                월 https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940
-                연 …?enabled=1973941 */}
             <div className="lic-row" style={{ marginTop: 14 }}>
               <span className="settings-intro" style={{ margin: 0 }}>
                 {m.settings.aiUpsell}
               </span>
-              <span className="status-chip off">{m.settings.aiUpsellSoon}</span>
+              <button
+                className="ghost-btn mini"
+                onClick={() =>
+                  window.zto.launch.openExternal(
+                    'https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940'
+                  )
+                }
+              >
+                {m.settings.aiUpsellCta}
+              </button>
             </div>
           </>
         )}

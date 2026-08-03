@@ -155,6 +155,31 @@ button {
   gap: 6px;
 }
 
+/* 플랜 칩 — 사이드바 하단 상시 표시. plus만 브랜드 틴트, 체험은 중립, 종료는 앰버(손 필요) */
+.plan-chip {
+  align-self: flex-start;
+  margin: 0 12px 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.05);
+  color: rgba(255, 255, 255, 0.75);
+}
+.plan-chip.plus {
+  border-color: transparent;
+  background: rgba(59, 130, 246, 0.18);
+  box-shadow: inset 0 0 0 1.5px var(--brand, #3b82f6);
+  color: #bfdbfe;
+}
+.plan-chip.over {
+  border-color: rgba(251, 191, 36, 0.4);
+  color: #fbbf24;
+}
+
 .sidebar-footer {
   padding: 10px 12px 0;
   font-size: 11px;

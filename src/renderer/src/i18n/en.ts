@@ -8,7 +8,10 @@ export const en = {
     social: 'Social Media',
     socialDesc: 'Embedded browser + AI copilot',
     settings: 'Settings',
-    settingsDesc: 'AI, language & app config'
+    settingsDesc: 'AI, language & app config',
+    planTitle: 'Your plan — open Settings',
+    planTrial: 'Trial D-{d}',
+    planTrialOver: 'Trial ended'
   },
   browser: {
     urlPlaceholder: 'Enter a URL or search…',
@@ -71,7 +74,9 @@ export const en = {
     apiKeyPlaceholder: 'API key (coming soon)',
     aiPlusBanner: 'ZTO Plus — AI is included. No keys, no setup: it just works.',
     aiUpsell: 'Tired of managing keys? ZTO Plus includes hosted AI — $15/mo.',
-    aiUpsellSoon: 'Coming soon',
+    aiUpsellCta: 'Subscribe',
+    aiPlusPrivacy:
+      'Privacy note: on Plus, AI requests pass through the ZTO relay server to reach the provider. The relay does not store your content.',
     licenseTitle: 'License',
     licenseIntro: 'Add your license key to unlock applying edits and AI. Verification happens on this computer, and the key is stored encrypted.',
     licenseActive: 'Active',

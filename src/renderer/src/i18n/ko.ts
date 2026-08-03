@@ -10,7 +10,10 @@ export const ko: Messages = {
     social: '소셜미디어 관리',
     socialDesc: '임베드 브라우저 + AI 코파일럿',
     settings: '설정',
-    settingsDesc: 'AI·언어·앱 설정'
+    settingsDesc: 'AI·언어·앱 설정',
+    planTitle: '내 플랜 — 설정 열기',
+    planTrial: '체험 D-{d}',
+    planTrialOver: '체험 종료'
   },
   browser: {
     urlPlaceholder: 'URL 또는 검색어 입력…',
@@ -73,7 +76,9 @@ export const ko: Messages = {
     apiKeyPlaceholder: 'API 키 (곧 지원)',
     aiPlusBanner: 'ZTO Plus — AI가 포함돼 있어요. 키도, 설정도 없이 그냥 됩니다.',
     aiUpsell: '키 관리가 번거롭다면 — ZTO Plus에는 hosted AI가 포함돼요 ($15/월).',
-    aiUpsellSoon: '곧 제공',
+    aiUpsellCta: '구독하기',
+    aiPlusPrivacy:
+      '프라이버시: Plus에서는 AI 요청이 ZTO 중계 서버를 거쳐 제공자에게 전달됩니다. 중계 서버는 내용을 저장하지 않아요.',
     licenseTitle: '라이선스',
     licenseIntro: '결제하신 라이선스 키를 등록하면 수정 적용과 AI가 열립니다. 확인은 이 컴퓨터에서 직접 하고, 키는 암호화해 보관해요.',
     licenseActive: '등록됨',
