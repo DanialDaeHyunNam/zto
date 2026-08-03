@@ -29,7 +29,7 @@ Two ways — both run the same code:
 | **Buy the official build — $5, one-time** | Signed & notarized by Apple, automatic updates, runs with a double-click. [zto-umber.vercel.app](https://zto-umber.vercel.app) |
 | **Build it yourself — free** | Clone this repo and follow [Development](#development). No license key needed for your own builds. |
 
-The source is public so you can verify what ZTO does with your accounts and
+The source is open (Apache-2.0) so you can verify what ZTO does with your accounts and
 passwords. The $5 is for the signature, the updates, and the convenience — see
 [LICENSE.md](LICENSE.md).
 
@@ -88,8 +88,10 @@ npm run dist:mac
 
 ## License
 
-Source-available — read, build, and modify for your own use; redistribution
-and resale are not permitted. See [LICENSE.md](LICENSE.md).
+Open source under [Apache 2.0](LICENSE.md). Build it yourself and it's free —
+no license key, ever. The signed official builds sold on the
+[website](https://zto-umber.vercel.app) are licensed separately (that's what
+the $5 pays for: the Apple signature, notarization, and auto-updates).
 
 Technical design lives in [`SPEC.md`](SPEC.md), the build order in
 [`ROADMAP.md`](ROADMAP.md).
