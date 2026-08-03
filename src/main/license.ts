@@ -17,15 +17,13 @@ const API = 'https://api.lemonsqueezy.com/v1/licenses'
 // 스토어 개설 후 채운다. **비어 있으면 상품 대조를 건너뛴다**(개발 중 앱이 잠기지 않도록) —
 // 배포 빌드에서 비어 있으면 안 된다.
 // libertas (all-libertas.lemonsqueezy.com) — 2026-08-02 개설
-// ⚠️ 2026-08-02 저녁 결정: BYO는 구독이 아니라 **단건 $5(평생, 1.x 업데이트)** —
-// LS에서 상품 재구성(ZTO=단건 / ZTO Plus=구독) 후 byo 줄을 새 variant id로 교체할 것.
-// 단건 키는 expires_at이 null이라 아래 로직 변경 없이 영구 active로 동작한다.
+// BYO는 단건 $5(평생) — 키에 expires_at이 없어(unlimited) 영구 active로 동작한다.
+// 2026-08-03 테스트 키로 활성화→검증→해제 왕복 실증.
 export const LS_STORE_ID = '443985'
 export const LS_VARIANTS: Record<string, 'byo' | 'plus'> = {
-  '1973935': 'byo', // (구) BYO · Monthly — 재구성 후 교체
-  '1973938': 'byo', // (구) BYO · Yearly — 재구성 후 교체
-  '1973940': 'plus', // Plus · Monthly $15
-  '1973941': 'plus' // Plus · Yearly $150
+  '1974924': 'byo', // ZTO 단건 $5 (상품 1263143 기본 variant)
+  '1973940': 'plus', // ZTO Plus · Monthly $15
+  '1973941': 'plus' // ZTO Plus · Yearly $150
 }
 
 export type Plan = 'byo' | 'plus'
