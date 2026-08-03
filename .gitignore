@@ -10,3 +10,7 @@ launch/answers/*.json
 .vercel
 # 패키징 산출물 — dmg·app 번들. 2026-08-02 git add -A에 딸려 들어간 사고 후 추가
 release/
+
+# 비공개 — 로컬 전용 (전략·개발일지)
+.omniscitus/
+SPEC-BIZ.md
