@@ -10,18 +10,17 @@ export const en = {
     settings: 'Settings',
     settingsDesc: 'AI, language & app config',
     planTitle: 'Your plan — open Settings',
-    planTrial: 'Trial D-{d}',
-    planTrialOver: 'Trial ended',
-    planTrialNotStarted: 'Free until first store connect',
+    planTrial: 'Free use — {d}d left',
+    planTrialOver: 'Free period ended',
     sourceBadge: 'source',
     titleSource: 'ZTO — Source Build'
   },
   gate: {
-    title: 'Your trial has ended',
+    title: 'Your free period has ended',
     body: 'Thanks for trying ZTO.',
     cta: 'See plans & buy',
     haveKey: 'I have a license key',
-    accountsNote: 'Trial ended — your accounts and passwords stay accessible. Adding accounts needs a license.'
+    accountsNote: 'Free period ended — your accounts and passwords stay accessible. Adding accounts needs a license.'
   },
   browser: {
     urlPlaceholder: 'Enter a URL or search…',
@@ -91,9 +90,8 @@ export const en = {
     licenseIntro: 'Add your license key to unlock applying edits and AI. Verification happens on this computer, and the key is stored encrypted.',
     licenseActive: 'Active',
     licenseRemove: 'Remove from this device',
-    licenseTrialLeft: '{d} days left in trial',
-    licenseTrialOver: 'Trial ended',
-    licenseTrialNotStarted: 'Trial not started — it begins when you first connect a store',
+    licenseTrialLeft: '{d} days of free use left',
+    licenseTrialOver: 'Free period ended',
     licenseSourceBuild: 'Source build — free to use, no key needed. A key is only for ZTO Plus (hosted AI).',
     licensePlaceholder: 'License key',
     licenseActivate: 'Activate',
@@ -535,7 +533,7 @@ export const en = {
     } as Record<string, string>,
     title: 'Account Inventory',
     subtitle:
-      "All your accounts at a glance — accounts aren't a burden when each one's reason to exist is written down. Passwords are never stored here (SPEC §7.3).",
+      "All your accounts at a glance — accounts aren't a burden when each one's reason to exist is written down. Passwords are never stored here. This screen stays free, forever.",
     emailPlaceholder: 'brand@gmail.com or @handle',
     memoPlaceholder: 'e.g. app brand account, X/Threads ops',
     emailLabel: 'ID or email',

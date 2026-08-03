@@ -94,9 +94,9 @@ export function createLicense(file: string, official: boolean) {
     }
   }
 
-  // 체험 시계는 **설치가 아니라 첫 스토어 연결 성공**부터 센다 (SPEC §8.6).
-  // 이 앱은 시작에 준비물이 있다(서비스 계정·ASC 키 발급) — 설치부터 세면 사용자가
-  // 자격증명 만드느라 체험을 다 쓰고 정작 대시보드는 못 본다.
+  // 무료 사용 시계는 **공식 빌드 첫 실행부터** 센다 (2026-08-03 Dan — "연결부터" 규칙 폐기:
+  // 방아쇠 조건이 늘수록 상태 조합만 혼란해졌다. 문구도 '체험'이 아니라 '무료 사용 N일').
+  // 계정 인벤토리는 시계와 무관하게 영구 무료다.
   const startTrial = (): void => {
     const s = read()
     if (s.trialStartedAt) return

@@ -42,10 +42,9 @@ export default function App(): React.JSX.Element {
   // 정상·확인중은 유저에게 노이즈라 숨기고, 진짜 IPC 오류일 때만 노출
   const ipcError = ipcStatus !== 'ok' && ipcStatus !== 'checking' ? ipcStatus : null
 
-  // 만료 잠금 — **공식 빌드에서, 체험이 시작됐다가 끝난** 경우만. 소스 빌드는 게이트 자체가
-  // 없고(LICENSE.md), 체험 시작 전(스토어 연결 전)은 준비 기간이라 무료다(SPEC §8.6).
-  // 예외 화면 2곳: 설정(키 등록 입구가 없으면 산 사람도 못 들어온다), 계정 인벤토리(맡겨둔
-  // 비밀번호를 결제 뒤에 가두면 인질이다 — 열람은 항상 된다)
+  // 만료 잠금 — 공식 빌드만. 무료 사용 3일은 첫 실행부터 카운트(2026-08-03 단순화).
+  // 소스 빌드는 게이트 자체가 없다(LICENSE.md). 예외 화면 2곳: 설정(키 등록 입구가
+  // 없으면 산 사람도 못 들어온다), 계정 인벤토리(영구 무료 — 비밀번호 인질 금지)
   const gated = !!lic && lic.official && !lic.entitled && !!lic.trialStartedAt
   const gateCovers = gated && active !== 'settings' && active !== 'accounts'
 
@@ -96,14 +95,9 @@ export default function App(): React.JSX.Element {
                     )
                   )}
                 </button>
-              ) : lic.trialStartedAt ? (
+              ) : (
                 <button className="plan-chip over" onClick={() => setActive('settings')}>
                   {m.nav.planTrialOver}
-                </button>
-              ) : (
-                // 준비 기간(연결 전 무료) — 왜 잠기지 않았는지, 언제부터 3일인지 미리 말해준다
-                <button className="plan-chip" onClick={() => setActive('settings')}>
-                  {m.nav.planTrialNotStarted}
                 </button>
               ))}
             {navBtn('settings', m.nav.settings, m.nav.settingsDesc)}

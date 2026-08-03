@@ -2309,6 +2309,9 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 app.whenReady().then(() => {
+  // 무료 사용 3일은 공식 빌드 **첫 실행부터** — userData가 준비된 뒤에 시계를 박는다.
+  // 소스 빌드는 시계 자체가 없다 (계정 인벤토리는 어느 빌드든 영구 무료)
+  if (license.info().official) license.startTrial()
   // 패키징 앱의 답안 시트는 userData에 산다(번들 안은 서명 때문에 쓰기 불가) — 없으면 만든다
   try {
     mkdirSync(ANSWERS_DIR, { recursive: true })
@@ -2804,10 +2807,6 @@ app.whenReady().then(() => {
       g.data ? { listings: g.data.listings, images: g.data.images, iap: g.data.iap } : null,
       a.data ? { meta: a.data.meta, screenshots: a.data.screenshots, iap: a.data.iap } : null
     )
-    // 체험 방아쇠는 자격증명 "저장" 한 곳뿐이었다 — 자격증명이 이미 있던 사용자는
-    // 저장을 다시 안 거치므로 영영 무료가 된다(실측). "첫 스토어 연결 성공"(SPEC §8.6)의
-    // 문구 그대로, pull 성공도 연결이다
-    if (g.data || a.data) license.startTrial()
     const result: DashboardData = {
       pulledAt: new Date().toISOString(),
       google: g.data,
@@ -2889,7 +2888,6 @@ app.whenReady().then(() => {
           }
         }
         writeState({ ...readState(), lastGoogleSa: creds.path })
-        license.startTrial() // 체험 시계는 여기서 시작한다 — 준비 기간은 무료(SPEC §8.6)
         return { ok: true }
       }
       if (!creds.keyId || !creds.issuerId) {
@@ -2906,7 +2904,6 @@ app.whenReady().then(() => {
         }
       }
       writeState({ ...readState(), ascCreds: asc })
-      license.startTrial()
       return { ok: true }
     }
   )

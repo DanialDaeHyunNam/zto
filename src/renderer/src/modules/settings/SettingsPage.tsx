@@ -76,8 +76,8 @@ function LicenseCard({
         </div>
       ) : (
         <>
-          {/* 체험은 **첫 스토어 연결부터** 센다 — 아직 연결 전이면 시작조차 안 한 것이다.
-              소스 빌드는 체험 개념이 없다(무료) — 키 입력은 Plus 구독용으로만 남긴다 */}
+          {/* 무료 사용 3일은 공식 빌드 첫 실행부터 — 남은 날짜를 사실 그대로 보여준다.
+              소스 빌드는 시계가 없다(무료) — 키 입력은 Plus 구독용으로만 남긴다 */}
           <div className="lic-row">
             {!info.official ? (
               <span className="status-chip ok">{m.settings.licenseSourceBuild}</span>
@@ -85,10 +85,8 @@ function LicenseCard({
               <span className="status-chip warn">
                 {m.settings.licenseTrialLeft.replace('{d}', String(daysLeft(info.trialEndsAt)))}
               </span>
-            ) : info.trialStartedAt ? (
-              <span className="status-chip off">{m.settings.licenseTrialOver}</span>
             ) : (
-              <span className="status-chip off">{m.settings.licenseTrialNotStarted}</span>
+              <span className="status-chip off">{m.settings.licenseTrialOver}</span>
             )}
           </div>
           <div className="cred-file">

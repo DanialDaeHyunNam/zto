@@ -12,18 +12,17 @@ export const ko: Messages = {
     settings: '설정',
     settingsDesc: 'AI·언어·앱 설정',
     planTitle: '내 플랜 — 설정 열기',
-    planTrial: '체험 D-{d}',
-    planTrialOver: '체험 종료',
-    planTrialNotStarted: '스토어 연결 전 무료',
+    planTrial: '무료 사용 {d}일 남음',
+    planTrialOver: '무료 기간 종료',
     sourceBadge: 'source',
     titleSource: 'ZTO — 소스 빌드'
   },
   gate: {
-    title: '체험이 끝났어요',
+    title: '무료 기간이 끝났어요',
     body: 'ZTO를 써봐주셔서 감사해요.',
     cta: '요금제 보고 구매하기',
     haveKey: '라이선스 키가 있어요',
-    accountsNote: '체험 종료 — 계정과 비밀번호는 계속 볼 수 있어요. 계정 추가는 라이선스가 필요합니다.'
+    accountsNote: '무료 기간 종료 — 계정과 비밀번호는 계속 볼 수 있어요. 계정 추가는 라이선스가 필요합니다.'
   },
   browser: {
     urlPlaceholder: 'URL 또는 검색어 입력…',
@@ -93,9 +92,8 @@ export const ko: Messages = {
     licenseIntro: '결제하신 라이선스 키를 등록하면 수정 적용과 AI가 열립니다. 확인은 이 컴퓨터에서 직접 하고, 키는 암호화해 보관해요.',
     licenseActive: '등록됨',
     licenseRemove: '이 기기에서 해제',
-    licenseTrialLeft: '체험 {d}일 남음',
-    licenseTrialOver: '체험 종료',
-    licenseTrialNotStarted: '체험 시작 전 — 스토어를 처음 연결하면 시작돼요',
+    licenseTrialLeft: '무료 사용이 {d}일 남았어요',
+    licenseTrialOver: '무료 기간 종료',
     licenseSourceBuild: '소스 빌드 — 키 없이 무료로 쓸 수 있어요. 키는 ZTO Plus(hosted AI)에만 필요합니다.',
     licensePlaceholder: '라이선스 키',
     licenseActivate: '등록',
@@ -535,7 +533,7 @@ export const ko: Messages = {
     } as Record<string, string>,
     title: '계정 인벤토리',
     subtitle:
-      '모든 계정을 한눈에 — 존재 이유가 적혀 있으면 계정이 많아도 짐이 아닙니다. 비밀번호는 여기 저장되지 않습니다 (SPEC §7.3).',
+      '모든 계정을 한눈에 — 존재 이유가 적혀 있으면 계정이 많아도 짐이 아닙니다. 비밀번호는 여기 저장되지 않아요. 이 화면은 언제까지나 무료입니다.',
     emailPlaceholder: 'brand@gmail.com 또는 @handle',
     memoPlaceholder: '예: 앱 브랜드용 계정, X/Threads 운영',
     emailLabel: 'ID 또는 이메일',
