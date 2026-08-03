@@ -40,7 +40,7 @@ export interface DevAccounts {
 
 // 일회성 상품과 구독은 양대 스토어 모두 **다른 리소스**다(Play: oneTimeProducts↔subscriptions,
 // ASC: inAppPurchasesV2↔subscriptionGroups). 한쪽만 부르면 화면이 "등록된 IAP 없음"이라고
-// 단언하면서 실제로는 구독을 가진 앱을 만난다(2026-07-31 example 실사례).
+// 단언하면서 실제로는 구독을 가진 앱을 만난다(2026-07-31 실사례).
 // `kind`·`period`는 나중에 생긴 선택 필드다 — 옛 캐시·스냅샷에는 없으므로 없을 때도 그려져야 한다.
 export interface LiveIapProduct {
   id: string

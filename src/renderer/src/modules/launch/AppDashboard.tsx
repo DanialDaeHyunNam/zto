@@ -789,7 +789,7 @@ function MetaSub({
   )
 }
 
-// 메타 전체 보기 — 언어 탭 + iOS/Android 나란히, 글자 수 표시 (example 허브 Store Status 참고)
+// 메타 전체 보기 — 언어 탭 + iOS/Android 나란히, 글자 수 표시 (별도 QA 허브 Store Status 참고)
 // 편집 가능한 메타 필드 — 스토어 값 대비 바뀌면 대기 diff에 쌓인다 (controlled by edits)
 function MetaField({
   platform,
