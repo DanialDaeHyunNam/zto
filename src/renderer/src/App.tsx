@@ -67,8 +67,9 @@ export default function App(): React.JSX.Element {
       <div className="app">
         <nav className="sidebar">
           <div className="logo">
-            zto<span className="logo-sub">zero to one</span>
+            zto
             {lic && !lic.official && <span className="logo-badge">{m.nav.sourceBadge}</span>}
+            <span className="logo-sub">zero to one</span>
           </div>
           {modules.map((mod) => navBtn(mod.id, mod.label, mod.desc))}
           <div className="sidebar-bottom">

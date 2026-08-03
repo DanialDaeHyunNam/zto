@@ -180,17 +180,18 @@ button {
   color: #fbbf24;
 }
 
-/* 소스 빌드 배지 — 공식 빌드와 나란히 놓여도 어느 쪽인지 로고만 보면 알게 */
+/* 소스 빌드 배지 — 공식 빌드와 나란히 놓여도 어느 쪽인지 로고만 보면 알게.
+   워드마크 "zto" 옆 첫 줄에 붙는다(.logo는 gradient text-clip이라 fill 색을 되살려야 보인다) */
 .logo-badge {
-  margin-left: 8px;
+  margin-left: 7px;
   padding: 2px 7px;
   border-radius: 999px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   border: 1px solid var(--border-strong);
-  color: var(--muted);
-  vertical-align: middle;
+  -webkit-text-fill-color: var(--muted);
+  vertical-align: 6px;
 }
 
 .sidebar-footer {
