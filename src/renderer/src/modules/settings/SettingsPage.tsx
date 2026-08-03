@@ -172,11 +172,17 @@ export default function SettingsPage(): React.JSX.Element {
   const { m, locale, setLocale } = useI18n()
   const [ai, setAi] = useState<AiStatus | null>(null)
   const [keyDraft, setKeyDraft] = useState<Record<string, string>>({})
+  // AI 섹션이 plan(byo/plus)에 따라 갈린다 — plus면 provider 연결 자체가 필요 없다.
+  // info는 24h 스로틀 재검증이라 LicenseCard와 중복 호출해도 디스크만 읽는다.
+  const [plan, setPlan] = useState<LicenseInfo['plan']>(undefined)
 
   const refresh = (fresh?: boolean): void => {
     window.zto.ai.status(fresh).then(setAi)
   }
   useEffect(() => refresh(), [])
+  useEffect(() => {
+    window.zto.license.info().then((i) => setPlan(i.state === 'active' ? i.plan : undefined))
+  }, [])
 
   const setMode = (p: AiProviderId, mode: 'subscription' | 'apikey'): void => {
     window.zto.ai.setMode(p, mode).then(() => refresh())
@@ -316,11 +322,29 @@ export default function SettingsPage(): React.JSX.Element {
 
       <div className="settings-card">
         <h2 className="settings-h2">{m.settings.aiTitle}</h2>
-        <p className="settings-intro">{m.settings.aiIntro}</p>
-        {ai ? (
-          <div className="ai-providers">{ai.providers.map(providerCard)}</div>
+        {plan === 'plus' ? (
+          /* Plus 구독자 — AI는 ZTO가 제공하므로 provider 연결이 아예 필요 없다 */
+          <div className="lic-row">
+            <span className="status-chip ok">{m.settings.aiPlusBanner}</span>
+          </div>
         ) : (
-          <p className="settings-intro">…</p>
+          <>
+            <p className="settings-intro">{m.settings.aiIntro}</p>
+            {ai ? (
+              <div className="ai-providers">{ai.providers.map(providerCard)}</div>
+            ) : (
+              <p className="settings-intro">…</p>
+            )}
+            {/* byo 업셀 — hosted AI는 프록시 완성 전이라 "곧 제공"만. 열리면 아래 체크아웃으로 연결:
+                월 https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940
+                연 …?enabled=1973941 */}
+            <div className="lic-row" style={{ marginTop: 14 }}>
+              <span className="settings-intro" style={{ margin: 0 }}>
+                {m.settings.aiUpsell}
+              </span>
+              <span className="status-chip off">{m.settings.aiUpsellSoon}</span>
+            </div>
+          </>
         )}
       </div>
 
