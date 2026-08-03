@@ -14,7 +14,7 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "dist:mac": "electron-vite build && electron-builder --mac",
     "dist:win": "electron-vite build && electron-builder --win",
-    "dist:mac:official": "MAIN_VITE_OFFICIAL=1 npm run dist:mac"
+    "dist:mac:official": "MAIN_VITE_OFFICIAL=1 electron-vite build && electron-builder --mac -c.publish.provider=generic -c.publish.url=\"${ZTO_UPDATE_URL:?ZTO_UPDATE_URL required}\""
   },
   "dependencies": {
     "electron-updater": "^6.8.9",

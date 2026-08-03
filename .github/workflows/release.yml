@@ -52,7 +52,8 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-        run: npm run dist:mac -- --publish never
+        # publish 설정은 yml이 아니라 여기서 주입한다 — 소스 빌더의 dist:mac이 env 없이도 돌게
+        run: npm run dist:mac -- --publish never -c.publish.provider=generic -c.publish.url="$ZTO_UPDATE_URL"
 
       - name: Checksums
         run: cd release && shasum -a 256 *.dmg *.zip > SHA256SUMS.txt

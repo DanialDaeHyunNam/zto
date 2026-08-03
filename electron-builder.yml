@@ -29,6 +29,9 @@ extraResources:
 
 mac:
   category: public.app-category.developer-tools
+  # 파일명에 버전을 넣지 않는다 — 사이트 다운로드 버튼이 releases/latest/download/ZTO-arm64.dmg
+  # 고정 URL을 쓸 수 있게(버전은 릴리스 태그가 이미 말한다). 자산은 릴리스별로 격리되므로 안 섞인다
+  artifactName: 'ZTO-${arch}.${ext}'
   target:
     - target: dmg
       arch: [arm64, x64]
@@ -49,13 +52,15 @@ win:
   # 코드 서명 인증서가 없으면 미서명으로 나간다(설치 시 SmartScreen 경고).
   # 인증서가 생기면 CSC_LINK · CSC_KEY_PASSWORD 환경변수로 붙인다
 
-# 업데이트 채널 — **호스트에 묶지 않는다.** 정적 파일(latest*.yml + 설치본)만 놓을 수 있으면
-# GitHub Releases든 오브젝트 스토리지든 상관없다. 릴리스할 때 환경변수로 주입한다:
-#   ZTO_UPDATE_URL=https://... npm run dist:mac
+# 업데이트 채널(publish)은 **이 파일에 두지 않는다.** ${env.X}는 변수가 없으면 빌드가 죽는데,
+# 그 변수를 알 이유가 없는 소스 빌더의 `npm run dist:mac`이 첫 명령에서 넘어지게 된다.
+# 채널은 공식 빌드에만 필요하므로 CI 워크플로(release.yml)와 dist:mac:official 스크립트가
+# `-c.publish.provider=generic -c.publish.url=$ZTO_UPDATE_URL`로 직접 주입한다.
+# 소스 빌드엔 app-update.yml이 안 구워지고, updater는 이를 감지해 "비활성"으로 동작한다.
+# ⚠️ `publish: null`은 장식이 아니다 — 없애면 electron-builder가 git remote로 GitHub provider를
+# **자동 추론**해서, 미서명 소스 빌드가 릴리스를 받았다가 설치에 실패하는 UX가 생긴다(실측).
 # ⚠️ macOS 자동 업데이트는 **서명된 앱에서만** 동작한다(Squirrel.Mac 요구). 미서명 빌드는 못 받는다.
-publish:
-  provider: generic
-  url: ${env.ZTO_UPDATE_URL}
+publish: null
 
 nsis:
   oneClick: false

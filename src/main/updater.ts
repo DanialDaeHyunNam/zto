@@ -9,6 +9,8 @@
 // GitHub Releases든 오브젝트 스토리지든 정적 파일만 놓을 수 있으면 된다.
 import { app, type BrowserWindow } from 'electron'
 import electronUpdater from 'electron-updater'
+import { existsSync } from 'fs'
+import { join } from 'path'
 
 const { autoUpdater } = electronUpdater
 
@@ -28,8 +30,10 @@ const SIX_HOURS = 6 * 60 * 60 * 1000
 
 export function createUpdater(getWindow: () => BrowserWindow | null) {
   let status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
-  // 패키징 안 된 앱에선 electron-updater가 동작하지 않는다(개발 중엔 그게 정상)
-  const enabled = app.isPackaged
+  // 패키징 안 된 앱에선 electron-updater가 동작하지 않고, 패키징됐어도 업데이트 채널이
+  // 안 구워진 빌드(소스 빌드 — publish 설정은 CI만 주입)면 확인할 곳이 없다.
+  // 둘 다 "오류"가 아니라 "비활성"이다 — 소스 빌더의 설정 화면에 오류를 띄우면 고장으로 보인다
+  const enabled = app.isPackaged && existsSync(join(process.resourcesPath, 'app-update.yml'))
 
   const push = (next: Partial<UpdateStatus>): void => {
     status = { ...status, ...next }
