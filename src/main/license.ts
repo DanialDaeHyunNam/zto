@@ -213,5 +213,8 @@ export function createLicense(file: string) {
     return info()
   }
 
-  return { info, activate, revalidate, deactivate, startTrial }
+  // Plus 프록시 호출용 — 프록시는 라이선스 키 자체를 자격증명으로 받는다(x-zto-license)
+  const currentKey = (): string => decodeKey(read())
+
+  return { info, activate, revalidate, deactivate, startTrial, currentKey }
 }

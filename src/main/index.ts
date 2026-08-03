@@ -426,13 +426,22 @@ function openAiText(j: { output_text?: unknown; output?: { content?: OpenAiPart[
   return parts.join('')
 }
 
+// Plus hosted AI — 앱과 같은 {model, input} 계약의 프록시. 배포 URL이 바뀌면 env로 덮는다.
+const ZTO_PLUS_PROXY_URL =
+  process.env.ZTO_PLUS_PROXY_URL ?? 'https://zto-proxy.vercel.app/api/responses'
+
 async function chatOpenAi(
   prompt: string,
   model: string,
-  opts?: { resume?: string; images?: { mediaType: string; data: string }[]; feature?: AiFeature }
+  opts?: {
+    resume?: string
+    images?: { mediaType: string; data: string }[]
+    feature?: AiFeature
+    plus?: boolean // true면 내 키 대신 ZTO 프록시(plus 라이선스가 곧 자격증명)
+  }
 ): Promise<AiChatResult> {
-  const key = getAiKey('chatgpt')
-  if (!key) return { ok: false, text: '', error: 'openai-key-missing' }
+  const key = opts?.plus ? '' : getAiKey('chatgpt')
+  if (!opts?.plus && !key) return { ok: false, text: '', error: 'openai-key-missing' }
   const startedAt = Date.now()
 
   const content: Record<string, unknown>[] = [{ type: 'input_text', text: prompt }]
@@ -445,9 +454,11 @@ async function chatOpenAi(
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), 120_000)
   try {
-    const r = await fetch('https://api.openai.com/v1/responses', {
+    const r = await fetch(opts?.plus ? ZTO_PLUS_PROXY_URL : 'https://api.openai.com/v1/responses', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+      headers: opts?.plus
+        ? { 'x-zto-license': license.currentKey(), 'Content-Type': 'application/json' }
+        : { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, input }),
       signal: ctrl.signal
     })
@@ -476,7 +487,8 @@ async function chatOpenAi(
       cacheReadTokens: cachedTok,
       cacheWriteTokens: 0,
       costUsd: openAiCost(model, inTok, cachedTok, outTok),
-      billed: true,
+      // plus는 우리(ZTO) 부담이라 사용자 실지출이 아니다 — 구독처럼 환산가로만 집계
+      billed: !opts?.plus,
       durationMs: Date.now() - startedAt,
       ok: r.ok
     })
@@ -2396,6 +2408,14 @@ app.whenReady().then(() => {
       // 화면을 읽는 데 있지 않은데, 이미지는 입력 토큰을 수십 배로 부풀린다(Terra는 Luna의 10배 단가).
       if (images?.length && IMAGE_HEAVY_MODELS.includes(model)) model = IMAGE_FALLBACK_MODEL
       opts = opts ? { ...opts, images } : opts
+      // Plus — provider 설정과 무관하게 ZTO 프록시로. 키가 없어도 되는 게 이 티어의 존재 이유다.
+      {
+        const lic = license.info()
+        if (lic.state === 'active' && lic.plan === 'plus') {
+          const plusModel = model.startsWith('gpt-') ? model : 'gpt-5.6-luna'
+          return await chatOpenAi(prompt, plusModel, { ...opts, feature, plus: true })
+        }
+      }
       if (provider === 'chatgpt') {
         return mode === 'apikey'
           ? await chatOpenAi(prompt, model, { ...opts, feature })
