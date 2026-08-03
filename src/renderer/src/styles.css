@@ -180,6 +180,19 @@ button {
   color: #fbbf24;
 }
 
+/* 소스 빌드 배지 — 공식 빌드와 나란히 놓여도 어느 쪽인지 로고만 보면 알게 */
+.logo-badge {
+  margin-left: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border: 1px solid var(--border-strong);
+  color: var(--muted);
+  vertical-align: middle;
+}
+
 .sidebar-footer {
   padding: 10px 12px 0;
   font-size: 11px;

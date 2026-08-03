@@ -13,7 +13,10 @@ export const ko: Messages = {
     settingsDesc: 'AI·언어·앱 설정',
     planTitle: '내 플랜 — 설정 열기',
     planTrial: '체험 D-{d}',
-    planTrialOver: '체험 종료'
+    planTrialOver: '체험 종료',
+    planTrialNotStarted: '스토어 연결 전 무료',
+    sourceBadge: 'source',
+    titleSource: 'ZTO — 소스 빌드'
   },
   gate: {
     title: '체험이 끝났어요',

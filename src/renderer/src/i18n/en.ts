@@ -11,7 +11,10 @@ export const en = {
     settingsDesc: 'AI, language & app config',
     planTitle: 'Your plan — open Settings',
     planTrial: 'Trial D-{d}',
-    planTrialOver: 'Trial ended'
+    planTrialOver: 'Trial ended',
+    planTrialNotStarted: 'Free until first store connect',
+    sourceBadge: 'source',
+    titleSource: 'ZTO — Source Build'
   },
   gate: {
     title: 'Your trial has ended',

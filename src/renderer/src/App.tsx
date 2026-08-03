@@ -19,6 +19,12 @@ export default function App(): React.JSX.Element {
     window.zto.license.info().then(setLic)
   }, [active]) // 설정에서 등록·해제하고 나오면 자연히 갱신된다
 
+  // 한 기기에 공식 빌드와 소스 빌드가 같이 있으면 겉으로 구분이 안 된다(실사례) —
+  // 창 제목이 가장 싼 구분자다. Dock·⌘Tab·창 전환 어디서든 보인다
+  useEffect(() => {
+    if (lic) document.title = lic.official ? 'ZTO' : m.nav.titleSource
+  }, [lic, m])
+
   useEffect(() => {
     window.zto
       .ping()
@@ -62,6 +68,7 @@ export default function App(): React.JSX.Element {
         <nav className="sidebar">
           <div className="logo">
             zto<span className="logo-sub">zero to one</span>
+            {lic && !lic.official && <span className="logo-badge">{m.nav.sourceBadge}</span>}
           </div>
           {modules.map((mod) => navBtn(mod.id, mod.label, mod.desc))}
           <div className="sidebar-bottom">
@@ -92,7 +99,12 @@ export default function App(): React.JSX.Element {
                 <button className="plan-chip over" onClick={() => setActive('settings')}>
                   {m.nav.planTrialOver}
                 </button>
-              ) : null)}
+              ) : (
+                // 준비 기간(연결 전 무료) — 왜 잠기지 않았는지, 언제부터 3일인지 미리 말해준다
+                <button className="plan-chip" onClick={() => setActive('settings')}>
+                  {m.nav.planTrialNotStarted}
+                </button>
+              ))}
             {navBtn('settings', m.nav.settings, m.nav.settingsDesc)}
             {ipcError && <div className="sidebar-footer error">{ipcError}</div>}
           </div>

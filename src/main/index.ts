@@ -2804,6 +2804,10 @@ app.whenReady().then(() => {
       g.data ? { listings: g.data.listings, images: g.data.images, iap: g.data.iap } : null,
       a.data ? { meta: a.data.meta, screenshots: a.data.screenshots, iap: a.data.iap } : null
     )
+    // 체험 방아쇠는 자격증명 "저장" 한 곳뿐이었다 — 자격증명이 이미 있던 사용자는
+    // 저장을 다시 안 거치므로 영영 무료가 된다(실측). "첫 스토어 연결 성공"(SPEC §8.6)의
+    // 문구 그대로, pull 성공도 연결이다
+    if (g.data || a.data) license.startTrial()
     const result: DashboardData = {
       pulledAt: new Date().toISOString(),
       google: g.data,
