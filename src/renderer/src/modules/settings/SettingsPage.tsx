@@ -107,6 +107,15 @@ function LicenseCard({
             </button>
           </div>
           {info.error && <div className="asset-edit-err">{m.settings.licenseErrors[info.error] ?? info.error}</div>}
+          {/* 사이드바 칩("체험 종료")이 여기로 데려온다 — 키 입력만 있고 살 곳이 없으면 막다른 길 */}
+          <div className="lic-row" style={{ marginTop: 10 }}>
+            <button
+              className="ghost-btn mini"
+              onClick={() => window.zto.launch.openExternal('https://zto-umber.vercel.app/#pricing')}
+            >
+              {m.gate.cta}
+            </button>
+          </div>
         </>
       )}
       {/* 오프라인 유예는 숨기지 않는다 — 언제 잠기는지 모르는 게 가장 나쁘다 */}
