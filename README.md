@@ -1,93 +1,95 @@
 # ZTO (Zero to One)
 
+> From zero — to the one where your app meets its first fan.
 > 아무것도 없는 0에서, 앱이 세상에 나가 첫 팬을 만나는 1까지.
 
-1인 개발사의 **앱 출시·계정·소셜**을 한 화면에서 다루는 데스크톱 앱 (macOS / Windows).
+**The solo founder's management desk.** Every new app you ship piles on more to
+manage — accounts, both app stores, promo posts. ZTO is a desktop app (macOS)
+that keeps all of it in one place, with an AI that knows your history.
 
-- **앱 스토어 관리** — 양대 스토어 실황을 한 화면에. 메타·자산·IAP·릴리스 노트를 여기서 고치고, API가 없는 것은 콘솔로 데려다주며 AI가 옆에서 거듭니다
-- **계정 인벤토리** — 계정과 용도·연결 서비스를 한눈에. 비밀번호는 **OS 키체인에만**, 네트워크 전송 없음
-- **소셜미디어 관리** — 임베드 브라우저에 직접 로그인하고, 원할 때만 AI가 화면을 읽습니다
+- **App Store Manager** — live status of Google Play and App Store Connect on
+  one screen. Stage listing/asset/IAP edits, confirm once, apply in one batch.
+  What has no API opens in a guided in-app console with an AI copilot beside it.
+- **Account Inventory** — every account, its purpose, and the services it's
+  connected to, at a glance. Passwords live **only in the OS keychain** —
+  viewing one passes Touch ID, nothing ever leaves this computer.
+- **Social Media Manager** — an embedded browser you log into directly, with an
+  AI panel that reads the page only when you flip the switch.
 
-자세한 설계는 [`SPEC.md`](SPEC.md), 작업 순서는 [`ROADMAP.md`](ROADMAP.md)에 있습니다.
+🌐 **Website**: <https://zto-umber.vercel.app>
 
 ---
 
-## 설치
+## Get ZTO
 
-릴리스 페이지에서 내려받습니다. <!-- TODO: 배포 채널 확정 시 링크 -->
+Two ways — both run the same code:
 
-| 플랫폼 | 파일 |
+| | |
 |---|---|
-| macOS — Apple Silicon (M1·M2·M3·M4) | `ZTO-<version>-arm64.dmg` |
-| macOS — Intel | `ZTO-<version>.dmg` |
-| Windows 10/11 | `ZTO Setup <version>.exe` |
+| **Buy the official build — $5, one-time** | Signed & notarized by Apple, automatic updates, runs with a double-click. [zto-umber.vercel.app](https://zto-umber.vercel.app) |
+| **Build it yourself — free** | Clone this repo and follow [Development](#development). No license key needed for your own builds. |
 
-**내 맥이 어느 쪽인지 모르겠다면**: 애플 메뉴  → 이 Mac에 관하여 → **칩** 줄에 Apple M… 또는 Intel이 적혀 있습니다.
-
-### Windows에서 "Windows의 PC 보호" 경고가 뜹니다
-
-**macOS 빌드는 애플 공증(notarization)을 거칩니다** — 경고 없이 바로 열립니다.
-
-**Windows 설치 파일은 아직 코드 서명 인증서가 없습니다.** 그래서 첫 실행 때
-*"Windows의 PC 보호"* 파란 화면이 뜹니다. 이건 **서명이 없다는 안내이지 악성코드 탐지가
-아닙니다** — 서명 인증서는 매년 비용이 드는 물건이라 아직 사지 않았을 뿐입니다.
-
-계속하려면 **추가 정보** → **실행**을 누르세요. 한 번 누르면 Windows가 선택을 기억합니다.
-
-파일이 진짜인지 확인하고 싶다면 릴리스 페이지의 **SHA-256 체크섬**과 비교하세요:
-
-```powershell
-Get-FileHash .\ZTO Setup <version>.exe -Algorithm SHA256
-```
-
-⚠️ ZTO는 **위 릴리스 페이지에서만** 받으세요. 다른 곳에서 받은 파일은 신뢰하지 마세요.
+The source is public so you can verify what ZTO does with your accounts and
+passwords. The $5 is for the signature, the updates, and the convenience — see
+[LICENSE.md](LICENSE.md).
 
 ---
 
-## 데이터는 어디에 있나
+## Where your data lives
 
-전부 이 컴퓨터 안에만 있습니다. ZTO에는 서버가 없습니다.
+All of it on this computer. ZTO has no server.
 
-| 무엇 | 어디 |
+| What | Where |
 |---|---|
-| 계정 메타·앱 답안 시트·스토어 스냅샷 | `~/Library/Application Support/zto/` (Windows: `%APPDATA%\zto\`) |
-| 비밀번호 **암호화 키** | OS 키체인 (macOS Keychain / Windows DPAPI) |
-| 비밀번호 암호문 | 같은 폴더의 `zto-secrets.json` — 키 없이는 못 읽습니다 |
-| AI 대화 | 설정한 provider로 직접 전송. 구독(CLI) 방식이면 이 컴퓨터를 벗어나지 않습니다 |
+| Account notes · app sheets · store snapshots | `~/Library/Application Support/zto/` |
+| Password **encryption key** | OS keychain (macOS Keychain) |
+| Password ciphertext | `zto-secrets.json` in the same folder — unreadable without the key |
+| AI conversations | Sent directly to the provider you configured. CLI-subscription mode never leaves this computer |
 
-비밀번호 조회는 **매번 Touch ID**를 지나고, 복사한 값은 30초 뒤 클립보드에서 지워집니다.
-자세한 정책과 한계는 앱 안 **계정 인벤토리 → 보안** 패널에 전부 공개돼 있습니다.
+Every password reveal passes Touch ID; copied values are wiped from the
+clipboard after 30 seconds. The full policy — including its limits — is shown
+inside the app under **Account Inventory → Security**.
 
 ---
 
-## 개발
+## Development
 
-**Node 22.12 필요** (`.tool-versions`로 고정 — asdf 사용).
+**Node 22.12** required (pinned via `.tool-versions`, asdf).
 
 ```bash
 npm install
-npm run dev          # 개발 실행
-npm run typecheck    # 타입 검사
-npm run build        # 번들
+npm run dev          # run in development
+npm run typecheck
+npm run build
 ```
 
-⚠️ `src/main/`·`src/preload/` 변경은 HMR이 안 됩니다 — **dev 서버를 재시작**하세요.
-안 하면 새 renderer + 옛 main이 섞여 빈 화면류 버그가 납니다.
+⚠️ Changes under `src/main/` and `src/preload/` do **not** hot-reload —
+restart the dev server, or you get a new renderer talking to a stale main
+(blank-screen class of bugs).
 
-### 패키징
+### Packaging your own build
 
 ```bash
-npm run dist:mac     # dmg + zip (arm64 · x64)
-npm run dist:win     # nsis 설치 파일
+npm run dist:mac     # dmg + zip (arm64 · x64) — unsigned is fine for personal use
 ```
 
-macOS 서명·공증에는 키체인의 **Developer ID Application** 인증서와 아래 환경변수가 필요합니다:
+Signing/notarization (only needed if you want Gatekeeper-clean builds of your
+own) uses a Developer ID certificate in your keychain plus an App Store
+Connect API key:
 
 ```bash
-export APPLE_ID="..."                     # Apple Developer 계정
-export APPLE_APP_SPECIFIC_PASSWORD="..."  # appleid.apple.com에서 발급
-export APPLE_TEAM_ID="..."                # developer.apple.com 멤버십
+export APPLE_API_KEY="/path/to/AuthKey_XXXXXXXXXX.p8"
+export APPLE_API_KEY_ID="XXXXXXXXXX"
+export APPLE_API_ISSUER="<issuer-uuid>"
+npm run dist:mac
 ```
 
-Windows 인증서가 생기면 `CSC_LINK`·`CSC_KEY_PASSWORD`를 넣으면 서명됩니다 —
-그때 위 SmartScreen 안내는 지워야 합니다.
+---
+
+## License
+
+Source-available — read, build, and modify for your own use; redistribution
+and resale are not permitted. See [LICENSE.md](LICENSE.md).
+
+Technical design lives in [`SPEC.md`](SPEC.md), the build order in
+[`ROADMAP.md`](ROADMAP.md).
