@@ -194,6 +194,68 @@ button {
   vertical-align: 6px;
 }
 
+/* 업데이트 배지 — 새 버전이 **준비됐을 때만** 나타난다. 나타난 순간 사이드바의 유일한 액션이라
+   그라데이션+글로우(주 CTA 위계). 확인 단계에선 앰버 — 다음 클릭이 재시작이라는 신호 */
+.update-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 2px 12px;
+  padding: 7px 12px;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 700;
+  text-align: left;
+  color: #fff;
+  background: var(--gradient);
+  box-shadow: var(--glow);
+  cursor: pointer;
+}
+.update-chip:hover {
+  filter: brightness(1.1);
+}
+.update-chip.confirm {
+  background: rgba(251, 191, 36, 0.16);
+  box-shadow: none;
+  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: var(--warn);
+}
+.update-chip.downloading {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  box-shadow: none;
+  color: var(--muted);
+  cursor: default;
+}
+.update-chip-icon {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+/* 현재 버전 — 상시 표시. 누르면 즉시 확인(사이드바에서 설정까지 들어갈 이유를 없앤다) */
+.version-line {
+  align-self: flex-start;
+  margin: 0 12px;
+  padding: 4px 2px;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  cursor: pointer;
+}
+.version-line:hover:not(:disabled) {
+  color: var(--fg);
+}
+.version-line:disabled {
+  cursor: default;
+  opacity: 0.7;
+}
+
 .sidebar-footer {
   padding: 10px 12px 0;
   font-size: 11px;

@@ -26,7 +26,12 @@ export interface UpdateStatus {
   disabled?: boolean
 }
 
-const SIX_HOURS = 6 * 60 * 60 * 1000
+// 확인은 자주, 요청은 적게. 6시간이면 하루 종일 켜둔 세션이 옛 버전인 줄도 모르고 산다 —
+// 사이드바에 배지를 다는 순간 "배지가 언제 뜨느냐"가 곧 신뢰도라 30분으로 당긴다.
+// 대신 **포커스 복귀 시에도 확인**한다: 잠자기에서 깬 노트북은 interval이 밀려 있다.
+const CHECK_EVERY = 30 * 60 * 1000
+// 창을 왔다갔다 할 때마다 릴리스 서버를 두드리지 않게 하는 최소 간격
+const FOCUS_MIN_GAP = 10 * 60 * 1000
 
 export function createUpdater(getWindow: () => BrowserWindow | null) {
   let status: UpdateStatus = { phase: 'idle', version: app.getVersion() }
@@ -60,8 +65,12 @@ export function createUpdater(getWindow: () => BrowserWindow | null) {
     autoUpdater.on('error', (e) => push({ phase: 'error', error: String(e).slice(0, 200) }))
   }
 
+  let lastCheck = 0
+  let started = false
+
   const check = async (): Promise<UpdateStatus> => {
     if (!enabled) return status
+    lastCheck = Date.now()
     try {
       await autoUpdater.checkForUpdates()
     } catch (e) {
@@ -70,11 +79,32 @@ export function createUpdater(getWindow: () => BrowserWindow | null) {
     return status
   }
 
+  // 이미 받아놨거나 받는 중이면 또 확인하지 않는다 — 사이드바 배지가
+  // "준비됨"에서 "확인 중"으로 되돌아가면 눌러야 할 순간에 버튼이 사라진다
+  const busy = (): boolean => status.phase === 'downloading' || status.phase === 'ready'
+  const checkIfIdle = (): void => {
+    if (!busy()) void check()
+  }
+
   const start = (): void => {
-    if (!enabled) return
+    // 배지 UI는 릴리스가 나야만 볼 수 있는 상태다 — 그래서 **dev에서만** 가짜 상태를 밀어준다
+    // (`ZTO_FAKE_UPDATE=9.9.9 npm run dev`). 패키징 빌드에선 절대 열리지 않는다
+    if (!app.isPackaged && process.env.ZTO_FAKE_UPDATE) {
+      setTimeout(
+        () => push({ phase: 'ready', newVersion: process.env.ZTO_FAKE_UPDATE, disabled: false }),
+        1500
+      )
+      return
+    }
+    if (!enabled || started) return // 창 재생성(macOS activate) 때 타이머가 겹치지 않게
+    started = true
     // 켜자마자 부르지 않는다 — 시작이 느려 보이고, 첫 화면이 뜨기 전 네트워크를 쓴다
-    setTimeout(() => void check(), 20_000)
-    setInterval(() => void check(), SIX_HOURS)
+    setTimeout(checkIfIdle, 20_000)
+    setInterval(checkIfIdle, CHECK_EVERY)
+    const w = getWindow()
+    w?.on('focus', () => {
+      if (Date.now() - lastCheck >= FOCUS_MIN_GAP) checkIfIdle()
+    })
   }
 
   const install = (): void => {

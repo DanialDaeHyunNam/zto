@@ -15,7 +15,12 @@ export const ko: Messages = {
     planTrial: '무료 사용 {d}일 남음',
     planTrialOver: '무료 기간 종료',
     sourceBadge: 'source',
-    titleSource: 'ZTO — 소스 빌드'
+    titleSource: 'ZTO — 소스 빌드',
+    updateReady: '업데이트 사용 가능: {v}',
+    updateConfirm: '지금 재시작하고 설치',
+    updateDownloading: '업데이트 받는 중 {p}%',
+    versionCheck: '업데이트 확인',
+    versionChecking: '확인 중…'
   },
   gate: {
     title: '무료 기간이 끝났어요',

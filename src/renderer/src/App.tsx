@@ -6,8 +6,89 @@ import SettingsPage from './modules/settings/SettingsPage'
 import { BrowserOverlayProvider } from './browser-overlay'
 import { useI18n } from './i18n'
 import type { LicenseInfo } from '../../shared/license-types'
+import type { UpdateStatus } from '../../shared/update-types'
 
 type ModuleId = 'accounts' | 'launch' | 'social' | 'settings'
+
+// ---------- 사이드바 업데이트 배지 + 버전 ----------
+// 설정에만 두면 아무도 안 본다 — 새 버전이 있다는 사실은 **찾아가지 않아도** 보여야 한다.
+// 다만 재시작은 여전히 사람이 누른다(updater.ts): ZTO는 라이브 스토어를 비가역으로 바꾸므로
+// 자산 업로드·IAP 반영 중에 앱이 재시작하면 무엇이 반영됐는지 모르는 상태가 된다.
+// 그래서 배지는 **두 번 눌러야** 설치한다 — 사이드바는 오조작하기 쉬운 자리다.
+function UpdateChip(): React.JSX.Element | null {
+  const { m } = useI18n()
+  const [st, setSt] = useState<UpdateStatus | null>(null)
+  const [confirming, setConfirming] = useState(false)
+
+  useEffect(() => {
+    window.zto.update.status().then(setSt)
+    return window.zto.update.onStatus(setSt)
+  }, [])
+
+  // 확인 상태로 둔 채 잊어버리면 다음 클릭이 곧 재시작이 된다 — 6초 뒤 원래대로
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => setConfirming(false), 6000)
+    return () => clearTimeout(t)
+  }, [confirming])
+
+  const version = st?.version ? `v${st.version}` : ''
+  const downloading = st?.phase === 'available' || st?.phase === 'downloading'
+  const ready = st?.phase === 'ready'
+
+  return (
+    <>
+      {ready && (
+        <button
+          className={`update-chip ${confirming ? 'confirm' : ''}`}
+          onClick={() => (confirming ? window.zto.update.install() : setConfirming(true))}
+          title={m.nav.updateConfirm}
+        >
+          {/* 상태 표시에 이모지 금지(디자인 원칙) — 인라인 SVG로 그린다 */}
+          <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
+            {confirming ? (
+              <path
+                d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            ) : (
+              <path
+                d="M8 2v7m0 0 3-3M8 9 5 6m-2 6h10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            )}
+          </svg>
+          {confirming
+            ? m.nav.updateConfirm
+            : m.nav.updateReady.replace('{v}', st?.newVersion ?? '')}
+        </button>
+      )}
+      {downloading && (
+        <div className="update-chip downloading">
+          {m.nav.updateDownloading.replace('{p}', String(st?.percent ?? 0))}
+        </div>
+      )}
+      {version && (
+        <button
+          className="version-line"
+          disabled={!!st?.disabled || st?.phase === 'checking' || downloading || ready}
+          onClick={() => window.zto.update.check().then(setSt)}
+          title={st?.disabled ? '' : m.nav.versionCheck}
+        >
+          {st?.phase === 'checking' ? m.nav.versionChecking : version}
+        </button>
+      )}
+    </>
+  )
+}
 
 export default function App(): React.JSX.Element {
   const { m } = useI18n()
@@ -101,6 +182,7 @@ export default function App(): React.JSX.Element {
                 </button>
               ))}
             {navBtn('settings', m.nav.settings, m.nav.settingsDesc)}
+            <UpdateChip />
             {ipcError && <div className="sidebar-footer error">{ipcError}</div>}
           </div>
         </nav>

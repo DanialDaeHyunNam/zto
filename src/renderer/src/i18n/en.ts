@@ -13,7 +13,12 @@ export const en = {
     planTrial: 'Free use — {d}d left',
     planTrialOver: 'Free period ended',
     sourceBadge: 'source',
-    titleSource: 'ZTO — Source Build'
+    titleSource: 'ZTO — Source Build',
+    updateReady: 'Update available: {v}',
+    updateConfirm: 'Restart & install now',
+    updateDownloading: 'Downloading update… {p}%',
+    versionCheck: 'Check for updates',
+    versionChecking: 'Checking…'
   },
   gate: {
     title: 'Your free period has ended',
