@@ -1848,13 +1848,13 @@ async function applyAscEdits(
           results.push({ id: e.id, ok: false, message: ko ? '지원하지 않는 필드' : 'Unsupported field' })
           continue
         }
-        const key = `${parsed.productId} ${e.locale}`
+        const key = `${parsed.productId}\0${e.locale}`
         const arr = grouped.get(key) ?? []
         arr.push(e)
         grouped.set(key, arr)
       }
       for (const [key, group] of grouped) {
-        const [productId, locale] = key.split(' ')
+        const [productId, locale] = key.split('\0')
         const iapId = idOfProduct.get(productId)
         if (!iapId) {
           for (const e of group)
