@@ -10,11 +10,12 @@ import {
   powerMonitor,
   protocol,
   safeStorage,
+  session,
   systemPreferences
 } from 'electron'
 import { basename, join } from 'path'
 import { pathToFileURL } from 'url'
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { createHash, randomUUID } from 'crypto'
 import { execFile, spawn, spawnSync } from 'child_process'
 import { homedir } from 'os'
@@ -69,8 +70,31 @@ import {
   type RunResult,
   type SheetIapInfo,
   type StoreKind,
+  type SecretVersion,
   type StoreSnapshotEntry
 } from '../shared/launch-types'
+
+// ---------- 데이터 방 ----------
+// 여기의 두 setPath는 **userData를 읽는 그 무엇보다 먼저** 돌아야 한다 — 그래서 이 파일 맨 위다.
+//
+// ① 공식 빌드와 그 외를 분리한다. macOS는 대소문자를 안 가려 dev의 `zto`와 패키징의 `ZTO`가
+//    **같은 폴더**이고(실측: inode 동일), `ZTO Source.app`도 CFBundleName을 `ZTO`로 유지해야
+//    Electron 헬퍼가 살아 있어서(install-source.sh) 셋이 한 방을 쓰고 있었다. 소스로 빌드해 쓰던
+//    사람이 공식판을 깔면 그대로 충돌한다. 가르는 축은 게이트와 같은 공식/비공식이다.
+const OFFICIAL = import.meta.env.MAIN_VITE_OFFICIAL === '1'
+if (!OFFICIAL) app.setPath('userData', join(app.getPath('appData'), 'ZTO-dev'))
+
+// ② `--profile=<이름>`(또는 ZTO_PROFILE)이면 그 안에서 다시 방을 판다 — 스크린샷·데모 영상·실험용.
+//    **진짜 데이터는 손대지 않고 방을 하나 더 쓴다**(파일 바꿔치기 금지: 원본을 옮기는 순간
+//    그 앱은 진짜 데이터를 못 켜고, 실수 하나가 원본을 덮는다).
+const PROFILE = (
+  process.argv.find((a) => a.startsWith('--profile='))?.slice('--profile='.length) ??
+  process.env.ZTO_PROFILE ??
+  ''
+).replace(/[^a-zA-Z0-9_-]/g, '') // 경로 탈출 방지 — 이름은 폴더명이 된다
+// 프로필과 무관하게 늘 같은 곳을 봐야 하는 것(라이선스)이 있어서 ①까지 적용된 경로를 들고 있는다
+const DEFAULT_USER_DATA = app.getPath('userData')
+if (PROFILE) app.setPath('userData', join(DEFAULT_USER_DATA, 'profiles', PROFILE))
 
 // ---------- 패키징 경로 ----------
 // 개발과 배포에서 파일이 사는 곳이 다르다. 이걸 안 나누면 패키징한 앱이 **조용히** 망가진다:
@@ -92,10 +116,9 @@ const updater = createUpdater(() => browserHostWindow)
 // 라이선스 — 파일은 userData, 키는 safeStorage로 암호화해 넣는다.
 // 게이트는 **공식 배포 빌드에만** 존재한다 — 공식 릴리스는 MAIN_VITE_OFFICIAL=1로 빌드하고,
 // 소스에서 직접 빌드하면 플래그가 없어 게이트 없는 앱이 나온다(LICENSE.md의 "직접 빌드 = 무료" 그대로)
-const license = createLicense(
-  join(app.getPath('userData'), 'zto-license.json'),
-  import.meta.env.MAIN_VITE_OFFICIAL === '1'
-)
+// 라이선스 파일만은 **프로필을 따라가지 않는다**(DEFAULT_USER_DATA 고정) — 자격은 기기에 붙는 것이지
+// 데이터 방에 붙는 게 아니다. 프로필마다 따로 두면 새 프로필 = 새 3일 무료가 되어 시계가 무의미해진다.
+const license = createLicense(join(DEFAULT_USER_DATA, 'zto-license.json'), OFFICIAL)
 
 // 전역 로컬 상태 (개발자 계정 보유 여부 등) — 비밀 없음, 메타데이터만
 const stateFile = (): string => join(app.getPath('userData'), 'zto-state.json')
@@ -2182,7 +2205,12 @@ const secretKey = (email: string, appId: string): string => `${email}::${appId}`
 interface SecretRecord {
   v: string // safeStorage 암호문 (base64)
   updatedAt: string
+  // 교체된 옛 값들(최신순). Apple 암호 앱과 같은 모델 — 비밀번호를 바꿔도 옛 값이 필요한 순간이 있다
+  // (기기·서비스에 옛 값이 남아 있거나, 변경이 실제로 반영됐는지 확인해야 할 때).
+  // ⚠️ 트레이드오프: 암호문 파일 하나가 새면 노출되는 값이 1개가 아니라 N개다. 그래서 상한을 둔다.
+  prev?: { v: string; at: string }[]
 }
+const PREV_KEEP = 10
 
 // 구 포맷(값이 문자열) 마이그레이션 포함
 function readSecrets(): Record<string, SecretRecord> {
@@ -2214,10 +2242,39 @@ let unlockedUntil = 0
 // renderer가 동기화해주는 로케일 — main이 만드는 사용자 노출 문구(Touch ID 프롬프트 등)용
 let appLocale: 'ko' | 'en' = 'ko'
 const MAIN_MSG = {
-  ko: { reveal: '비밀번호 보기', copy: '비밀번호 복사', update: '비밀번호 변경', delete: '비밀번호 삭제', deleteAccount: '계정 삭제', parseFail: '파싱 실패' },
-  en: { reveal: 'reveal password', copy: 'copy password', update: 'change password', delete: 'delete password', deleteAccount: 'delete account', parseFail: 'parse failed' }
+  ko: { parseFail: '파싱 실패' },
+  en: { parseFail: 'parse failed' }
 } as const
 const mainMsg = (k: keyof (typeof MAIN_MSG)['ko']): string => MAIN_MSG[appLocale][k]
+
+// Touch ID 시트 사유. macOS가 **"ZTO에서 다음 동작을 시도함: " + 이 문자열**(영어 시스템이면
+// "ZTO is trying to ")로 이어 붙여 한 문장을 만든다. 그래서 어순이 언어마다 뒤집힌다 —
+// 호출부에서 `${대상} ${동사}`로 이으면 영어가 "…is trying to test@… reveal password"로 깨졌다
+// (2026-08-12 실기 촬영에서 발견). 연결어를 끼워 맞추는 대신 **문장 전체를 로케일별로** 둔다:
+// 'for'가 붙어야 자연스러운 동작(비밀번호)과 아닌 동작(계정)이 섞여 있어 규칙 하나로는 안 된다.
+// ⚠️ 시트의 뼈대 문구는 앱 로케일이 아니라 **OS 언어**를 따르므로 둘이 섞일 수 있다(정상).
+const GATE_REASON = {
+  ko: {
+    reveal: '{s} 비밀번호 보기',
+    copy: '{s} 비밀번호 복사',
+    update: '{s} 비밀번호 변경',
+    delete: '{s} 비밀번호 삭제',
+    deleteAccount: '{s} 계정 삭제',
+    revealPrev: '{s} 이전 비밀번호 보기',
+    rename: '계정 이름 변경 {s}'
+  },
+  en: {
+    reveal: 'reveal the password for {s}',
+    copy: 'copy the password for {s}',
+    update: 'change the password for {s}',
+    delete: 'delete the password for {s}',
+    deleteAccount: 'delete the account {s}',
+    revealPrev: 'reveal a previous password for {s}',
+    rename: 'rename the account {s}'
+  }
+} as const
+const gateReason = (action: keyof (typeof GATE_REASON)['ko'], subject: string): string =>
+  GATE_REASON[appLocale][action].replace('{s}', subject)
 
 export function lockSecrets(): void {
   unlockedUntil = 0
@@ -2739,14 +2796,24 @@ app.whenReady().then(() => {
       packageName: string,
       bundleId: string
     ): { ok: boolean; file?: string; error?: string } => {
-      const slug = (packageName.split('.').pop() || name)
-        .toLowerCase()
-        .replace(/[^a-z0-9-]+/g, '-')
-        .replace(/^-+|-+$/g, '')
-      if (!slug) return { ok: false, error: 'invalid-name' }
-      const file = `${slug}.json`
+      // 파일명은 우리가 정하는 것이고 얼마든지 피할 수 있다 — **진짜 중복은 패키지 이름**이다.
+      // (예전엔 패키지의 마지막 조각을 파일명으로 썼는데, com.<브랜드>.app 관례에서 그 조각은
+      //  거의 항상 'app'이라 두 번째 앱부터 전부 "이미 있는 이름"으로 막혔다. 2026-08-12 실사용에서 발견)
+      const slugify = (v: string): string =>
+        v
+          .toLowerCase()
+          .replace(/[^a-z0-9-]+/g, '-')
+          .replace(/^-+|-+$/g, '')
+      const parts = packageName.split('.').filter(Boolean)
+      // 마지막 조각은 구분에 못 쓰므로, 세 조각 이상이면 그 앞(브랜드)을 쓴다
+      const fromPkg = slugify((parts.length > 2 ? parts[parts.length - 2] : parts[parts.length - 1]) ?? '')
+      const base = slugify(name) || fromPkg // 앱 이름이 비ASCII(예: 무결전)면 패키지에서 가져온다
+      if (!base) return { ok: false, error: 'invalid-name' }
+      const dup = listSheets().find((x) => x.packageName && x.packageName === packageName)
+      if (dup) return { ok: false, error: 'exists', file: dup.file }
+      let file = `${base}.json`
+      for (let i = 2; existsSync(join(ANSWERS_DIR, file)); i++) file = `${base}-${i}.json`
       const path = join(ANSWERS_DIR, file)
-      if (existsSync(path)) return { ok: false, error: 'exists' }
       const sheet = {
         app: { name, packageName, bundleId: bundleId || packageName },
         iap: [],
@@ -3265,7 +3332,7 @@ app.whenReady().then(() => {
     const secrets = readSecrets()
     const keys = Object.keys(secrets).filter((k) => k.startsWith(account.email + '::'))
     if (keys.length > 0) {
-      await biometricGate(`${account.email} ${mainMsg('deleteAccount')}`)
+      await biometricGate(gateReason('deleteAccount', account.email))
       keys.forEach((k) => delete secrets[k])
       writeSecrets(secrets)
     }
@@ -3307,7 +3374,7 @@ app.whenReady().then(() => {
       const keys = Object.keys(secrets).filter((k) => k.startsWith(prefix))
       if (keys.length > 0) {
         try {
-          await biometricGate(`${account.email} → ${next}`)
+          await biometricGate(gateReason('rename', `${account.email} → ${next}`))
         } catch {
           logAccess({ email: account.email, appId: '', action: 'update', ok: false })
           return { ok: false, error: 'auth', accounts }
@@ -3368,15 +3435,30 @@ app.whenReady().then(() => {
       // 첫 저장은 무인증(기존 비밀을 건드리지 않음), 변경은 파괴적이므로 인증 필요
       if (exists) {
         try {
-          await biometricGate(`${email} · ${appId} ${mainMsg('update')}`)
+          await biometricGate(gateReason('update', `${email} · ${appId}`))
         } catch (e) {
           logAccess({ email, appId, action: 'update', ok: false })
           throw e
         }
       }
-      secrets[secretKey(email, appId)] = {
+      const key = secretKey(email, appId)
+      const before = secrets[key]
+      const now = new Date().toISOString()
+      // 값이 실제로 바뀐 경우에만 옛 값을 남긴다 — 같은 값 재저장까지 이력에 쌓이면 목록이 거짓말을 한다
+      let prev = before?.prev ?? []
+      if (before) {
+        let old = ''
+        try {
+          old = safeStorage.decryptString(Buffer.from(before.v, 'base64'))
+        } catch {
+          /* 못 풀면(키체인 교체 등) 비교를 포기하고 그냥 보존한다 */
+        }
+        if (old !== password) prev = [{ v: before.v, at: now }, ...prev].slice(0, PREV_KEEP)
+      }
+      secrets[key] = {
         v: safeStorage.encryptString(password).toString('base64'),
-        updatedAt: new Date().toISOString()
+        updatedAt: now,
+        ...(prev.length ? { prev } : {})
       }
       writeSecrets(secrets)
       logAccess({ email, appId, action: exists ? 'update' : 'save', ok: true })
@@ -3386,7 +3468,7 @@ app.whenReady().then(() => {
   ipcMain.handle('secrets:reveal', async (_e, email: string, appId: string): Promise<string | null> => {
     try {
       // 평문 표시는 세션 무시, 항상 재인증
-      await biometricGateStrict(`${email} · ${appId} ${mainMsg('reveal')}`)
+      await biometricGateStrict(gateReason('reveal', `${email} · ${appId}`))
     } catch (e) {
       logAccess({ email, appId, action: 'reveal', ok: false })
       throw e
@@ -3396,7 +3478,7 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('secrets:copy', async (_e, email: string, appId: string): Promise<boolean> => {
     try {
-      await biometricGate(`${email} · ${appId} ${mainMsg('copy')}`)
+      await biometricGate(gateReason('copy', `${email} · ${appId}`))
     } catch (e) {
       logAccess({ email, appId, action: 'copy', ok: false })
       throw e
@@ -3425,6 +3507,29 @@ app.whenReady().then(() => {
       return []
     }
   })
+  // 옛 비밀번호 **목록**은 무인증 — 값이 아니라 "몇 개가, 언제 교체됐는지"뿐이다.
+  // 값은 아래 revealPrev가 매번 생체 관문을 거친다(현재 값 보기와 같은 규칙).
+  ipcMain.handle('secrets:history', (_e, email: string, appId: string): SecretVersion[] => {
+    const rec = readSecrets()[secretKey(email, appId)]
+    return (rec?.prev ?? []).map((p) => ({ at: p.at }))
+  })
+  ipcMain.handle(
+    'secrets:revealPrev',
+    async (_e, email: string, appId: string, at: string): Promise<string | null> => {
+      const rec = readSecrets()[secretKey(email, appId)]
+      const hit = rec?.prev?.find((p) => p.at === at)
+      if (!hit) return null
+      try {
+        // strict — 옛 값도 평문 노출이므로 30분 세션을 무시하고 매번 재인증한다
+        await biometricGateStrict(gateReason('revealPrev', `${email} · ${appId}`))
+      } catch (e) {
+        logAccess({ email, appId, action: 'reveal-prev', ok: false })
+        throw e
+      }
+      logAccess({ email, appId, action: 'reveal-prev', ok: true })
+      return safeStorage.decryptString(Buffer.from(hit.v, 'base64'))
+    }
+  )
   ipcMain.handle('secrets:updatedAt', (_e, email: string, appId: string): string | null => {
     return readSecrets()[secretKey(email, appId)]?.updatedAt || null
   })
@@ -3436,6 +3541,49 @@ app.whenReady().then(() => {
       secretsPath: secretsFile()
     })
   )
+
+  // 로컬 데이터 전체 삭제 — "이 컴퓨터를 안 떠난다"의 짝. 데이터가 여기에만 있다면
+  // **여기서 지울 수단**도 우리가 줘야 한다. 앱을 휴지통에 넣어도 userData는 남는다(macOS 일반).
+  //
+  // 라이선스 파일(zto-license.json)은 **의도적으로 남긴다** — 무료 사용 시작 시각이 거기 있어서
+  // 지우면 3일이 초기화되는 우회로가 열린다(license.ts의 deactivate가 체험 기록만 남기는 것과 같은 이유).
+  // 키를 빼려면 설정의 [해제]가 따로 있고, 그쪽이 LS 인스턴스 해제까지 한다.
+  //
+  // 키체인의 마스터 키도 우리가 못 지운다(Electron safeStorage에 삭제 API 없음). 하지만
+  // 암호문을 지우므로 남은 키는 아무것도 못 연다 — 완전 삭제 명령은 화면이 안내한다.
+  const WIPE_DIRS = new Set(['assets', 'answers', 'downloads', 'app-icons'])
+  ipcMain.handle('data:wipe', async (): Promise<number> => {
+    const dir = app.getPath('userData')
+    let removed = 0
+    for (const name of readdirSync(dir)) {
+      if (name === 'zto-license.json') continue
+      // zto-*.json(계정·비밀번호 암호문·기록·스냅샷·캐시) + 우리가 만든 디렉터리.
+      // 프로필로 켰다면 여기는 그 프로필 폴더다 — 진짜 데이터는 다른 방에 있어 안 다친다
+      const ours = name.startsWith('zto-') || WIPE_DIRS.has(name)
+      if (!ours) continue
+      try {
+        rmSync(join(dir, name), { recursive: true, force: true })
+        removed++
+      } catch {
+        /* 한 건 실패가 나머지를 막지 않는다 */
+      }
+    }
+    // 임베드 브라우저 세션 — Play 콘솔·ASC 로그인 쿠키도 계정 데이터다
+    await session.defaultSession.clearStorageData()
+    return removed
+  })
+  // 삭제 뒤 재시작. 메모리에 남은 옛 상태가 빈 파일 위에 다시 쓰이는 걸 막는다.
+  // 프로필로 켠 앱은 같은 프로필로 다시 켠다 — 안 그러면 재시작이 조용히 방을 바꾼다
+  ipcMain.handle('data:relaunch', (): void => {
+    app.relaunch({ args: process.argv.slice(1) })
+    app.exit(0)
+  })
+  // 지금 어느 데이터를 보고 있는가. name이 비면 기본(진짜) 프로필
+  ipcMain.handle('data:profile', (): { name: string; dir: string } => ({
+    name: PROFILE,
+    dir: app.getPath('userData')
+  }))
+
   // 기기의 비밀번호 관리자로 안내 — 검색어(도메인)를 클립보드에 복사하고 해당 창을 연다.
   // Chrome/암호 앱 모두 검색어 주입 딥링크가 없어서 "복사 + 열기"가 최선 (2026-07-22 실기기 검증).
   ipcMain.handle(
@@ -3455,7 +3603,7 @@ app.whenReady().then(() => {
   )
   ipcMain.handle('secrets:delete', async (_e, email: string, appId: string): Promise<boolean> => {
     try {
-      await biometricGate(`${email} · ${appId} ${mainMsg('delete')}`)
+      await biometricGate(gateReason('delete', `${email} · ${appId}`))
     } catch (e) {
       logAccess({ email, appId, action: 'delete', ok: false })
       throw e

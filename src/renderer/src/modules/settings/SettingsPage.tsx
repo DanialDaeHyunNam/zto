@@ -202,6 +202,84 @@ function UpdateCard(): React.JSX.Element {
   )
 }
 
+// ---------- 내 데이터 ----------
+// "이 컴퓨터를 안 떠난다"의 짝. 데이터가 여기에만 있다면 **지울 수단도 여기 있어야 한다** —
+// 앱을 휴지통에 넣어도 userData는 남으므로(macOS 일반), 앱을 지우는 것으로는 지워지지 않는다.
+function DataCard(): React.JSX.Element {
+  const { m } = useI18n()
+  const [dir, setDir] = useState('')
+  const [profile, setProfile] = useState('')
+  const [armed, setArmed] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [done, setDone] = useState<number | null>(null)
+
+  useEffect(() => {
+    window.zto.data.profile().then((p) => {
+      setDir(p.dir)
+      setProfile(p.name)
+    })
+  }, [])
+
+  const wipe = async (): Promise<void> => {
+    // 2단 컨펌 (SPEC §3) — 계정 삭제와 같은 규칙, 3초 뒤 저절로 풀린다
+    if (!armed) {
+      setArmed(true)
+      setTimeout(() => setArmed(false), 3000)
+      return
+    }
+    setArmed(false)
+    setBusy(true)
+    setDone(await window.zto.data.wipe())
+    setBusy(false)
+  }
+
+  return (
+    <div className="settings-card">
+      <h2 className="settings-h2">{m.settings.dataTitle}</h2>
+      <p className="settings-intro">{m.settings.dataIntro}</p>
+      {/* 프로필로 켰다면 반드시 보인다 — 어느 방에 있는지 모르면 삭제 버튼이 무섭다 */}
+      {profile && (
+        <div className="lic-row">
+          <span className="status-chip warn">
+            {m.settings.dataProfile.replace('{n}', profile)}
+          </span>
+        </div>
+      )}
+      {dir && (
+        <div className="lic-row">
+          <span className="iap-kind">{m.settings.dataPath}</span>
+          <code className="cred-path">{dir}</code>
+        </div>
+      )}
+      <p className="settings-intro">{m.settings.dataWhat}</p>
+      <p className="settings-intro">{m.settings.dataKeeps}</p>
+      {done === null ? (
+        <div className="acc-detail-foot">
+          <button className={`act-btn delete ${armed ? 'arm' : ''}`} disabled={busy} onClick={wipe}>
+            {busy ? m.settings.dataWiping : armed ? m.settings.dataWipeSure : m.settings.dataWipe}
+          </button>
+        </div>
+      ) : (
+        <div className="lic-row">
+          <span className="status-chip ok">{m.settings.dataDone.replace('{n}', String(done))}</span>
+          <button className="choice small active" onClick={() => window.zto.data.relaunch()}>
+            {m.settings.dataRestart}
+          </button>
+        </div>
+      )}
+      {/* 키체인 항목은 우리가 못 지운다 — 숨기지 말고 지우는 방법을 준다 */}
+      {dir.includes('/Library/Application Support') && (
+        <>
+          <p className="settings-intro">{m.settings.dataKeychainNote}</p>
+          <code className="cred-path">
+            security delete-generic-password -s &quot;ZTO Safe Storage&quot;
+          </code>
+        </>
+      )}
+    </div>
+  )
+}
+
 export default function SettingsPage(): React.JSX.Element {
   const { m, locale, setLocale } = useI18n()
   const [ai, setAi] = useState<AiStatus | null>(null)
@@ -419,6 +497,8 @@ export default function SettingsPage(): React.JSX.Element {
           ))}
         </div>
       </div>
+
+      <DataCard />
     </section>
   )
 }

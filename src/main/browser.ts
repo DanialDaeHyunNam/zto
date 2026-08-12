@@ -206,6 +206,7 @@ function makeTab(): Tab {
   // 구글 GSI(accounts.google.com/gsi/select)에서 흰 화면으로 굳는 것으로 실증(2026-07-29).
   // 콘솔 로그인(Play·ASC)이 통과했던 건 그쪽이 전체 페이지 리다이렉트라 opener가 필요 없어서였다.
   wc.setWindowOpenHandler(({ url }) => {
+    if (!app.isPackaged) console.log('[popup] request', url)
     if (!/^https?:\/\//i.test(url)) return { action: 'deny' } // 외부 스킴은 열지 않는다
     const parent = getWin()
     return {
@@ -221,8 +222,20 @@ function makeTab(): Tab {
     }
   })
   // 세션은 기본 세션을 공유하므로 팝업에서 로그인해도 탭 쪽에 그대로 반영된다.
-  wc.on('did-create-window', (win) => {
+  wc.on('did-create-window', (win, details) => {
     win.setMenuBarVisibility(false)
+    // 팝업엔 주소창이 없다 — 안에서 터지면 **창 제목 말고는 단서가 0**이다(구글 로그인
+    // "Use another account"가 400으로 떨어지는데 어느 URL인지 볼 수 없었다, 2026-08-08).
+    // 그래서 여기서만 흐름을 찍는다. **dev 전용** — 로그인 URL 쿼리에는 토큰이 실릴 수 있어
+    // 패키징 빌드의 stdout(시스템 로그로 샐 수 있는 곳)에는 내보내지 않는다.
+    if (app.isPackaged) return
+    const pwc = win.webContents
+    console.log('[popup] open', details.disposition, details.postBody ? '(POST)' : '(GET)', details.url)
+    // UA에 Electron이 실려 구글이 축소 플로우를 내리는지 확인하는 용도 (2026-07-27 실증의 후속)
+    console.log('[popup] ua', pwc.getUserAgent())
+    pwc.on('did-navigate', (_e, url, code, status) => console.log('[popup] nav', code, status, url))
+    pwc.on('did-fail-load', (_e, code, desc, url) => console.log('[popup] fail', code, desc, url))
+    pwc.on('page-title-updated', (_e, title) => console.log('[popup] title', title))
   })
   // 보이지 않는 뷰는 Chromium이 렌더링·타이머를 스로틀해서 무거운 SPA가 부트스트랩을 못 끝낸다
   // (Play 콘솔이 앵커 0개·본문 49자로 멈춤, 2026-07-30 실측). 자동화가 화면 뒤에서도 돌아야 하므로 끈다.

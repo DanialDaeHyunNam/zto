@@ -3,7 +3,8 @@ import {
   PLATFORM_DOMAINS,
   PLATFORMS,
   type AccessLogEntry,
-  type Account
+  type Account,
+  type SecretVersion
 } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
 import { KeyGlyph, PlatformIcon, PLATFORM_NAMES, platformTint } from '../../platform-icons'
@@ -85,6 +86,10 @@ function AppSecretRow({
   const [updatedAt, setUpdatedAt] = useState<string | null>(null)
   const [log, setLog] = useState<AccessLogEntry[] | null>(null)
   const [logFilter, setLogFilter] = useState<string | null>(null)
+  // 교체된 옛 비밀번호 — 목록(시각만)은 카드를 열면 바로, 값은 [보기]마다 생체 관문
+  const [prev, setPrev] = useState<SecretVersion[]>([])
+  const [prevOpen, setPrevOpen] = useState(false)
+  const [prevShown, setPrevShown] = useState<Record<string, string>>({})
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
@@ -94,7 +99,10 @@ function AppSecretRow({
   }, [])
 
   useEffect(() => {
-    if (open && hasSecret) window.zto.secrets.updatedAt(email, appId).then(setUpdatedAt)
+    if (open && hasSecret) {
+      window.zto.secrets.updatedAt(email, appId).then(setUpdatedAt)
+      window.zto.secrets.history(email, appId).then(setPrev)
+    }
   }, [open, hasSecret, email, appId])
 
   const flash = (msg: string): void => {
@@ -119,6 +127,8 @@ function AppSecretRow({
           setEditMode(false)
           flash(m.accounts.secretSaved)
           window.zto.secrets.updatedAt(email, appId).then(setUpdatedAt)
+          window.zto.secrets.history(email, appId).then(setPrev)
+          setPrevShown({}) // 방금 값이 옛 값 자리로 내려간다 — 열려 있던 평문은 접는다
           onStored()
         }
       })
@@ -167,6 +177,22 @@ function AppSecretRow({
       .then((term) => flash(m.accounts.searchCopied.replace('{term}', term)))
   }
 
+  // 옛 값 하나를 연다. 30분 세션을 무시하고 매번 인증(main의 strict 관문) — 현재 값과 같은 규칙
+  const revealPrev = (at: string): void => {
+    if (prevShown[at]) {
+      setPrevShown((v) => {
+        const next = { ...v }
+        delete next[at]
+        return next
+      })
+      return
+    }
+    window.zto.secrets
+      .revealPrev(email, appId, at)
+      .then((v) => v !== null && setPrevShown((cur) => ({ ...cur, [at]: v })))
+      .catch(() => flash(m.accounts.authFailed))
+  }
+
   const toggleLog = (): void => {
     setLogFilter(null)
     if (log) {
@@ -182,7 +208,8 @@ function AppSecretRow({
       copy: m.accounts.actionCopy,
       save: m.accounts.actionSave,
       update: m.accounts.actionUpdate,
-      delete: m.accounts.actionDelete
+      delete: m.accounts.actionDelete,
+      'reveal-prev': m.accounts.actionRevealPrev
     })[a]
 
   const domain = PLATFORM_DOMAINS[appId]
@@ -290,6 +317,39 @@ function AppSecretRow({
               <span>{fmtDate(updatedAt)}</span>
             </div>
           )}
+          {hasSecret && prev.length > 0 && (
+            <div className="pw-row">
+              <span className="pw-label">{m.accounts.prevTitle}</span>
+              <span className="pw-value">
+                <button className="ghost-btn" onClick={() => setPrevOpen(!prevOpen)}>
+                  {prevOpen
+                    ? m.accounts.prevHide
+                    : m.accounts.prevShow.replace('{n}', String(prev.length))}
+                </button>
+              </span>
+            </div>
+          )}
+          {hasSecret && prevOpen && (
+            <div className="sec-log">
+              {prev.map((v) => (
+                <div key={v.at} className="sec-log-row">
+                  <span className="sec-log-time">
+                    {m.accounts.prevReplaced.replace('{d}', fmtDate(v.at))}
+                  </span>
+                  <span className="sec-log-what">
+                    {prevShown[v.at] ? (
+                      <code className="secret-value">{prevShown[v.at]}</code>
+                    ) : (
+                      <span className="pw-mask">••••••••••</span>
+                    )}
+                  </span>
+                  <button className="ghost-btn" onClick={() => revealPrev(v.at)}>
+                    {prevShown[v.at] ? m.accounts.secretHide : m.accounts.secretReveal}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           {hasSecret && (
             <div className="pw-footer">
               <button className="choice tiny" onClick={toggleLog}>
@@ -314,7 +374,7 @@ function AppSecretRow({
                   >
                     {m.accounts.all} ({log.length})
                   </button>
-                  {(['reveal', 'copy', 'save', 'update', 'delete'] as const)
+                  {(['reveal', 'reveal-prev', 'copy', 'save', 'update', 'delete'] as const)
                     .filter((a) => log.some((e) => e.action === a))
                     .map((a) => (
                       <button

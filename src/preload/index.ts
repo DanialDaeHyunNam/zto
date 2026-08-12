@@ -20,6 +20,7 @@ import type {
   LockState,
   PendingEdit,
   RunResult,
+  SecretVersion,
   SheetIapInfo,
   SheetSummary,
   StoreKind,
@@ -161,6 +162,13 @@ const api = {
     activate: (key: string): Promise<LicenseInfo> => ipcRenderer.invoke('license:activate', key),
     deactivate: (): Promise<LicenseInfo> => ipcRenderer.invoke('license:deactivate')
   },
+  // 로컬 데이터 삭제 — 라이선스 파일만 남는다(무료 사용 기록이 거기 있다)
+  data: {
+    wipe: (): Promise<number> => ipcRenderer.invoke('data:wipe'),
+    relaunch: (): Promise<void> => ipcRenderer.invoke('data:relaunch'),
+    // 지금 보고 있는 데이터 방 — name이 비면 기본(진짜) 프로필
+    profile: (): Promise<{ name: string; dir: string }> => ipcRenderer.invoke('data:profile')
+  },
   launch: {
     // 자산 파일 고르기 — main이 규격까지 검증해서 돌려준다(통과 못 하면 ok:false + 사유)
     // platform은 검증기를 고른다 — 'ios'면 기기별 스크린샷 규격(+알파 채널 검사), 없으면 Play
@@ -263,6 +271,11 @@ const api = {
       ipcRenderer.invoke('secrets:accessLog', email, appId),
     updatedAt: (email: string, appId: string): Promise<string | null> =>
       ipcRenderer.invoke('secrets:updatedAt', email, appId),
+    // 교체된 옛 비밀번호 — 목록은 무인증(시각만), 값은 revealPrev가 매번 생체 관문
+    history: (email: string, appId: string): Promise<SecretVersion[]> =>
+      ipcRenderer.invoke('secrets:history', email, appId),
+    revealPrev: (email: string, appId: string, at: string): Promise<string | null> =>
+      ipcRenderer.invoke('secrets:revealPrev', email, appId, at),
     securityStatus: (): Promise<{ biometry: boolean; secretCount: number; secretsPath: string }> =>
       ipcRenderer.invoke('secrets:securityStatus')
   }

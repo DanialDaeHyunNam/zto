@@ -352,8 +352,14 @@ export interface AccessLogEntry {
   ts: string
   email: string
   appId: string
-  action: 'reveal' | 'copy' | 'save' | 'update' | 'delete'
+  action: 'reveal' | 'copy' | 'save' | 'update' | 'delete' | 'reveal-prev'
   ok: boolean
+}
+
+// 교체된 옛 비밀번호 한 건 — 값은 안 싣는다(목록은 무인증, 값은 생체 관문 뒤).
+// at = 이 값이 **교체된** 시각 = 다음 값의 수정일. 그래서 현재 값의 '수정일'과 한 줄로 이어진다.
+export interface SecretVersion {
+  at: string
 }
 
 export interface LockState {

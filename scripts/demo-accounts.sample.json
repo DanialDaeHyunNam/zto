@@ -1,0 +1,36 @@
+{
+  "accounts": [
+    {
+      "id": "demo-1",
+      "email": "studio.mainline@gmail.com",
+      "memo": "Primary developer account — both store consoles live here.",
+      "apps": ["play-console", "app-store-connect"],
+      "createdAt": "2026-03-11T09:20:00.000Z",
+      "updatedAt": "2026-07-28T14:05:00.000Z"
+    },
+    {
+      "id": "demo-2",
+      "email": "press.mainline@gmail.com",
+      "memo": "Press and support inbox. Never used for store logins.",
+      "apps": ["x", "threads", "reddit"],
+      "createdAt": "2026-04-02T11:40:00.000Z",
+      "updatedAt": "2026-07-19T08:15:00.000Z"
+    },
+    {
+      "id": "demo-3",
+      "email": "demo.builds@icloud.com",
+      "memo": "TestFlight tester account for pre-release builds.",
+      "apps": ["app-store-connect"],
+      "createdAt": "2026-05-21T16:02:00.000Z",
+      "updatedAt": "2026-07-30T10:44:00.000Z"
+    },
+    {
+      "id": "demo-4",
+      "email": "mainline.social@outlook.com",
+      "memo": "Posting only — no billing, no store access.",
+      "apps": ["x", "youtube", "linkedin"],
+      "createdAt": "2026-06-09T13:31:00.000Z",
+      "updatedAt": "2026-07-22T09:58:00.000Z"
+    }
+  ]
+}
