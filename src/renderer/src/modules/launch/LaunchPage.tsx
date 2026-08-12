@@ -290,8 +290,17 @@ function NewSheetForm({
       return
     }
     window.zto.launch.createSheet(name.trim(), pkg.trim(), bundle.trim()).then((r) => {
-      if (r.ok && r.file) onCreated(r.file)
-      else setErr(r.error === 'exists' ? m.launch.sheetExists : m.launch.sheetInvalid)
+      if (r.ok && r.file) return onCreated(r.file)
+      // 번들 ID 선점은 **누가 쓰고 있는지**까지 말해준다 — "안 됩니다"만으로는 다음 수를 못 정한다
+      const msg =
+        r.error === 'exists'
+          ? m.launch.sheetExists
+          : r.error === 'bundle-taken'
+            ? m.launch.bundleTaken
+            : r.error === 'bundle-mine'
+              ? m.launch.bundleMine
+              : m.launch.sheetInvalid
+      setErr(r.detail ? `${msg} — ${r.detail}` : msg)
     })
   }
 

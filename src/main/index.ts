@@ -2120,19 +2120,73 @@ function iconDataUri(file: string): string | undefined {
   return 'data:image/png;base64,' + readFileSync(p).toString('base64')
 }
 
+// App Store 조회 — 번들 ID는 **전역 고유**라, 결과가 있다는 건 그 ID의 임자가 있다는 뜻이다.
+// 우리 앱인지 남의 앱인지는 개발자(artistId)로 가른다.
+interface StoreApp {
+  trackName: string
+  artistName: string
+  artistId: number
+  artwork?: string
+}
+async function appStoreLookup(bundleId: string): Promise<StoreApp | null> {
+  if (!bundleId) return null
+  try {
+    const r = await fetch(
+      `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(bundleId)}&country=KR`
+    )
+    const j = (await r.json()) as {
+      results?: {
+        trackName?: string
+        artistName?: string
+        artistId?: number
+        artworkUrl512?: string
+        artworkUrl100?: string
+      }[]
+    }
+    const hit = j.results?.[0]
+    if (!hit?.artistId) return null
+    return {
+      trackName: hit.trackName ?? '',
+      artistName: hit.artistName ?? '',
+      artistId: hit.artistId,
+      artwork: hit.artworkUrl512 ?? hit.artworkUrl100
+    }
+  } catch {
+    return null // 네트워크 실패는 "임자 없음"이 아니다 — 호출부가 판단을 보류한다
+  }
+}
+
+// "우리 개발자 계정"의 근거는 **자격증명이 붙은 시트**다 — 키로 스토어를 읽을 수 있다는 건
+// 그 앱이 우리 것이라는 증거다. 그 시트들의 artistId 집합이 곧 우리다.
+async function ourArtistIds(): Promise<Set<number>> {
+  const ids = new Set<number>()
+  for (const s of listSheets()) {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, s.file), 'utf8'))
+      const c = sheet.credentials ?? {}
+      if (!c.googleSa && !c.asc?.keyPath) continue // 미검증 시트는 근거가 못 된다
+      const hit = await appStoreLookup(sheet.app?.bundleId ?? '')
+      if (hit) ids.add(hit.artistId)
+    } catch {
+      /* 못 읽는 시트는 건너뛴다 */
+    }
+  }
+  return ids
+}
+
 async function fetchAppIcon(file: string): Promise<boolean> {
   const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
   mkdirSync(iconsDir(), { recursive: true })
   if (existsSync(iconPathFor(file))) return true
   let url: string | null = null
-  try {
-    const r = await fetch(
-      `https://itunes.apple.com/lookup?bundleId=${encodeURIComponent(sheet.app.bundleId)}&country=KR`
-    )
-    const j = (await r.json()) as { results?: { artworkUrl512?: string; artworkUrl100?: string }[] }
-    url = j.results?.[0]?.artworkUrl512 ?? j.results?.[0]?.artworkUrl100 ?? null
-  } catch {
-    /* 다음 소스로 */
+  const hit = await appStoreLookup(sheet.app?.bundleId ?? '')
+  if (hit) {
+    // **남의 앱 아이콘을 우리 칩에 그리지 않는다** — 그러면 화면이 "네 앱을 찾았다"고 거짓말한다.
+    // 실제 의미는 정반대(이 번들 ID는 임자가 있다)이므로, 아이콘 대신 경고가 나가야 한다.
+    const ours = await ourArtistIds()
+    if (ours.size > 0 && !ours.has(hit.artistId)) return false
+    if (ours.size === 0) return false // 대조할 근거가 없으면 가져오지 않는다
+    url = hit.artwork ?? null
   }
   if (!url) {
     try {
@@ -2790,12 +2844,12 @@ app.whenReady().then(() => {
   // GUI에서 답안 시트 생성 — 2단계가 파일 작업 없이 앱 안에서 완결되도록
   ipcMain.handle(
     'launch:createSheet',
-    (
+    async (
       _e,
       name: string,
       packageName: string,
       bundleId: string
-    ): { ok: boolean; file?: string; error?: string } => {
+    ): Promise<{ ok: boolean; file?: string; error?: string; detail?: string }> => {
       // 파일명은 우리가 정하는 것이고 얼마든지 피할 수 있다 — **진짜 중복은 패키지 이름**이다.
       // (예전엔 패키지의 마지막 조각을 파일명으로 썼는데, com.<브랜드>.app 관례에서 그 조각은
       //  거의 항상 'app'이라 두 번째 앱부터 전부 "이미 있는 이름"으로 막혔다. 2026-08-12 실사용에서 발견)
@@ -2811,6 +2865,17 @@ app.whenReady().then(() => {
       if (!base) return { ok: false, error: 'invalid-name' }
       const dup = listSheets().find((x) => x.packageName && x.packageName === packageName)
       if (dup) return { ok: false, error: 'exists', file: dup.file }
+      // 번들 ID는 전역 고유다 — 스토어에 이미 있으면 새로 만들 수 없다. 콘솔에 가서
+      // "이미 사용 중"을 만나기 전에, 여기서 **누가 쓰고 있는지까지** 알려준다.
+      const taken = await appStoreLookup(bundleId || packageName)
+      if (taken) {
+        const ours = await ourArtistIds()
+        return {
+          ok: false,
+          error: ours.has(taken.artistId) ? 'bundle-mine' : 'bundle-taken',
+          detail: `${taken.trackName} — ${taken.artistName}`
+        }
+      }
       let file = `${base}.json`
       for (let i = 2; existsSync(join(ANSWERS_DIR, file)); i++) file = `${base}-${i}.json`
       const path = join(ANSWERS_DIR, file)

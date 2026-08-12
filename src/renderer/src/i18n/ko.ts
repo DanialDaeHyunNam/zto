@@ -282,6 +282,8 @@ export const ko: Messages = {
     packagePlaceholder: 'com.brand.myapp',
     create: '생성',
     sheetExists: '같은 패키지 이름의 앱이 이미 있습니다',
+    bundleTaken: '이 번들 ID는 App Store에서 다른 개발자가 이미 쓰고 있습니다 — 다른 ID를 정하세요',
+    bundleMine: '이미 출시하신 번들 ID입니다 — 새로 만들지 말고 "기존 앱"으로 추가하세요',
     sheetInvalid: '앱 이름과 패키지명을 입력하세요',
     importApp: '기존 앱 가져오기',
     importTitle: '기존 앱 가져오기',

@@ -222,12 +222,13 @@ button {
   border: 1px solid rgba(251, 191, 36, 0.45);
   color: var(--warn);
 }
-.update-chip.downloading {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  box-shadow: none;
-  color: var(--muted);
-  cursor: default;
+/* 버전 줄 안에 들어가는 축소판 — 배지가 별도 블록을 차지하지 않게 */
+.update-chip.mini {
+  /* 기본 .update-chip의 좌우 12px 여백을 지운다 — 줄(.version-row)이 이미 들여쓰기를 갖는다 */
+  margin: 0 0 0 auto;
+  padding: 3px 9px;
+  font-size: 10.5px;
+  flex: none;
 }
 .update-chip-icon {
   width: 14px;
@@ -235,10 +236,18 @@ button {
   flex: none;
 }
 
+/* 버전 + 상태가 한 줄. 진행률은 오른쪽 끝에 조용히 붙고, 다 받으면 그 자리에 배지가 선다 */
+.version-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 12px;
+  min-height: 24px;
+}
+
 /* 현재 버전 — 상시 표시. 누르면 즉시 확인(사이드바에서 설정까지 들어갈 이유를 없앤다) */
 .version-line {
-  align-self: flex-start;
-  margin: 0 12px;
+  margin: 0;
   padding: 4px 2px;
   border: none;
   background: none;
@@ -254,6 +263,26 @@ button {
 .version-line:disabled {
   cursor: default;
   opacity: 0.7;
+}
+
+/* 받는 중 — 누를 게 없으므로 버튼처럼 보이지 않는다. 숫자만 흔들리지 않게 tabular */
+.version-progress {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-left: auto;
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.version-progress .update-chip-icon {
+  width: 11px;
+  height: 11px;
+  opacity: 0.75;
+}
+.update-chip.mini .update-chip-icon {
+  width: 11px;
+  height: 11px;
 }
 
 .sidebar-footer {

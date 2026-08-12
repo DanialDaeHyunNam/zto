@@ -280,6 +280,8 @@ export const en = {
     packagePlaceholder: 'com.brand.myapp',
     create: 'Create',
     sheetExists: 'An app with this package name already exists',
+    bundleTaken: "This bundle ID is already taken on the App Store by another developer — pick a different one",
+    bundleMine: "You've already shipped this bundle ID — add it with \"Existing app\" instead of creating a new sheet",
     sheetInvalid: 'Enter an app name and package name',
     importApp: 'Import existing app',
     importTitle: 'Import existing app',

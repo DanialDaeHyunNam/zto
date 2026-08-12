@@ -185,7 +185,8 @@ const api = {
       name: string,
       packageName: string,
       bundleId: string
-    ): Promise<{ ok: boolean; file?: string; error?: string }> =>
+      // detail = 선점된 번들 ID의 임자(앱 이름 — 개발자)
+    ): Promise<{ ok: boolean; file?: string; error?: string; detail?: string }> =>
       ipcRenderer.invoke('launch:createSheet', name, packageName, bundleId),
     importApp: (
       name: string,

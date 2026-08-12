@@ -36,56 +36,77 @@ function UpdateChip(): React.JSX.Element | null {
   const downloading = st?.phase === 'available' || st?.phase === 'downloading'
   const ready = st?.phase === 'ready'
 
+  // 버전 한 줄이 상태의 자리다 — 진행률은 그 오른쪽에 조용히, 다 받으면 같은 자리에 버튼이 생긴다.
+  // 별도 블록으로 띄우면 아무것도 누를 게 없는 동안에도 사이드바가 소리를 지른다(Dan 2026-08-12).
+  // 예외는 확인 단계 하나 — 다음 클릭이 곧 재시작이므로 그 순간만 줄 전체를 가져간다.
+  const arrow = (
+    <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
+      <path
+        d="M8 2v7m0 0 3-3M8 9 5 6m-2 6h10"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+
+  if (ready && confirming) {
+    return (
+      <button
+        className="update-chip confirm"
+        onClick={() => window.zto.update.install()}
+        title={m.nav.updateConfirm}
+      >
+        <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        </svg>
+        {m.nav.updateConfirm}
+      </button>
+    )
+  }
+
   return (
     <>
-      {ready && (
-        <button
-          className={`update-chip ${confirming ? 'confirm' : ''}`}
-          onClick={() => (confirming ? window.zto.update.install() : setConfirming(true))}
-          title={m.nav.updateConfirm}
-        >
-          {/* 상태 표시에 이모지 금지(디자인 원칙) — 인라인 SVG로 그린다 */}
-          <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
-            {confirming ? (
-              <path
-                d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            ) : (
-              <path
-                d="M8 2v7m0 0 3-3M8 9 5 6m-2 6h10"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.6"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            )}
-          </svg>
-          {confirming
-            ? m.nav.updateConfirm
-            : m.nav.updateReady.replace('{v}', st?.newVersion ?? '')}
-        </button>
-      )}
-      {downloading && (
-        <div className="update-chip downloading">
-          {m.nav.updateDownloading.replace('{p}', String(st?.percent ?? 0))}
-        </div>
-      )}
-      {version && (
-        <button
-          className="version-line"
-          disabled={!!st?.disabled || st?.phase === 'checking' || downloading || ready}
-          onClick={() => window.zto.update.check().then(setSt)}
-          title={st?.disabled ? '' : m.nav.versionCheck}
-        >
-          {st?.phase === 'checking' ? m.nav.versionChecking : version}
-        </button>
-      )}
+      <div className="version-row">
+        {version && (
+          <button
+            className="version-line"
+            disabled={!!st?.disabled || st?.phase === 'checking' || downloading || ready}
+            onClick={() => window.zto.update.check().then(setSt)}
+            title={st?.disabled ? '' : m.nav.versionCheck}
+          >
+            {st?.phase === 'checking' ? m.nav.versionChecking : version}
+          </button>
+        )}
+        {downloading && (
+          <span
+            className="version-progress"
+            title={m.nav.updateDownloading.replace('{p}', String(st?.percent ?? 0))}
+          >
+            {arrow}
+            {st?.percent ?? 0}%
+          </span>
+        )}
+        {ready && (
+          <button
+            className="update-chip mini"
+            onClick={() => setConfirming(true)}
+            title={m.nav.updateReady.replace('{v}', st?.newVersion ?? '')}
+          >
+            {arrow}
+            {st?.newVersion ?? ''}
+          </button>
+        )}
+      </div>
     </>
   )
 }
