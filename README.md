@@ -7,6 +7,8 @@
 manage — accounts, both app stores, promo posts. ZTO is a desktop app (macOS)
 that keeps all of it in one place, with an AI that knows your history.
 
+![ZTO — pull live store status, stage listing edits, apply them behind a two-step confirm](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/hero.gif)
+
 - **App Store Manager** — live status of Google Play and App Store Connect on
   one screen. Stage listing/asset/IAP edits, confirm once, apply in one batch.
   What has no API opens in a guided in-app console with an AI copilot beside it.
@@ -17,6 +19,19 @@ that keeps all of it in one place, with an AI that knows your history.
   AI panel that reads the page only when you flip the switch.
 
 🌐 **Website**: <https://zto-umber.vercel.app>
+
+---
+
+## A look inside
+
+| | |
+|---|---|
+| **Both stores, one screen**<br>What's already done lights up; you jump to the console only where hands are needed.<br>![App Store Manager](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/screenshot-app-store-manager.png) | **Nothing goes out unconfirmed**<br>Edits are staged against live store values and applied in one confirmed batch.<br>![Two-step confirm](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/screenshot-two-step-confirm.png) |
+| **Every account, and what it's for**<br>Accounts aren't a burden when each one's reason to exist is written down.<br>![Account Inventory](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/screenshot-account-inventory.png) | **Passwords stay on your machine**<br>Stored in the OS keychain; every reveal passes Touch ID.<br>![Touch ID](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/screenshot-touch-id.png) |
+
+**Social Media** — an embedded browser you log into yourself, with an AI panel that reads the page only when you flip the switch.
+
+![Social Media](https://github.com/DanialDaeHyunNam/zto/releases/download/v0.1.5/screenshot-social-media.png)
 
 ---
 
@@ -41,7 +56,7 @@ All of it on this computer. ZTO has no server.
 
 | What | Where |
 |---|---|
-| Account notes · app sheets · store snapshots | `~/Library/Application Support/zto/` |
+| Account notes · app sheets · store snapshots | `~/Library/Application Support/ZTO/` — official builds<br>`~/Library/Application Support/ZTO-dev/` — builds you made yourself, so the two never share a folder |
 | Password **encryption key** | OS keychain (macOS Keychain) |
 | Password ciphertext | `zto-secrets.json` in the same folder — unreadable without the key |
 | AI conversations | Sent directly to the provider you configured. CLI-subscription mode never leaves this computer |
@@ -49,6 +64,18 @@ All of it on this computer. ZTO has no server.
 Every password reveal passes Touch ID; copied values are wiped from the
 clipboard after 30 seconds. The full policy — including its limits — is shown
 inside the app under **Account Inventory → Security**.
+
+Because it's all local, **deleting the app does not delete your data.** To erase
+it, use **Settings → Your data → Delete all local data** (the app also shows the
+one command that removes the keychain entry).
+
+For screenshots or experiments, run against a throwaway data folder instead of
+your real one:
+
+```bash
+npm run demo:profile            # launches the installed app on a sandbox profile
+npm run demo:profile -- --dev   # seed the profile `npm run dev` uses
+```
 
 ---
 
