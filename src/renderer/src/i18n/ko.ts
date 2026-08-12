@@ -514,6 +514,8 @@ export const ko: Messages = {
       'Play Console에서 해당 계정에 “릴리스 관리” 권한 부여',
       '다운로드한 JSON의 절대경로를 답안 시트에 기록 (커밋 금지)'
     ],
+    registerWhy: '앱 레코드 생성은 스토어 API가 없습니다 — 콘솔 폼으로만 존재하는 일이라 여기서 해야 합니다.',
+    guideRegister: '이 화면에서 앱 레코드를 만드시면 됩니다. 헷갈리는 항목은 물어보세요 — 화면을 같이 보고 있습니다.',
     openPlayConsole: 'Play Console 열기 ↗',
     ascTitle: 'App Store Connect API 키 (App Manager)',
     ascGuideIntro:

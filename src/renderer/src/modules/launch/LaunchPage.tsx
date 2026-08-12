@@ -642,7 +642,27 @@ function ApiStatusBar(): React.JSX.Element {
 
 export default function LaunchPage(): React.JSX.Element {
   const { m } = useI18n()
-  const { open: openBrowser } = useBrowserOverlay()
+  const { open: openBrowser, setGuide } = useBrowserOverlay()
+
+  // 앱 레코드 생성은 API가 없어 콘솔에서만 되는 일 — 그래도 **밖의 브라우저로 내보내지 않는다**.
+  // ZTO 브라우저 + AI 패널로 열고, 무엇을 하러 왔는지(앱·플랫폼·왜 콘솔인지)를 같이 넘긴다.
+  // 여는 것과 이끄는 것은 다르다: task 없이 열면 AI가 우리가 이미 아는 걸 되묻는다(2026-07-31).
+  // 경계는 그대로다 — 콘솔 폼만 임베드하고, 개발자 등록·결제·스토어 공개 페이지는 외부 브라우저.
+  const openConsole = (platform: 'android' | 'ios', url: string): void => {
+    const sh = sheets.find((x) => x.file === selected)
+    openBrowser(url, {
+      copilot: true,
+      task: {
+        goal: platform === 'android' ? m.launch.registerPlay : m.launch.registerAsc,
+        app: sh ? `${sh.appName} (${sh.packageName})` : undefined,
+        platform,
+        why: m.launch.registerWhy,
+        // 콘솔 홈까지만 데려간다 — 앱이 아직 없어 목적지 URL을 만들 수 없다
+        exact: false
+      }
+    })
+    setGuide({ text: m.launch.guideRegister, tone: 'ask' })
+  }
   // '앱 스토어 관리'가 홈 — 신규 여정은 [+ 앱 추가 → 신규 앱 출시]로만 진입 (2026-07-22 Dan)
   const [view, setViewState] = useState<'manage' | 'new'>(
     () => (localStorage.getItem('zto-launch-view') as 'manage' | 'new') ?? 'manage'
@@ -888,14 +908,14 @@ export default function LaunchPage(): React.JSX.Element {
                 </ol>
                 <button
                   className="link-btn"
-                  onClick={() => window.zto.launch.openExternal('https://play.google.com/console')}
+                  onClick={() => openConsole('android', 'https://play.google.com/console')}
                 >
                   {m.launch.openPlayConsole}
                 </button>
                 <button
                   className="link-btn"
                   onClick={() =>
-                    window.zto.launch.openExternal('https://appstoreconnect.apple.com/apps')
+                    openConsole('ios', 'https://appstoreconnect.apple.com/apps')
                   }
                 >
                   {m.launch.openAscApps}

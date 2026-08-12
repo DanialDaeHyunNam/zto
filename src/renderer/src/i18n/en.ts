@@ -514,6 +514,8 @@ export const en = {
       'Grant the account "Release management" permission in Play Console',
       'Record the absolute path of the JSON in the answer sheet (never commit it)'
     ],
+    registerWhy: 'Creating the app record has no store API — it only exists as a console form, so it has to be done here.',
+    guideRegister: "Create the app record on this screen. Ask me about any field you're unsure of — I can see the page.",
     openPlayConsole: 'Open Play Console ↗',
     ascTitle: 'App Store Connect API key (App Manager)',
     ascGuideIntro:
