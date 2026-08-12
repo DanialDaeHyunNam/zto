@@ -27,7 +27,7 @@
   <a class="back" href="/">← ZTO</a>
 
   <h1>Terms of Service</h1>
-  <p class="date">Last updated: August 3, 2026</p>
+  <p class="date">Last updated: August 8, 2026</p>
 
   <h2>1. What ZTO is</h2>
   <p>ZTO is a desktop application for solo app developers ("the Software"), made by an independent developer ("we", "us"). It helps you manage app store listings, accounts, and related workflows. It runs locally on your computer.</p>
@@ -36,7 +36,7 @@
   <p>Official builds are sold through <strong>Lemon Squeezy</strong>, our merchant of record. Your payment, invoice, and applicable taxes are handled by Lemon Squeezy, and the charge may appear under their name. A purchase grants you a license key for personal or internal business use of the official builds. The source code is open source under the <a href="https://github.com/DanialDaeHyunNam/zto/blob/main/LICENSE.md">Apache License 2.0</a> — building and using it yourself is free and requires no key. Official builds (signed, notarized, auto-updating) are what a purchase licenses.</p>
 
   <h2>3. Trials and subscriptions</h2>
-  <p>Official builds include a free trial (currently 3 days of full functionality, starting when you first connect a store). Subscriptions (ZTO Plus) renew automatically until cancelled; you can cancel any time and keep access until the end of the paid period. Refunds are covered by our <a href="/refunds">refund policy</a>.</p>
+  <p>Official builds include free use of the full app for a limited period (currently 3 days, starting the first time you launch an official build). After that, paid features are locked until you enter a license key; your account inventory stays accessible either way. Subscriptions (ZTO Plus) renew automatically until cancelled; you can cancel any time and keep access until the end of the paid period. Refunds are covered by our <a href="/refunds">refund policy</a>.</p>
 
   <h2>4. Store actions are yours</h2>
   <p>ZTO can perform actions against your Google Play and App Store Connect accounts — editing listings, uploading assets, updating in-app purchases. Some of these actions are <strong>irreversible on the store side</strong>. ZTO always shows you what it is about to change and requires your explicit confirmation before applying. By confirming, you take responsibility for the change, and you remain responsible for complying with Google's and Apple's terms for your developer accounts.</p>
@@ -44,13 +44,16 @@
   <h2>5. Your data</h2>
   <p>ZTO has no server for its core features. Your account inventory, store credentials, and app data stay on your computer. Passwords are stored only in your operating system's keychain and are never transmitted to us. If you use ZTO Plus hosted AI, your prompts are relayed through our proxy to an AI model provider to generate a response; we do not store the content of these requests. License keys are verified directly against the Lemon Squeezy API.</p>
 
-  <h2>6. No warranty</h2>
+  <h2>6. Deleting your data</h2>
+  <p>Because your data is stored locally, <strong>removing the app does not remove your data</strong> — it stays in ZTO's folder on your computer. To erase it, open <strong>Settings → Your data → Delete all local data</strong> in the app: this deletes your accounts, saved passwords, access history, store snapshots and caches, and signs you out of the embedded browser. Your license key and free-period record are kept so the app can still tell what you are entitled to; use <strong>Remove</strong> in Settings to unregister the device. The operating system keychain entry that encrypts your passwords cannot be removed by the app, but once the encrypted file is gone it can no longer open anything; the app shows the command to remove it yourself. Since we hold no account for you, there is nothing on our side to delete — apart from purchase records held by Lemon Squeezy as merchant of record.</p>
+
+  <h2>7. No warranty</h2>
   <p>The Software is provided <strong>"as is"</strong>, without warranty of any kind. We do not guarantee that store operations will succeed, that third-party APIs will remain available, or that the Software is free of errors. To the maximum extent permitted by law, our total liability for any claim related to the Software is limited to the amount you paid us in the twelve months before the claim.</p>
 
-  <h2>7. Changes</h2>
+  <h2>8. Changes</h2>
   <p>We may update these terms as the product evolves. Material changes will be noted on this page with a new date. Continued use after a change means you accept the updated terms.</p>
 
-  <h2>8. Contact</h2>
+  <h2>9. Contact</h2>
   <p><a href="mailto:libertas.kr@gmail.com">libertas.kr@gmail.com</a></p>
 
   <hr>
@@ -60,9 +63,10 @@
   <ul>
     <li><strong>제품</strong> — ZTO는 1인 개발자를 위한 데스크톱 앱이며, 컴퓨터에서 로컬로 동작합니다.</li>
     <li><strong>구매</strong> — 결제는 판매자(Merchant of Record)인 Lemon Squeezy가 처리합니다. 구매 시 공식 빌드용 라이선스 키가 발급됩니다. 소스 코드는 Apache 2.0 오픈소스이며, 직접 빌드해 쓰는 것은 무료입니다. 구매는 공식 빌드(서명·공증·자동업데이트)에 대한 라이선스입니다.</li>
-    <li><strong>체험·구독</strong> — 공식 빌드는 첫 스토어 연결부터 3일 전체 기능 체험을 제공합니다. 구독(Plus)은 언제든 해지할 수 있고, 결제된 기간이 끝날 때까지 이용 가능합니다.</li>
+    <li><strong>무료 사용·구독</strong> — 공식 빌드는 <strong>첫 실행부터 3일</strong> 동안 전체 기능을 무료로 쓸 수 있습니다. 이후에는 라이선스 키를 등록할 때까지 유료 기능이 잠기며, 계정 인벤토리는 잠금과 무관하게 계속 열람할 수 있습니다. 구독(Plus)은 언제든 해지할 수 있고, 결제된 기간이 끝날 때까지 이용 가능합니다.</li>
     <li><strong>스토어 작업 책임</strong> — 스토어를 비가역적으로 바꾸는 작업은 항상 명시적 확인을 거치며, 확인 후의 변경에 대한 책임은 사용자에게 있습니다.</li>
     <li><strong>데이터</strong> — 핵심 기능에 서버가 없습니다. 데이터는 컴퓨터에만 있고, 비밀번호는 OS 키체인에만 저장됩니다. Plus AI 사용 시 요청 내용은 중계만 되며 저장하지 않습니다.</li>
+    <li><strong>데이터 삭제</strong> — 데이터가 로컬에만 있으므로 <strong>앱을 지워도 데이터는 남습니다</strong>. 앱의 <strong>설정 → 내 데이터 → 로컬 데이터 전체 삭제</strong>로 계정·저장된 비밀번호·접근 기록·스토어 스냅샷과 캐시를 지우고 임베드 브라우저에서 로그아웃됩니다. 라이선스 키와 무료 사용 기록은 남으며, 기기 등록 해제는 설정의 [해제]로 합니다. 비밀번호를 암호화하는 키체인 항목은 앱이 지울 수 없지만 암호문이 사라지면 아무것도 열지 못하며, 직접 지우는 명령을 앱이 안내합니다. 우리 쪽에는 계정이 없어 지울 것이 없습니다(결제 기록은 판매자인 Lemon Squeezy가 보관).</li>
     <li><strong>보증 없음</strong> — 소프트웨어는 "있는 그대로" 제공되며, 책임은 법이 허용하는 한도 내에서 최근 12개월 결제액으로 제한됩니다.</li>
   </ul>
 </div>
