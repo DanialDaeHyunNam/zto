@@ -151,16 +151,27 @@ export default function AiPanel({
     if (d) addImg(d)
   }
 
+  // 파일 → data URL (붙여넣기·드롭 공용)
+  const readFile = (file: File): void => {
+    const reader = new FileReader()
+    reader.onload = () => typeof reader.result === 'string' && addImg(reader.result)
+    reader.readAsDataURL(file)
+  }
+
+  // 드래그&드롭 첨부 — 떨어뜨리면 바로 붙는다. 기본 동작(파일을 창에 여는 것)은 막는다
+  const onDrop = (e: React.DragEvent): void => {
+    const files = [...(e.dataTransfer?.files ?? [])].filter((f) => f.type.startsWith('image/'))
+    if (files.length === 0) return
+    e.preventDefault()
+    files.forEach(readFile)
+  }
+
   // 클립보드 이미지 붙여넣기
   const onPaste = (e: React.ClipboardEvent): void => {
     for (const item of e.clipboardData.items) {
       if (item.type.startsWith('image/')) {
         const file = item.getAsFile()
-        if (file) {
-          const reader = new FileReader()
-          reader.onload = () => typeof reader.result === 'string' && addImg(reader.result)
-          reader.readAsDataURL(file)
-        }
+        if (file) readFile(file)
       }
     }
   }
@@ -221,9 +232,21 @@ export default function AiPanel({
     setInput('')
     setImgs([])
     // 코파일럿 모드에선 지금 화면을 프롬프트에 얹는다 — 사람이 "이거 뭐 골라?"라고만 해도
-    // AI가 무슨 화면인지 알아야 답이 된다. 원문이 아니라 구조라 값이 싸다.
-    const withForm =
-      watch && form ? `${prompt}\n\n---\n${describeForm(form)}` : prompt
+    // AI가 무슨 화면인지 알아야 답이 된다.
+    //
+    // 콘솔이면 폼 **구조**로 충분하고 그게 싸다. 소셜 페이지엔 폼이 없어서 그동안 아무것도
+    // 안 실렸고, AI가 "영상 내용을 볼 수 없다"고 답했다(2026-08-13 실사용). 그럴 땐 화면의
+    // **글**을 그 자리에서 읽어 붙인다 — 주기적으로 긁지 않으므로 토글이 곧 약속 그대로다.
+    let context = ''
+    if (watch) {
+      if (form && form.controls.length > 0) context = describeForm(form)
+      else {
+        const r = await window.zto.browser.pageText()
+        const pg = r.ok ? (r.result as { url: string; title: string; text: string }) : null
+        if (pg?.text?.trim()) context = `[${pg.title}] ${pg.url}\n${pg.text}`
+      }
+    }
+    const withForm = context ? `${prompt}\n\n---\n${context}` : prompt
     // 토글을 안 켜고 바로 말을 걸어도 역할은 앞서야 한다 — 첫 답부터 결이 달라진다
     const withPersona =
       watchable && !personaRef.current
@@ -390,6 +413,8 @@ export default function AiPanel({
           placeholder={m.social.aiPlaceholder}
           onChange={(e) => setInput(e.target.value)}
           onPaste={onPaste}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={onDrop}
           onKeyDown={(e) => {
             // IME 조합 중 Enter는 확정이지 전송이 아니다 — 조합 확정분이 비운 입력창에
             // 도로 꽂히는 버그(2026-08-03 실측: 전송됐는데 텍스트가 남음)의 원인

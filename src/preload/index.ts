@@ -75,6 +75,8 @@ const api = {
     reload: (): Promise<void> => ipcRenderer.invoke('browser:reload'),
     eval: (js: string): Promise<BrowserResult> => ipcRenderer.invoke('browser:eval', js),
     probeForm: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:probeForm'),
+    // 지금 화면의 글 — '읽기' 토글이 켜져 있을 때 사용자가 물으면 그 순간에만 부른다
+    pageText: (): Promise<BrowserResult> => ipcRenderer.invoke('browser:pageText'),
     // 폼 따라가기 — 켠 동안만 main이 폴링한다. 해제 함수를 돌려주므로 언마운트 시 반드시 끈다.
     watchForm: (on: boolean): Promise<boolean> => ipcRenderer.invoke('browser:watchForm', on),
     onFormChanged: (cb: (c: FormChange) => void): (() => void) => {

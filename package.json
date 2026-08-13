@@ -1,6 +1,6 @@
 {
   "name": "zto",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "ZTO (Zero to One) — 1인 개발사의 출시·계정·소셜·브랜딩 데스크톱 앱",
   "main": "./out/main/index.js",
   "author": "Dan",

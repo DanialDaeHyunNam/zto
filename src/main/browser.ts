@@ -152,7 +152,22 @@ function wireShortcuts(wc: WebContents): void {
     if (!attached || input.type !== 'keyDown') return
     if (!(input.meta || input.control)) return
     const k = input.key.toLowerCase()
-    if (k === 't') {
+    // 편집 단축키를 **뷰에 직접** 건다. 앱 메뉴의 role은 '포커스된 webContents'에 작용하는데,
+    // 임베드 뷰는 클릭해도 포커스를 못 받는 경우가 있어 ⌘C가 렌더러(빈 선택)로 새어나갔다.
+    // 여기서 처리하면 뷰가 키를 받는 그 순간에 뷰 자신에게 실행된다(2026-08-13 실사용 발견).
+    if (k === 'c') {
+      event.preventDefault()
+      wc.copy()
+    } else if (k === 'v') {
+      event.preventDefault()
+      wc.paste()
+    } else if (k === 'x') {
+      event.preventDefault()
+      wc.cut()
+    } else if (k === 'a') {
+      event.preventDefault()
+      wc.selectAll()
+    } else if (k === 't') {
       event.preventDefault()
       newTab()
     } else if (k === 'w') {
@@ -267,6 +282,12 @@ function showActive(): void {
   const a = activeTab()
   if (a) {
     w.contentView.addChildView(a.view)
+    // 키보드 포커스를 뷰로 넘긴다 — 안 하면 ⌘C·타이핑이 뒤의 렌더러로 간다
+    try {
+      a.view.webContents.focus()
+    } catch {
+      /* 파괴 직후면 무시 */
+    }
     if (lastBounds) {
       const b = isStartWc(a.view.webContents)
         ? { x: lastBounds.x, y: lastBounds.y, width: 0, height: 0 }
@@ -554,6 +575,28 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     if (on) startWatch()
     else stopWatch()
     return on
+  })
+
+  // 지금 화면의 **글**을 읽어온다. 폼 프로브(FORM_PROBE_JS)는 콘솔 폼 컨트롤을 세는 물건이라
+  // 소셜 페이지에선 아무것도 못 읽는다 — TikTok에서 AI가 "영상 내용을 볼 수 없다"고 답한 이유다
+  // (2026-08-13 실사용). 주기적으로 긁지 않고 **사용자가 물을 때만** 부른다: 토큰도 아끼고,
+  // "읽는다"는 약속이 토글에 정확히 대응한다.
+  ipcMain.handle('browser:pageText', async (): Promise<BrowserResult> => {
+    const wc = activeWc()
+    if (!wc) return { ok: false, error: 'no-view' }
+    try {
+      const r = (await wc.executeJavaScript(
+        `(() => ({
+          url: location.href,
+          title: document.title,
+          text: (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').slice(0, 8000)
+        }))()`,
+        true
+      )) as { url: string; title: string; text: string }
+      return { ok: true, result: r }
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 300) }
+    }
   })
 
   // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 구조화 JSON으로 회수한다(ROADMAP #4).

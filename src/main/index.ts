@@ -585,6 +585,7 @@ async function chatCodex(
 
   return await new Promise<AiChatResult>((resolve) => {
     const child = spawn(info.bin as string, args, { cwd: app.getPath('userData') })
+    child.stdin.end() // 입력을 줄 게 없다 — 열어두면 CLI가 stdin을 기다린다(claude -p와 같은 함정)
     let out = ''
     let err = ''
     let done = false
@@ -2573,7 +2574,10 @@ app.whenReady().then(() => {
           const args = ['-p', prompt, '--output-format', 'json', '--model', model]
           if (opts?.resume) args.push('--resume', opts.resume)
           return await new Promise<AiChatResult>((resolve) => {
-            execFile(
+            // ⚠️ stdin을 반드시 닫는다. `claude -p`는 파이프로 열린 stdin에 입력이 올까 봐
+            // 3초 기다렸다가 "no stdin data received in 3s" 경고와 함께 실패한다(2026-08-13 실측).
+            // execFile은 stdin을 파이프로 만들고 열어둔 채 두므로, 우리가 즉시 끝내줘야 한다.
+            const child = execFile(
               bin,
               args,
               { cwd: app.getPath('userData'), timeout: 120_000, maxBuffer: 16 * 1024 * 1024 },
@@ -2591,6 +2595,7 @@ app.whenReady().then(() => {
                 }
               }
             )
+            child.stdin?.end()
           })
         }
 
