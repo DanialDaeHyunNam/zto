@@ -10,7 +10,16 @@ import { useI18n } from '../../i18n'
 const SOCIAL_IDS = new Set(PLATFORMS.filter((p) => p.category === 'social').map((p) => p.id))
 const isStartUrl = (s: BrowserState | null): boolean => !s || !s.url || s.url === 'about:blank'
 
-export default function BrowserSurface(): React.JSX.Element {
+// 툴바는 **쓰는 곳에 따라 다르다**. 폼 읽기·콘솔 지도는 콘솔 폼을 겨냥한 물건이라
+// 소셜 페이지에선 아무것도 못 잡는다(TikTok에서 실측) — 거기선 화면을 통째로 AI에게
+// 넘기는 버튼이 훨씬 쓸모 있다. 기본은 콘솔(기존 호출부 불변).
+export default function BrowserSurface({
+  mode = 'console',
+  onSendToAi
+}: {
+  mode?: 'console' | 'social'
+  onSendToAi?: (kind: 'text' | 'html') => void
+} = {}): React.JSX.Element {
   const { m } = useI18n()
   const surfaceRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -177,14 +186,36 @@ export default function BrowserSurface(): React.JSX.Element {
           onChange={(e) => setAddr(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && go()}
         />
-        {/* reverse-sync 1단계 — 현재 페이지 폼을 구조화 JSON으로 회수 (ROADMAP #4) */}
-        <button className="ghost-btn" onClick={probe} title={m.browser.probeFormTitle}>
-          {m.browser.probeForm}
-        </button>
-        {/* 발견 단계 — 콘솔 섹션을 순회하며 실제 링크 수확 */}
-        <button className="ghost-btn" onClick={crawl} title={m.browser.crawlTitle}>
-          {m.browser.crawlConsole}
-        </button>
+        {mode === 'social' ? (
+          <>
+            {/* 크롤링이 막히거나 글이 구조를 잃는 사이트를 위해, 화면을 그대로 오른쪽 AI에게 넘긴다 */}
+            <button
+              className="ghost-btn"
+              onClick={() => onSendToAi?.('text')}
+              title={m.browser.sendTextTitle}
+            >
+              {m.browser.sendText}
+            </button>
+            <button
+              className="ghost-btn"
+              onClick={() => onSendToAi?.('html')}
+              title={m.browser.sendHtmlTitle}
+            >
+              {m.browser.sendHtml}
+            </button>
+          </>
+        ) : (
+          <>
+            {/* reverse-sync 1단계 — 현재 페이지 폼을 구조화 JSON으로 회수 (ROADMAP #4) */}
+            <button className="ghost-btn" onClick={probe} title={m.browser.probeFormTitle}>
+              {m.browser.probeForm}
+            </button>
+            {/* 발견 단계 — 콘솔 섹션을 순회하며 실제 링크 수확 */}
+            <button className="ghost-btn" onClick={crawl} title={m.browser.crawlTitle}>
+              {m.browser.crawlConsole}
+            </button>
+          </>
+        )}
         <button className="choice small active" onClick={go}>
           {m.browser.go}
         </button>

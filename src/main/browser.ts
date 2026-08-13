@@ -581,23 +581,37 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
   // 소셜 페이지에선 아무것도 못 읽는다 — TikTok에서 AI가 "영상 내용을 볼 수 없다"고 답한 이유다
   // (2026-08-13 실사용). 주기적으로 긁지 않고 **사용자가 물을 때만** 부른다: 토큰도 아끼고,
   // "읽는다"는 약속이 토글에 정확히 대응한다.
-  ipcMain.handle('browser:pageText', async (): Promise<BrowserResult> => {
-    const wc = activeWc()
-    if (!wc) return { ok: false, error: 'no-view' }
-    try {
-      const r = (await wc.executeJavaScript(
-        `(() => ({
-          url: location.href,
-          title: document.title,
-          text: (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').slice(0, 8000)
-        }))()`,
-        true
-      )) as { url: string; title: string; text: string }
-      return { ok: true, result: r }
-    } catch (e) {
-      return { ok: false, error: String(e).slice(0, 300) }
+  ipcMain.handle(
+    'browser:pageText',
+    async (_e, kind: 'text' | 'html' = 'text'): Promise<BrowserResult> => {
+      const wc = activeWc()
+      if (!wc) return { ok: false, error: 'no-view' }
+      // 글(innerText)이 기본. HTML은 **글로는 사라지는 구조**가 필요할 때만 —
+      // 링크·속성·숨은 라벨이 답에 필요한 사이트가 있다. 대신 토큰이 비싸서 상한이 다르다.
+      const js =
+        kind === 'html'
+          ? `(() => ({
+              url: location.href,
+              title: document.title,
+              text: document.documentElement.outerHTML.slice(0, 12000)
+            }))()`
+          : `(() => ({
+              url: location.href,
+              title: document.title,
+              text: (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').slice(0, 8000)
+            }))()`
+      try {
+        const r = (await wc.executeJavaScript(js, true)) as {
+          url: string
+          title: string
+          text: string
+        }
+        return { ok: true, result: r }
+      } catch (e) {
+        return { ok: false, error: String(e).slice(0, 300) }
+      }
     }
-  })
+  )
 
   // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 구조화 JSON으로 회수한다(ROADMAP #4).
   // 결과를 userData/zto-form-probe.json에도 남긴다: 콘솔 폼은 로그인 뒤에 있어 밖에서 볼 수 없고,

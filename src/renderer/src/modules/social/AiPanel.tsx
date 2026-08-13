@@ -87,7 +87,8 @@ export default function AiPanel({
   watch = false,
   watchable = false,
   feature = 'social',
-  task
+  task,
+  inject
 }: {
   // 콘솔 코파일럿 모드 — 왼쪽 폼을 따라가며 사람이 고른 것을 감지한다(기본 켜짐)
   watch?: boolean
@@ -95,6 +96,8 @@ export default function AiPanel({
   // 피드는 남의 글·DM이 섞여 있고 provider가 API 키면 그게 밖으로 나간다. 그래서 옵트인이다.
   // 게다가 피드에서 '바뀐 것'은 대개 스크롤이라, 콘솔 폼과 달리 자동 질문이 신호가 아니라 소음이다
   watchable?: boolean
+  // 왼쪽 툴바가 "이 화면을 넘겨줘"라고 보낸 신호. seq가 바뀔 때마다 한 번 처리한다
+  inject?: { kind: 'text' | 'html'; seq: number } | null
   feature?: AiFeature
   // 무엇을 하러 왔는지. 있으면 대화를 이걸로 연다
   task?: CopilotTask
@@ -267,6 +270,36 @@ export default function AiPanel({
     void ask(briefing(task, ko), [])
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [task])
+
+  // ---- 왼쪽 툴바가 넘긴 화면을 대화에 얹기 ----
+  // "읽기" 토글과 다른 물건이다: 토글은 **물을 때마다** 자동으로 붙이고, 이 버튼은 **지금 한 번**
+  // 넘긴다. 크롤링이 막히거나 글로는 구조가 사라지는 사이트에서, 사람이 직접 복붙하던 일을 대신한다.
+  const injectSeq = useRef(0)
+  useEffect(() => {
+    if (!inject || inject.seq === injectSeq.current) return
+    injectSeq.current = inject.seq
+    void (async () => {
+      const r = await window.zto.browser.pageText(inject.kind)
+      const pg = r.ok ? (r.result as { url: string; title: string; text: string }) : null
+      if (!pg?.text?.trim()) {
+        setMsgs((prev) => [...prev, { role: 'system', text: m.social.injectEmpty }])
+        return
+      }
+      const label = inject.kind === 'html' ? m.browser.sendHtml : m.browser.sendText
+      // 화면에는 짧은 줄만, 프롬프트에는 본문 전체 — 대화가 기계 텍스트로 도배되면 못 읽는다
+      void ask(
+        [
+          `${m.social.injectPrompt}`,
+          `[${pg.title}] ${pg.url}`,
+          pg.text,
+          langLine(ko)
+        ].join('\n\n'),
+        [],
+        { role: 'user', text: `${label} — ${pg.title || pg.url}` }
+      )
+    })()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inject])
 
   // ---- 콘솔 코파일럿: 왼쪽 폼 따라가기 ----
   // main이 1.5초마다 폼을 읽어 **달라졌을 때만** 알려준다. 여기서는 그걸 대화로 옮긴다.
