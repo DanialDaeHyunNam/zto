@@ -65,6 +65,44 @@ const socialPersona = (ko: boolean): string =>
     langLine(ko)
   ].join('\n')
 
+// ---- 도구 프로토콜 ----
+// provider가 넷(claude CLI·codex·OpenAI·hosted)이라 **공급자별 tool-calling에 기대지 않는다**.
+// 대신 모델이 한 줄짜리 지시를 뱉으면 우리가 실행하고 결과를 다시 넣어주는 얇은 루프를 쓴다 —
+// 어느 모델이든 같은 방식으로 돌고, 붙이는 데 provider 코드를 안 건드린다.
+//
+// ⚠️ **읽기 전용만** 준다. 여긴 사용자가 직접 로그인한 소셜 계정이라, 클릭·입력·이동을 열면
+// AI가 글을 올리거나 DM을 보낼 수 있게 된다. 그건 "비가역 액션은 사람 컨펌"(SPEC §3)에
+// 걸리는 별개 결정이므로 이 판에서는 제외한다. 스크롤만 예외 — 되돌릴 수 있고, 더 읽으려면 필요하다.
+// 모델이 JS를 짜서 보내는 경로도 없다(스크립트는 우리 것 고정).
+const TOOL_TAG = /<zto-tool>\s*(\{[\s\S]*?\})\s*<\/zto-tool>/
+
+const toolPreamble = (ko: boolean): string =>
+  ko
+    ? [
+        '당신은 왼쪽 브라우저 화면을 조사할 수 있는 도구를 가지고 있습니다.',
+        '필요하면 답 대신 **정확히 이 형식 한 줄만** 출력하세요(설명은 그 앞에 한 문장까지):',
+        '<zto-tool>{"tool":"page_text"}</zto-tool>',
+        '쓸 수 있는 도구:',
+        '- page_text — 지금 화면에 보이는 글을 읽는다. 대부분의 질문은 이걸로 충분하다',
+        '- page_html — HTML 원문을 읽는다. 링크·라벨·숨은 속성이 필요할 때만',
+        '- screenshot — 지금 화면을 이미지로 본다. 배치·디자인·썸네일처럼 글로 안 담기는 것',
+        '- scroll — 아래로 한 화면 내린다. {"tool":"scroll","dy":800}',
+        '결과를 받으면 그걸로 답하거나, 필요하면 도구를 한 번 더 부르세요(최대 3회).',
+        '도구가 필요 없으면 그냥 답하세요.'
+      ].join('\n')
+    : [
+        'You have tools to inspect the browser page on the left.',
+        'When you need one, output **exactly this single line** instead of an answer (at most one sentence before it):',
+        '<zto-tool>{"tool":"page_text"}</zto-tool>',
+        'Available tools:',
+        '- page_text — read the visible text of the page. Enough for most questions',
+        '- page_html — read the raw HTML. Only when links, labels or hidden attributes matter',
+        '- screenshot — see the screen as an image. For layout, design, thumbnails — things text loses',
+        '- scroll — scroll down one screen. {"tool":"scroll","dy":800}',
+        'When you get the result, answer with it — or call one more tool if needed (max 3).',
+        'If no tool is needed, just answer.'
+      ].join('\n')
+
 function briefing(t: CopilotTask, ko: boolean): string {
   return [
     '사용자가 ZTO(앱 스토어 관리 도구)에서 이 콘솔 화면으로 넘어왔습니다.',
@@ -185,30 +223,81 @@ export default function AiPanel({
 
   // 한 턴 보내기. `show`는 화면에 남길 사용자 말풍선 — 자동 질문일 땐 폼 덤프 대신
   // 짧은 시스템 줄만 남기려고 프롬프트와 표시를 분리했다(대화가 기계 텍스트로 도배되면 못 읽는다).
+  // 도구 한 건 실행 — 모델이 짠 코드를 돌리지 않는다. 이름으로 우리 함수를 고를 뿐이다.
+  const runTool = async (
+    spec: { tool?: string; dy?: number } | null
+  ): Promise<{ note: string; text?: string; image?: string }> => {
+    const kind = spec?.tool
+    if (kind === 'screenshot') {
+      const d = await window.zto.browser.capture()
+      return d
+        ? { note: m.social.toolShot, image: d, text: m.social.toolShotResult }
+        : { note: m.social.toolFailed }
+    }
+    if (kind === 'scroll') {
+      const dy = typeof spec?.dy === 'number' ? Math.max(-4000, Math.min(4000, spec.dy)) : 800
+      await window.zto.browser.eval(`window.scrollBy(0, ${dy}); ''`)
+      const r = await window.zto.browser.pageText('text')
+      const pg = r.ok ? (r.result as { text: string }) : null
+      return { note: m.social.toolScroll, text: pg?.text ?? '' }
+    }
+    if (kind === 'page_text' || kind === 'page_html') {
+      const r = await window.zto.browser.pageText(kind === 'page_html' ? 'html' : 'text')
+      const pg = r.ok ? (r.result as { url: string; title: string; text: string }) : null
+      if (!pg?.text) return { note: m.social.toolFailed }
+      return {
+        note: kind === 'page_html' ? m.social.toolHtml : m.social.toolText,
+        text: `[${pg.title}] ${pg.url}\n${pg.text}`
+      }
+    }
+    return { note: m.social.toolUnknown }
+  }
+
+  // 한 번 물으면 **모델이 필요한 만큼 도구를 부르고** 우리가 실행해 되먹인다.
+  // provider별 tool-calling에 기대지 않는 얇은 루프 — 어느 모델이든 같은 방식으로 돈다.
+  // 상한 3회: 모르는 화면에서 무한히 훑는 것보다 "못 찾겠다"가 낫고, 토큰이 새지 않는다.
   const ask = async (prompt: string, sending: string[], show?: Msg): Promise<void> => {
     if (busyRef.current || !prompt) return
     busyRef.current = true
     setBusy(true)
     if (show) setMsgs((prev) => [...prev, show])
-    const images = sending
-      .map(splitDataUrl)
-      .filter((x): x is { mediaType: string; data: string } => !!x)
-    const r = await window.zto.ai.chat(prompt, {
-      resume: sessionRef.current,
-      images: images.length > 0 ? images : undefined,
-      feature
-    })
-    busyRef.current = false
-    setBusy(false)
-    if (r.ok) {
-      setMsgs((prev) => [...prev, { role: 'assistant', text: r.text }])
+    let nextPrompt = prompt
+    let nextImgs = sending
+    for (let round = 0; round <= 3; round++) {
+      const images = nextImgs
+        .map(splitDataUrl)
+        .filter((x): x is { mediaType: string; data: string } => !!x)
+      const r = await window.zto.ai.chat(nextPrompt, {
+        resume: sessionRef.current,
+        images: images.length > 0 ? images : undefined,
+        feature
+      })
+      if (!r.ok) {
+        setMsgs((prev) => [...prev, { role: 'assistant', text: '⚠ ' + (r.error ?? 'failed') }])
+        break
+      }
       if (r.sessionId) {
         sessionRef.current = r.sessionId
         setSession(r.sessionId)
       }
-    } else {
-      setMsgs((prev) => [...prev, { role: 'assistant', text: '⚠ ' + (r.error ?? 'failed') }])
+      const hit = watchable && round < 3 ? TOOL_TAG.exec(r.text) : null
+      const said = hit ? r.text.replace(TOOL_TAG, '').trim() : r.text
+      if (said) setMsgs((prev) => [...prev, { role: 'assistant', text: said }])
+      if (!hit) break
+      let spec: { tool?: string; dy?: number } | null = null
+      try {
+        spec = JSON.parse(hit[1])
+      } catch {
+        /* 형식이 깨졌으면 아래에서 unknown으로 떨어진다 */
+      }
+      const res = await runTool(spec)
+      // 화면엔 무엇을 했는지 한 줄만 — 본문은 프롬프트로만 간다
+      setMsgs((prev) => [...prev, { role: 'system', text: res.note }])
+      nextPrompt = res.text ? `${m.social.toolResult}\n\n${res.text}` : m.social.toolFailed
+      nextImgs = res.image ? [res.image] : []
     }
+    busyRef.current = false
+    setBusy(false)
   }
 
   // 토글을 켠 순간 = 도움을 요청한 순간. 페르소나를 심고 **AI가 먼저 말을 건다**.
@@ -253,7 +342,8 @@ export default function AiPanel({
     // 토글을 안 켜고 바로 말을 걸어도 역할은 앞서야 한다 — 첫 답부터 결이 달라진다
     const withPersona =
       watchable && !personaRef.current
-        ? ((personaRef.current = true), `${socialPersona(ko)}\n\n---\n${withForm}`)
+        ? ((personaRef.current = true),
+          `${socialPersona(ko)}\n\n${toolPreamble(ko)}\n\n---\n${withForm}`)
         : withForm
     await ask(withPersona, sending, { role: 'user', text, imgs: sending })
   }
