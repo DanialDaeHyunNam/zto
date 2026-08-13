@@ -269,6 +269,31 @@ function makeTab(): Tab {
 }
 
 // 활성 탭만 창에 붙인다 — 나머지는 뗀다(한 번에 하나만 보임). 활성 뷰 bounds는 lastBounds(시작이면 0×0).
+// 화면에서 내려간 뷰는 **소리를 내지 않는다**. 배경 스로틀링은 끈 채로 두므로
+// (자동화가 화면 뒤에서 돌아야 한다 — 2026-07-30) 뷰는 계속 살아 있고, 그래서 소셜 탭을
+// 떠나도 영상이 계속 재생됐다(2026-08-13 실사용). 죽이는 대신 **재생만 멈춘다**:
+// 로그인 세션도, 스크롤 위치도, 자동화도 그대로 두고 소리와 프레임만 끈다.
+function suspendMedia(wc: WebContents): void {
+  try {
+    wc.setAudioMuted(true)
+  } catch {
+    /* 파괴 직후면 무시 */
+  }
+  wc.executeJavaScript(
+    `document.querySelectorAll('video,audio').forEach((el) => { try { el.pause() } catch (e) {} })`,
+    true
+  ).catch(() => {
+    /* 이동 중이면 실패한다 — 다음에 붙을 때 다시 맞춘다 */
+  })
+}
+function unmute(wc: WebContents): void {
+  try {
+    wc.setAudioMuted(false)
+  } catch {
+    /* 무시 */
+  }
+}
+
 function showActive(): void {
   const w = getWin()
   if (!w || w.isDestroyed()) return
@@ -278,6 +303,7 @@ function showActive(): void {
     } catch {
       /* 안 붙어 있었으면 무시 */
     }
+    if (t.id !== activeId) suspendMedia(t.view.webContents)
   }
   const a = activeTab()
   if (a) {
@@ -288,6 +314,7 @@ function showActive(): void {
     } catch {
       /* 파괴 직후면 무시 */
     }
+    unmute(a.view.webContents) // 재생은 되살리지 않는다 — 사람이 누른 적 없는 소리를 내지 않는다
     if (lastBounds) {
       const b = isStartWc(a.view.webContents)
         ? { x: lastBounds.x, y: lastBounds.y, width: 0, height: 0 }
@@ -515,6 +542,8 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
         /* 무시 */
       }
     }
+    // 다른 모듈로 나갔다 = 이 브라우저는 지금 활성이 아니다. 탭 전부 재생을 멈춘다
+    for (const t of tabs) suspendMedia(t.view.webContents)
     attached = false
   })
 
