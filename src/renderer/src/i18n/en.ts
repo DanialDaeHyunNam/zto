@@ -70,6 +70,12 @@ export const en = {
     toolResult: 'Tool result:',
     toolFailed: "Couldn't read the page",
     toolUnknown: 'Unknown tool — ignored',
+    draftEdit: 'Edit',
+    draftDone: 'Done',
+    draftCopy: 'Copy',
+    draftCopied: 'Copied',
+    draftExpand: 'Expand',
+    draftCollapse: 'Collapse',
     aiEmptyConsole:
       'Fill the real console form on the left — ZTO watches what you pick and helps decide the next one. Ask anything about the current question.',
     formProgress: '{a}/{n} answered',

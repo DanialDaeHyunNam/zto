@@ -4306,3 +4306,64 @@ button {
   color: var(--fg);
   font-weight: 600;
 }
+
+/* ---------- AI 초안 카드 ---------- */
+/* 코드블록으로 온 것 = 바로 쓸 글(캡션·댓글). 읽고 끝내지 않고 복사·편집까지 여기서 끝낸다 */
+.draft-card {
+  margin: 8px 0;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  overflow: hidden;
+}
+.draft-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.draft-head-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.draft-copied {
+  font-size: 10.5px;
+  color: var(--muted);
+}
+.draft-ic {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+.draft-body {
+  margin: 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: inherit;
+  line-height: 1.6;
+}
+/* 긴 초안은 접어둔다 — 대화 흐름이 초안 하나에 밀려나지 않게 */
+.draft-body.clipped {
+  max-height: 260px;
+  overflow: hidden;
+  -webkit-mask-image: linear-gradient(180deg, #000 72%, transparent);
+  mask-image: linear-gradient(180deg, #000 72%, transparent);
+}
+.draft-ta {
+  width: 100%;
+  border: none;
+  border-radius: 0;
+  background: rgba(0, 0, 0, 0.25);
+  color: var(--fg);
+  font: inherit;
+  line-height: 1.6;
+  padding: 10px 12px;
+  resize: vertical;
+}
+.draft-ta:focus {
+  outline: none;
+}

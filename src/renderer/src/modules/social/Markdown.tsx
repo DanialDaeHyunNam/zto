@@ -8,7 +8,76 @@
 //  ② 채팅 말풍선에 필요한 문법은 몇 개뿐이다(굵게·기울임·코드·목록·링크). 전체 스펙은 짐이다.
 //
 // 지원: **굵게** · *기울임* · `코드` · [링크](url) · - 목록 · 1. 목록 · ``` 코드블록 · 줄바꿈
-import type React from 'react'
+import React, { useState } from 'react'
+import { useI18n } from '../../i18n'
+
+// ---------- 초안 카드 ----------
+// 코드블록으로 온 것은 소셜 패널에서 사실상 **바로 쓸 글**(캡션·댓글·스레드)이다.
+// 읽기만 되는 <pre>로 두면 결국 드래그해서 복사하고 다른 데 붙여 고치게 되는데,
+// 그 왕복이 이 패널을 쓰는 이유를 깎는다. 그래서 복사·편집을 카드 안에서 끝낸다.
+// 편집은 **로컬**이다 — 대화에 되돌려 보내지 않는다(고친 건 사람 것이고, AI가 다시 손대면 안 된다).
+function DraftCard({ text }: { text: string }): React.JSX.Element {
+  const { m } = useI18n()
+  const [val, setVal] = useState(text)
+  const [editing, setEditing] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const [open, setOpen] = useState(false)
+  const long = val.length > 600 || val.split('\n').length > 14
+
+  const copy = (): void => {
+    void navigator.clipboard.writeText(val)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="draft-card">
+      <div className="draft-head">
+        <button className="ghost-btn mini" onClick={() => setEditing(!editing)}>
+          {editing ? m.social.draftDone : m.social.draftEdit}
+        </button>
+        <span className="draft-head-right">
+          {copied && <span className="draft-copied">{m.social.draftCopied}</span>}
+          <button className="ghost-btn mini" onClick={copy} title={m.social.draftCopy}>
+            <svg viewBox="0 0 16 16" className="draft-ic" aria-hidden="true">
+              <rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" strokeWidth="1.4" />
+              <path d="M10.5 3.5H3.6a1 1 0 0 0-1 1V11" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
+          {long && (
+            <button
+              className="ghost-btn mini"
+              onClick={() => setOpen(!open)}
+              title={open ? m.social.draftCollapse : m.social.draftExpand}
+            >
+              <svg viewBox="0 0 16 16" className="draft-ic" aria-hidden="true">
+                <path
+                  d={open ? 'M9 7h4M3 9h4M11 3v4M5 9v4' : 'M10 2h4v4M6 14H2v-4M14 2l-5 5M2 14l5-5'}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </button>
+          )}
+        </span>
+      </div>
+      {editing ? (
+        <textarea
+          className="draft-ta"
+          value={val}
+          onChange={(e) => setVal(e.target.value)}
+          rows={Math.min(24, val.split('\n').length + 2)}
+          autoFocus
+        />
+      ) : (
+        <pre className={`draft-body ${long && !open ? 'clipped' : ''}`}>{val}</pre>
+      )}
+    </div>
+  )
+}
 
 // 인라인 문법 — 굵게가 기울임보다 먼저다(`**`를 `*` 두 번으로 잘못 먹지 않게).
 // 링크는 http/https만 받는다(javascript: 등 스킴을 통과시키지 않는다).
@@ -64,7 +133,7 @@ export default function Markdown({ text }: { text: string }): React.JSX.Element 
       i++
       while (i < lines.length && !lines[i].trimStart().startsWith('```')) body.push(lines[i++])
       i++ // 닫는 ```
-      blocks.push(<pre key={key++}>{body.join('\n')}</pre>)
+      blocks.push(<DraftCard key={key++} text={body.join('\n')} />)
       continue
     }
 

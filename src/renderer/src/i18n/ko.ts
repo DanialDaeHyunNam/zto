@@ -72,6 +72,12 @@ export const ko: Messages = {
     toolResult: '도구 결과:',
     toolFailed: '화면을 읽지 못했습니다',
     toolUnknown: '모르는 도구 — 무시했습니다',
+    draftEdit: '편집',
+    draftDone: '완료',
+    draftCopy: '복사',
+    draftCopied: '복사됨',
+    draftExpand: '펼치기',
+    draftCollapse: '접기',
     aiEmptyConsole:
       '왼쪽 진짜 콘솔 폼을 채우세요 — 고르시는 걸 ZTO가 보고 다음 항목을 같이 정합니다. 지금 문항이 헷갈리면 물어보세요.',
     formProgress: '{a}/{n} 답함',
