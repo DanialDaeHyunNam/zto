@@ -8,6 +8,8 @@ import { useI18n } from '../../i18n'
 // WebContentsView는 main이 소유해 이 '구멍'(surface) 위에 얹힌다. 시작 상태(about:blank)일 땐 뷰를
 // 0×0으로 접어 숨기고 스피드다이얼(내 소셜 계정 바로가기)을 노출한다 — 뷰가 React 위를 덮기 때문.
 const SOCIAL_IDS = new Set(PLATFORMS.filter((p) => p.category === 'social').map((p) => p.id))
+// 맥은 ⌥, 그 외는 Alt — main은 alt 플래그 하나로 받으므로 표기만 갈린다
+const TAB_KEY = window.zto.platform === 'darwin' ? '⌥' : 'Alt+'
 const isStartUrl = (s: BrowserState | null): boolean => !s || !s.url || s.url === 'about:blank'
 
 // 툴바는 **쓰는 곳에 따라 다르다**. 폼 읽기·콘솔 지도는 콘솔 폼을 겨냥한 물건이라
@@ -15,10 +17,13 @@ const isStartUrl = (s: BrowserState | null): boolean => !s || !s.url || s.url ==
 // 넘기는 버튼이 훨씬 쓸모 있다. 기본은 콘솔(기존 호출부 불변).
 export default function BrowserSurface({
   mode = 'console',
-  onSendToAi
+  onSendToAi,
+  highlight
 }: {
   mode?: 'console' | 'social'
   onSendToAi?: (kind: 'text' | 'html') => void
+  // AI가 요청한 버튼을 빛나게 — 채팅의 안내 문장과 눌러야 할 자리를 잇는다
+  highlight?: 'text' | 'html' | null
 } = {}): React.JSX.Element {
   const { m } = useI18n()
   const surfaceRef = useRef<HTMLDivElement | null>(null)
@@ -150,7 +155,7 @@ export default function BrowserSurface({
               }}
             >
               {/* ⌘1..9 — 어느 탭이 몇 번인지 한눈에. 순서를 바꾸면 번호도 따라온다 */}
-              {i < 9 && <span className="br-tab-key">⌘{i + 1}</span>}
+              {i < 9 && <span className="br-tab-key">{TAB_KEY}{i + 1}</span>}
               <span className="br-tab-title">{tabLabel(t)}</span>
               <button
                 className="br-tab-close"
@@ -190,14 +195,14 @@ export default function BrowserSurface({
           <>
             {/* 크롤링이 막히거나 글이 구조를 잃는 사이트를 위해, 화면을 그대로 오른쪽 AI에게 넘긴다 */}
             <button
-              className="ghost-btn"
+              className={`ghost-btn ${highlight === 'text' ? 'wanted' : ''}`}
               onClick={() => onSendToAi?.('text')}
               title={m.browser.sendTextTitle}
             >
               {m.browser.sendText}
             </button>
             <button
-              className="ghost-btn"
+              className={`ghost-btn ${highlight === 'html' ? 'wanted' : ''}`}
               onClick={() => onSendToAi?.('html')}
               title={m.browser.sendHtmlTitle}
             >

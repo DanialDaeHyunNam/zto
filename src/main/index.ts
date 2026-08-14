@@ -5,6 +5,7 @@ import {
   clipboard,
   dialog,
   ipcMain,
+  Menu,
   nativeImage,
   net,
   powerMonitor,
@@ -22,7 +23,7 @@ import { homedir } from 'os'
 import { hostname } from 'os'
 import { createLicense } from './license'
 import { createUpdater } from './updater'
-import { registerBrowserIpc } from './browser'
+import { closeTabIfBrowserVisible, registerBrowserIpc } from './browser'
 import { probeAppContent, pullDataSafety } from './console-sync'
 import {
   imageInfo,
@@ -2437,7 +2438,40 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'zto-asset', privileges: { standard: true, secure: true, supportFetchAPI: true } }
 ])
 
+// 앱 메뉴 — 기본 메뉴를 그대로 두면 ⌘W가 **창을 닫는다**. 액셀러레이터는 네이티브 층에서
+// 먼저 처리돼 페이지의 before-input-event로는 못 막으므로, 우리가 메뉴를 소유해 분기시킨다.
+// 편집 role(복사·붙여넣기·전체선택)도 여기서 보장된다 — 임베드 뷰의 ⌘C/V가 여기에 기댄다.
+function installMenu(): void {
+  const isMac = process.platform === 'darwin'
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      ...(isMac ? [{ role: 'appMenu' as const }] : []),
+      { role: 'editMenu' },
+      {
+        label: 'Window',
+        submenu: [
+          { role: 'minimize' as const },
+          {
+            // 브라우저가 보이면 탭을, 아니면 창을 닫는다. 같은 키가 맥락에 따라 다르게 동작한다
+            label: 'Close',
+            accelerator: 'CmdOrCtrl+W',
+            click: () => {
+              if (closeTabIfBrowserVisible()) return
+              BrowserWindow.getFocusedWindow()?.close()
+            }
+          },
+          ...(isMac
+            ? [{ type: 'separator' as const }, { role: 'zoom' as const }, { role: 'front' as const }]
+            : [])
+        ]
+      },
+      { role: 'viewMenu' }
+    ])
+  )
+}
+
 app.whenReady().then(() => {
+  installMenu()
   // 무료 사용 3일은 공식 빌드 **첫 실행부터** — userData가 준비된 뒤에 시계를 박는다.
   // 소스 빌드는 시계 자체가 없다 (계정 인벤토리는 어느 빌드든 영구 무료)
   if (license.info().official) license.startTrial()

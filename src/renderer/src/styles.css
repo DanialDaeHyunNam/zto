@@ -85,8 +85,8 @@ button {
   backdrop-filter: blur(20px);
   display: flex;
   flex-direction: column;
-  padding: 24px 14px 16px;
-  gap: 6px;
+  padding: 24px 10px 16px;
+  gap: 2px;
 }
 
 .logo {
@@ -115,7 +115,7 @@ button {
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
-  padding: 11px 14px;
+  padding: 9px 10px;
   border: 1px solid transparent;
   border-radius: 12px;
   background: transparent;
@@ -4366,4 +4366,51 @@ button {
 }
 .draft-ta:focus {
   outline: none;
+}
+
+/* 사이드바 모듈 단축키 배지 — 바깥(앱)은 ⌘, 안(브라우저 탭)은 ⌥로 층을 나눈다 */
+.nav-item {
+  display: flex;
+  /* 위 .nav-item이 column이라 배지가 라벨 **위로** 쌓였다 — 여기서 가로로 되돌린다 */
+  flex-direction: row;
+  /* 설명이 두 줄로 접히는 항목이 있어 baseline은 배지를 위로 띄운다 — 세로 중앙이 안정적이다 */
+  align-items: center;
+  gap: 7px;
+}
+.nav-key {
+  flex: none;
+  /* 오른쪽 끝에 붙인다 — 라벨이 먼저 읽히고 단축키는 곁들이다 */
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  opacity: 0.75;
+}
+.nav-item.active .nav-key {
+  color: rgba(255, 255, 255, 0.85);
+  opacity: 1;
+}
+.nav-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* AI가 요청한 버튼 — 채팅의 안내와 눌러야 할 자리를 잇는다.
+   hover가 아니라 **지속 상태**라 액센트를 써도 된다(hover는 밝기만이라는 규칙과 충돌 없음) */
+@keyframes wanted-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0);
+  }
+}
+.ghost-btn.wanted {
+  border-color: var(--brand);
+  color: var(--fg);
+  animation: wanted-pulse 1.6s ease-out infinite;
 }

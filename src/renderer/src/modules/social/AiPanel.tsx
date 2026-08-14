@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import type { AiFeature, AiModel, AiProviderId, CopilotTask } from '../../../../shared/launch-types'
 import type { FormSnapshot } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
+// 프롬프트는 공용 모듈에 산다 — evals가 같은 것을 돌려야 회귀를 잡는다(복제하면 곧 갈라진다)
+import {
+  isResearchUrl,
+  langLine,
+  socialPersona,
+  TOOL_TAG,
+  toolPreamble
+} from '../../../../shared/social-prompts'
 import Markdown from './Markdown'
 
 // provider 표기는 브랜드명이라 번역하지 않는다(설정 페이지와 같은 문자열).
@@ -46,64 +54,6 @@ function describeForm(s: FormSnapshot): string {
 // ZTO가 **직접 만드는** 프롬프트는 화면 언어를 따라야 한다. 지금까지 프롬프트가 한국어
 // 하드코딩이라 영어 UI에서도 AI가 한국어로 답했다(2026-07-31 Dan). 사용자가 직접 친 말에는
 // 안 붙인다 — 그건 사용자의 언어가 곧 지시다.
-const langLine = (ko: boolean): string =>
-  ko ? '한국어로 답하세요.' : 'Answer in English.'
-
-// 소셜 패널의 **역할 규정**. 화면에 안내 문구를 띄우는 것과 다르다 — 문구는 읽고 넘기지만
-// 페르소나는 이후 모든 답의 결을 바꾼다(무엇을 볼지, 무엇을 먼저 말할지).
-// 대화 한 세션에 한 번만 실어 보낸다(resume로 맥락이 이어지므로 반복은 낭비다).
-const socialPersona = (ko: boolean): string =>
-  [
-    '당신은 소셜미디어 그로스 마케터이자 카피라이터입니다. X·Threads·Instagram에서 무엇이 읽히고 무엇이 퍼지는지를 실무로 아는 사람입니다.',
-    '이 대화에서 당신이 하는 일:',
-    '- 사용자가 올리려는 글의 **훅(첫 문장)**이 손을 멈추게 하는지 본다',
-    '- 문장이 짧고 읽히는지, 군더더기·전문용어·자기소개식 도입을 걷어낼 곳이 있는지 짚는다',
-    '- 저장·공유·답글을 부를 요소(구체적 숫자, 의외성, 반박 여지, 질문)가 있는지 본다',
-    '- 플랫폼별 관습(글자 수, 스레드로 쪼갤 지점, 해시태그 남용 금지)을 반영한다',
-    '규칙: 칭찬으로 시작하지 말고 **고칠 곳 하나**를 먼저 말한다. 대안 문장은 예시로 직접 써서 보여준다.',
-    '길게 쓰지 않는다 — 한 번에 두세 문장.',
-    '**그대로 올릴 수 있는 글(캡션·댓글·스레드)을 제안할 때는 ``` 로 감싸서** 내보내세요. 사용자가 그 블록을 바로 복사·편집합니다. 설명은 블록 밖에 씁니다.',
-    langLine(ko)
-  ].join('\n')
-
-// ---- 도구 프로토콜 ----
-// provider가 넷(claude CLI·codex·OpenAI·hosted)이라 **공급자별 tool-calling에 기대지 않는다**.
-// 대신 모델이 한 줄짜리 지시를 뱉으면 우리가 실행하고 결과를 다시 넣어주는 얇은 루프를 쓴다 —
-// 어느 모델이든 같은 방식으로 돌고, 붙이는 데 provider 코드를 안 건드린다.
-//
-// ⚠️ **읽기 전용만** 준다. 여긴 사용자가 직접 로그인한 소셜 계정이라, 클릭·입력·이동을 열면
-// AI가 글을 올리거나 DM을 보낼 수 있게 된다. 그건 "비가역 액션은 사람 컨펌"(SPEC §3)에
-// 걸리는 별개 결정이므로 이 판에서는 제외한다. 스크롤만 예외 — 되돌릴 수 있고, 더 읽으려면 필요하다.
-// 모델이 JS를 짜서 보내는 경로도 없다(스크립트는 우리 것 고정).
-const TOOL_TAG = /<zto-tool>\s*(\{[\s\S]*?\})\s*<\/zto-tool>/
-
-const toolPreamble = (ko: boolean): string =>
-  ko
-    ? [
-        '당신은 왼쪽 브라우저 화면을 조사할 수 있는 도구를 가지고 있습니다.',
-        '필요하면 답 대신 **정확히 이 형식 한 줄만** 출력하세요(설명은 그 앞에 한 문장까지):',
-        '<zto-tool>{"tool":"page_text"}</zto-tool>',
-        '쓸 수 있는 도구:',
-        '- page_text — 지금 화면에 보이는 글을 읽는다. 대부분의 질문은 이걸로 충분하다',
-        '- page_html — HTML 원문을 읽는다. 링크·라벨·숨은 속성이 필요할 때만',
-        '- screenshot — 지금 화면을 이미지로 본다. 배치·디자인·썸네일처럼 글로 안 담기는 것',
-        '- scroll — 아래로 한 화면 내린다. {"tool":"scroll","dy":800}',
-        '결과를 받으면 그걸로 답하거나, 필요하면 도구를 한 번 더 부르세요(최대 3회).',
-        '도구가 필요 없으면 그냥 답하세요.'
-      ].join('\n')
-    : [
-        'You have tools to inspect the browser page on the left.',
-        'When you need one, output **exactly this single line** instead of an answer (at most one sentence before it):',
-        '<zto-tool>{"tool":"page_text"}</zto-tool>',
-        'Available tools:',
-        '- page_text — read the visible text of the page. Enough for most questions',
-        '- page_html — read the raw HTML. Only when links, labels or hidden attributes matter',
-        '- screenshot — see the screen as an image. For layout, design, thumbnails — things text loses',
-        '- scroll — scroll down one screen. {"tool":"scroll","dy":800}',
-        'When you get the result, answer with it — or call one more tool if needed (max 3).',
-        'If no tool is needed, just answer.'
-      ].join('\n')
-
 function briefing(t: CopilotTask, ko: boolean): string {
   return [
     '사용자가 ZTO(앱 스토어 관리 도구)에서 이 콘솔 화면으로 넘어왔습니다.',
@@ -127,7 +77,8 @@ export default function AiPanel({
   watchable = false,
   feature = 'social',
   task,
-  inject
+  inject,
+  onNeedPage
 }: {
   // 콘솔 코파일럿 모드 — 왼쪽 폼을 따라가며 사람이 고른 것을 감지한다(기본 켜짐)
   watch?: boolean
@@ -137,6 +88,8 @@ export default function AiPanel({
   watchable?: boolean
   // 왼쪽 툴바가 "이 화면을 넘겨줘"라고 보낸 신호. seq가 바뀔 때마다 한 번 처리한다
   inject?: { kind: 'text' | 'html'; seq: number } | null
+  // 읽기가 꺼진 채 AI가 화면을 필요로 할 때 — 왼쪽 버튼을 빛나게 해 사람이 누르게 한다
+  onNeedPage?: (kind: 'text' | 'html') => void
   feature?: AiFeature
   // 무엇을 하러 왔는지. 있으면 대화를 이걸로 연다
   task?: CopilotTask
@@ -226,9 +179,51 @@ export default function AiPanel({
   // 짧은 시스템 줄만 남기려고 프롬프트와 표시를 분리했다(대화가 기계 텍스트로 도배되면 못 읽는다).
   // 도구 한 건 실행 — 모델이 짠 코드를 돌리지 않는다. 이름으로 우리 함수를 고를 뿐이다.
   const runTool = async (
-    spec: { tool?: string; dy?: number } | null
-  ): Promise<{ note: string; text?: string; image?: string }> => {
+    spec: { tool?: string; dy?: number; q?: string; url?: string } | null
+  ): Promise<{ note: string; text?: string; image?: string; need?: 'text' | 'html' }> => {
     const kind = spec?.tool
+
+    // 우리 데이터 — 토글과 무관하다. 사용자가 ZTO에 직접 적어둔 것이고 밖으로 나갈 일이 없다.
+    // 이게 없으면 AI가 "어느 앱이죠?"를 되묻는다 — 콘솔에서 이미 고쳤던 실수의 반복이다.
+    if (kind === 'my_accounts') {
+      const list = await window.zto.accounts.list()
+      const lines = list.map((a) => `${a.email}${a.memo ? ` — ${a.memo}` : ''} · ${(a.apps ?? []).join(', ')}`)
+      return { note: m.social.toolAccounts, text: lines.join('\n') || '(none)' }
+    }
+    if (kind === 'my_apps') {
+      const sheets = await window.zto.launch.listSheets()
+      const lines = sheets.map((x) => `${x.appName} (${x.packageName})`)
+      return { note: m.social.toolApps, text: lines.join('\n') || '(none)' }
+    }
+
+    // 찾아보러 가기 — 공개 리서치 소스는 토글 없이, 그 밖은 로그인 상태가 묻어날 수 있어 토글 필요
+    if (kind === 'search_web' || kind === 'open_url') {
+      const url =
+        kind === 'search_web'
+          ? `https://www.google.com/search?q=${encodeURIComponent(String(spec?.q ?? ''))}`
+          : String(spec?.url ?? '')
+      if (!url) return { note: m.social.toolFailed }
+      if (!watch && !isResearchUrl(url)) {
+        onNeedPage?.('text')
+        return { note: m.social.needPage, need: 'text' }
+      }
+      const r = await window.zto.browser.openAndRead(url)
+      const pg = r.ok ? (r.result as { url: string; title: string; text: string }) : null
+      if (!pg?.text) return { note: m.social.toolFailed }
+      return {
+        note: m.social.toolOpened.replace('{u}', pg.title || pg.url),
+        text: `[${pg.title}] ${pg.url}\n${pg.text}`
+      }
+    }
+
+    // **토글이 꺼져 있으면 내 화면을 읽지 않는다.** 이 스위치는 편의가 아니라 약속이다 —
+    // 피드엔 남의 글·DM이 섞여 있고, provider가 API 키면 그게 밖으로 나간다.
+    // 대신 사람에게 요청한다: 왼쪽 버튼이 빛나고, 누른 순간에만 화면이 나간다.
+    if (!watch && kind) {
+      const want = kind === 'page_html' ? 'html' : 'text'
+      onNeedPage?.(want)
+      return { note: want === 'html' ? m.social.needHtml : m.social.needPage, need: want }
+    }
     if (kind === 'screenshot') {
       const d = await window.zto.browser.capture()
       return d
@@ -254,6 +249,11 @@ export default function AiPanel({
     return { note: m.social.toolUnknown }
   }
 
+  // 한 턴에 도구가 쓸 수 있는 총량. 도구별 상한(글 8k·HTML 12k)만으로는 **누적**을 못 막는다 —
+  // HTML을 세 번 부르면 한 질문에 36k가 실린다. Plus에선 그 원가를 우리가 내므로 돈 문제이기도 하다.
+  // 넘으면 자르고 **잘렸다고 모델에게 알린다**(모르면 없는 내용을 있다고 여긴다).
+  const TOOL_BUDGET = 20000
+
   // 한 번 물으면 **모델이 필요한 만큼 도구를 부르고** 우리가 실행해 되먹인다.
   // provider별 tool-calling에 기대지 않는 얇은 루프 — 어느 모델이든 같은 방식으로 돈다.
   // 상한 3회: 모르는 화면에서 무한히 훑는 것보다 "못 찾겠다"가 낫고, 토큰이 새지 않는다.
@@ -264,6 +264,7 @@ export default function AiPanel({
     if (show) setMsgs((prev) => [...prev, show])
     let nextPrompt = prompt
     let nextImgs = sending
+    let budget = TOOL_BUDGET
     for (let round = 0; round <= 3; round++) {
       const images = nextImgs
         .map(splitDataUrl)
@@ -285,16 +286,31 @@ export default function AiPanel({
       const said = hit ? r.text.replace(TOOL_TAG, '').trim() : r.text
       if (said) setMsgs((prev) => [...prev, { role: 'assistant', text: said }])
       if (!hit) break
-      let spec: { tool?: string; dy?: number } | null = null
+      let spec: { tool?: string; dy?: number; q?: string; url?: string } | null = null
+      let broken = false
       try {
         spec = JSON.parse(hit[1])
       } catch {
-        /* 형식이 깨졌으면 아래에서 unknown으로 떨어진다 */
+        broken = true // 조용히 넘기지 않는다 — 왜 실패했는지 모르면 모델은 같은 실수를 반복한다
+      }
+      if (broken) {
+        setMsgs((prev) => [...prev, { role: 'system', text: m.social.toolBadFormat }])
+        nextPrompt = m.social.toolBadFormatPrompt
+        nextImgs = []
+        continue
       }
       const res = await runTool(spec)
       // 화면엔 무엇을 했는지 한 줄만 — 본문은 프롬프트로만 간다
       setMsgs((prev) => [...prev, { role: 'system', text: res.note }])
-      nextPrompt = res.text ? `${m.social.toolResult}\n\n${res.text}` : m.social.toolFailed
+      if (res.need) break // 사람이 버튼을 누를 차례다 — AI에게 되묻지 않는다(왕복도 토큰도 낭비)
+      let body = res.text ?? ''
+      if (body.length > budget) {
+        body = body.slice(0, Math.max(0, budget)) + `\n\n${m.social.toolTruncated}`
+        budget = 0
+      } else {
+        budget -= body.length
+      }
+      nextPrompt = body ? `${m.social.toolResult}\n\n${body}` : m.social.toolFailed
       nextImgs = res.image ? [res.image] : []
     }
     busyRef.current = false

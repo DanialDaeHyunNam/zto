@@ -67,6 +67,15 @@ let pendingDownload: {
   timer: NodeJS.Timeout
 } | null = null
 
+// ⌘W를 누가 먹을지 결정한다 — 브라우저가 보이면 **탭**을, 아니면 창을 닫는다.
+// before-input-event로는 못 막는다: 메뉴 액셀러레이터가 네이티브 층에서 먼저 처리되기 때문에
+// 앱 메뉴에서 이 함수를 불러 판단해야 한다(2026-08-14 실사용에서 창이 통째로 닫혔다).
+export function closeTabIfBrowserVisible(): boolean {
+  if (!attached || !activeId) return false
+  closeTab(activeId)
+  return true
+}
+
 export function expectDownload(name: string, timeoutMs = 60_000): Promise<string> {
   const dir = join(app.getPath('userData'), 'downloads')
   try {
@@ -149,7 +158,23 @@ function emit(): void {
 // 단축키 — 페이지·렌더러 어디에 포커스가 있든 잡히도록 각 webContents에 바인딩. 브라우저가 보일 때만 동작.
 function wireShortcuts(wc: WebContents): void {
   wc.on('before-input-event', (event, input) => {
-    if (!attached || input.type !== 'keyDown') return
+    if (input.type !== 'keyDown') return
+    // 모듈 전환(⌘1..3)은 **attached와 무관하게** 넘긴다. 뷰가 창에서 떼어져도 키보드 포커스는
+    // 남아 있을 수 있어서, 이걸 막으면 소셜을 떠난 뒤 ⌘N이 통째로 죽는다(2026-08-14 실사용:
+    // "⌘3만 괜찮다" — 소셜에 있을 때만 attached라 그것만 살아 있었다).
+    if ((input.meta || input.control) && !input.alt && /^[1-3]$/.test(input.key)) {
+      event.preventDefault()
+      const w0 = getWin()
+      if (w0 && !w0.isDestroyed()) w0.webContents.send('app:module', parseInt(input.key, 10))
+      return
+    }
+    if (!attached) return
+    // 브라우저 **탭**은 ⌥1..9 — 앱 모듈(⌘1..3)과 층을 나눈다. 바깥이 ⌘, 안이 ⌥.
+    if (input.alt && !input.meta && !input.control && /^[1-9]$/.test(input.key)) {
+      event.preventDefault()
+      selectIndex(parseInt(input.key, 10) - 1)
+      return
+    }
     if (!(input.meta || input.control)) return
     const k = input.key.toLowerCase()
     // 편집 단축키를 **뷰에 직접** 건다. 앱 메뉴의 role은 '포커스된 webContents'에 작용하는데,
@@ -173,9 +198,6 @@ function wireShortcuts(wc: WebContents): void {
     } else if (k === 'w') {
       event.preventDefault()
       if (activeId) closeTab(activeId)
-    } else if (/^[1-9]$/.test(input.key)) {
-      event.preventDefault()
-      selectIndex(parseInt(input.key, 10) - 1)
     }
   })
 }
@@ -544,6 +566,8 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     }
     // 다른 모듈로 나갔다 = 이 브라우저는 지금 활성이 아니다. 탭 전부 재생을 멈춘다
     for (const t of tabs) suspendMedia(t.view.webContents)
+    // 키보드 포커스를 렌더러로 되돌린다 — 떼어진 뷰가 포커스를 쥔 채 남으면 단축키가 갈 곳을 잃는다
+    if (w && !w.isDestroyed()) w.webContents.focus()
     attached = false
   })
 
@@ -641,6 +665,41 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
       }
     }
   )
+
+  // AI가 **찾아보러 갈** 때 — 새 탭에서 열고, 다 뜨면 글을 읽어 돌려준다.
+  // 새 탭인 이유: ① 사용자가 보던 화면을 뺏지 않는다 ② 어디로 갔는지 탭으로 눈에 보인다
+  //              ③ ⌘W로 되돌릴 수 있다. 조용히 현재 탭을 바꿔치기하는 것이 가장 나쁘다.
+  ipcMain.handle('browser:openAndRead', async (_e, url: string): Promise<BrowserResult> => {
+    const target = normalizeUrl(url)
+    if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'bad-url' }
+    const t = makeTab()
+    tabs.push(t)
+    activeId = t.id
+    showActive()
+    emit()
+    const wc = t.view.webContents
+    try {
+      await wc.loadURL(target)
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 200) }
+    }
+    // SPA는 loadURL이 끝나도 본문이 비어 있다 — 잠깐 기다렸다 읽는다(콘솔에서 겪은 것과 같은 함정)
+    await new Promise((r) => setTimeout(r, 1200))
+    try {
+      const r = (await wc.executeJavaScript(
+        `(() => ({
+          url: location.href,
+          title: document.title,
+          text: (document.body?.innerText || '').replace(/\n{3,}/g, '\n\n').slice(0, 8000)
+        }))()`,
+        true
+      )) as { url: string; title: string; text: string }
+      emit()
+      return { ok: true, result: r }
+    } catch (e) {
+      return { ok: false, error: String(e).slice(0, 200) }
+    }
+  })
 
   // reverse-sync 1단계 — 현재 페이지의 폼을 읽어 구조화 JSON으로 회수한다(ROADMAP #4).
   // 결과를 userData/zto-form-probe.json에도 남긴다: 콘솔 폼은 로그인 뒤에 있어 밖에서 볼 수 없고,

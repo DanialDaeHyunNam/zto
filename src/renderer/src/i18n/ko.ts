@@ -18,6 +18,7 @@ export const ko: Messages = {
     titleSource: 'ZTO — 소스 빌드',
     updateReady: '업데이트 사용 가능: {v}',
     updateConfirm: '지금 재시작하고 설치',
+    updateConfirmShort: '설치하고 재시작',
     updateDownloading: '업데이트 받는 중 {p}%',
     versionCheck: '업데이트 확인',
     versionChecking: '확인 중…'
@@ -72,6 +73,15 @@ export const ko: Messages = {
     toolResult: '도구 결과:',
     toolFailed: '화면을 읽지 못했습니다',
     toolUnknown: '모르는 도구 — 무시했습니다',
+    toolOpened: '열어서 읽었습니다 — {u}',
+    toolBadFormat: '도구 호출 형식이 깨져 다시 물었습니다',
+    toolBadFormatPrompt:
+      '도구 호출을 해석하지 못했습니다. 정확히 한 줄로만 내보내세요: <zto-tool>{"tool":"page_text"}</zto-tool> — 올바른 JSON, 코드펜스 금지, 태그 안에 다른 글자 금지.',
+    toolTruncated: '[잘림 — 예산을 넘어 뒤쪽을 잘랐습니다. 더 필요하면 범위를 좁혀 다시 요청하세요.]',
+    toolAccounts: '내 계정을 확인했습니다',
+    toolApps: '내 앱을 확인했습니다',
+    needPage: 'AI가 이 화면을 봐야 합니다 — 왼쪽 [화면 글]을 눌러주세요',
+    needHtml: 'AI가 이 화면의 HTML이 필요합니다 — 왼쪽 [HTML]을 눌러주세요',
     draftEdit: '편집',
     draftDone: '완료',
     draftCopy: '복사',

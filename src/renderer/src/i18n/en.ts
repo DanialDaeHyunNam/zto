@@ -16,6 +16,7 @@ export const en = {
     titleSource: 'ZTO — Source Build',
     updateReady: 'Update available: {v}',
     updateConfirm: 'Restart & install now',
+    updateConfirmShort: 'Install & restart',
     updateDownloading: 'Downloading update… {p}%',
     versionCheck: 'Check for updates',
     versionChecking: 'Checking…'
@@ -70,6 +71,15 @@ export const en = {
     toolResult: 'Tool result:',
     toolFailed: "Couldn't read the page",
     toolUnknown: 'Unknown tool — ignored',
+    toolOpened: 'Opened and read — {u}',
+    toolBadFormat: 'Tool call was malformed — asked again',
+    toolBadFormatPrompt:
+      'Your tool call could not be parsed. Emit exactly one line: <zto-tool>{"tool":"page_text"}</zto-tool> — valid JSON, no code fences, no extra text inside the tag.',
+    toolTruncated: '[truncated — the rest was cut to stay within budget. Ask for a narrower part if you need more.]',
+    toolAccounts: 'Checked your accounts',
+    toolApps: 'Checked your apps',
+    needPage: 'AI needs to see this page — press [Send page] on the left',
+    needHtml: 'AI needs this page\'s HTML — press [Send HTML] on the left',
     draftEdit: 'Edit',
     draftDone: 'Done',
     draftCopy: 'Copy',

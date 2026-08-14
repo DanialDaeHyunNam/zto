@@ -52,32 +52,10 @@ function UpdateChip(): React.JSX.Element | null {
     </svg>
   )
 
-  if (ready && confirming) {
-    return (
-      <button
-        className="update-chip confirm"
-        onClick={() => window.zto.update.install()}
-        title={m.nav.updateConfirm}
-      >
-        <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
-          <path
-            d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.6"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        {m.nav.updateConfirm}
-      </button>
-    )
-  }
-
   return (
     <>
       <div className="version-row">
-        {version && (
+        {version && !(ready && confirming) && (
           <button
             className="version-line"
             disabled={!!st?.disabled || st?.phase === 'checking' || downloading || ready}
@@ -98,18 +76,36 @@ function UpdateChip(): React.JSX.Element | null {
         )}
         {ready && (
           <button
-            className="update-chip mini"
-            onClick={() => setConfirming(true)}
-            title={m.nav.updateReady.replace('{v}', st?.newVersion ?? '')}
+            className={`update-chip mini ${confirming ? 'confirm' : ''}`}
+            onClick={() => (confirming ? window.zto.update.install() : setConfirming(true))}
+            title={confirming ? m.nav.updateConfirm : m.nav.updateReady.replace('{v}', st?.newVersion ?? '')}
           >
-            {arrow}
-            {st?.newVersion ?? ''}
+            {/* 확인 단계에서도 **줄 높이가 변하지 않는다** — 버튼 하나 때문에 사이드바 바닥이
+                들썩이면 눌러야 할 자리가 움직인다. 색과 아이콘만 바뀐다 */}
+            {confirming ? (
+              <svg className="update-chip-icon" viewBox="0 0 16 16" aria-hidden="true">
+                <path
+                  d="M13 8a5 5 0 1 1-1.6-3.7M13 2v3h-3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.6"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            ) : (
+              arrow
+            )}
+            {confirming ? m.nav.updateConfirmShort : (st?.newVersion ?? '')}
           </button>
         )}
       </div>
     </>
   )
 }
+
+// 맥은 ⌘/⌥, 그 외는 Ctrl/Alt — 키 조합 자체는 main이 meta·control 둘 다 받는다
+const MOD_KEY = window.zto.platform === 'darwin' ? '⌘' : 'Ctrl+'
 
 export default function App(): React.JSX.Element {
   const { m } = useI18n()
@@ -141,6 +137,30 @@ export default function App(): React.JSX.Element {
     { id: 'social', label: m.nav.social, desc: m.nav.socialDesc }
   ]
 
+  // ⌘1..3 = 모듈 전환. 임베드 브라우저가 키보드를 쥐고 있을 땐 그쪽이 못 받으므로
+  // main(browser.ts)이 같은 조합을 가로채 'app:module'로 넘겨준다 — 어디에 포커스가 있든 같게 동작
+  useEffect(() => {
+    const go = (n: number): void => {
+      const mod = modules[n - 1]
+      if (mod) setActive(mod.id)
+    }
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.metaKey || e.ctrlKey) || e.altKey || e.shiftKey) return
+      const n = parseInt(e.key, 10)
+      if (n >= 1 && n <= modules.length) {
+        e.preventDefault()
+        go(n)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    const off = window.zto.onModuleKey(go)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      off()
+    }
+  }, [modules])
+
+
   // 정상·확인중은 유저에게 노이즈라 숨기고, 진짜 IPC 오류일 때만 노출
   const ipcError = ipcStatus !== 'ok' && ipcStatus !== 'checking' ? ipcStatus : null
 
@@ -152,14 +172,18 @@ export default function App(): React.JSX.Element {
 
   const buyUrl = 'https://zto-umber.vercel.app/#pricing'
 
-  const navBtn = (id: ModuleId, label: string, desc: string): React.JSX.Element => (
+  const navBtn = (id: ModuleId, label: string, desc: string, n = 0): React.JSX.Element => (
     <button
       key={id}
       className={`nav-item ${active === id ? 'active' : ''}`}
       onClick={() => setActive(id)}
     >
-      <span className="nav-label">{label}</span>
-      <span className="nav-desc">{desc}</span>
+      <span className="nav-text">
+        <span className="nav-label">{label}</span>
+        <span className="nav-desc">{desc}</span>
+      </span>
+      {/* 모듈은 ⌘1..3, 브라우저 탭은 ⌥1..9 — 바깥(앱)이 ⌘, 안(브라우저)이 ⌥ */}
+      {n > 0 && <span className="nav-key">{MOD_KEY}{n}</span>}
     </button>
   )
 
@@ -172,7 +196,7 @@ export default function App(): React.JSX.Element {
             {lic && !lic.official && <span className="logo-badge">{m.nav.sourceBadge}</span>}
             <span className="logo-sub">zero to one</span>
           </div>
-          {modules.map((mod) => navBtn(mod.id, mod.label, mod.desc))}
+          {modules.map((mod, i) => navBtn(mod.id, mod.label, mod.desc, i + 1))}
           <div className="sidebar-bottom">
             {lic &&
               (lic.state === 'active' && lic.plan ? (

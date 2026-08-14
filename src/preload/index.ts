@@ -56,6 +56,12 @@ const api = {
   platform: process.platform,
   ping: (): Promise<string> => ipcRenderer.invoke('ping'),
   setLocale: (locale: 'ko' | 'en'): Promise<void> => ipcRenderer.invoke('app:setLocale', locale),
+  // ⌘1..3 — 임베드 브라우저가 키보드를 쥐고 있을 때 main이 대신 넘겨주는 모듈 전환
+  onModuleKey: (cb: (n: number) => void): (() => void) => {
+    const l = (_e: unknown, n: number): void => cb(n)
+    ipcRenderer.on('app:module', l)
+    return () => ipcRenderer.removeListener('app:module', l)
+  },
   getLocale: (): Promise<'ko' | 'en'> => ipcRenderer.invoke('app:getLocale'),
   // #4 ZTO 자체 브라우저 — WebContentsView 임베드·네비게이트·eval/CDP 제어
   browser: {
@@ -78,6 +84,9 @@ const api = {
     // 지금 화면의 글 — '읽기' 토글이 켜져 있을 때 사용자가 물으면 그 순간에만 부른다
     pageText: (kind?: 'text' | 'html'): Promise<BrowserResult> =>
       ipcRenderer.invoke('browser:pageText', kind ?? 'text'),
+    // AI가 찾아보러 갈 때 — 새 탭에서 열고 다 뜨면 읽어 돌려준다
+    openAndRead: (url: string): Promise<BrowserResult> =>
+      ipcRenderer.invoke('browser:openAndRead', url),
     // 폼 따라가기 — 켠 동안만 main이 폴링한다. 해제 함수를 돌려주므로 언마운트 시 반드시 끈다.
     watchForm: (on: boolean): Promise<boolean> => ipcRenderer.invoke('browser:watchForm', on),
     onFormChanged: (cb: (c: FormChange) => void): (() => void) => {
