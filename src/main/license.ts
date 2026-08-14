@@ -20,10 +20,17 @@ const API = 'https://api.lemonsqueezy.com/v1/licenses'
 // BYO는 단건 $5(평생) — 키에 expires_at이 없어(unlimited) 영구 active로 동작한다.
 // 2026-08-03 테스트 키로 활성화→검증→해제 왕복 실증.
 export const LS_STORE_ID = '443985'
+// ⚠️ **라이브 variant id다.** 테스트 모드 상품은 라이브로 넘어오지 않아 상품을 새로 만들었고,
+// 그래서 id가 전부 바뀌었다(2026-08-14). 이 값은 바이너리에 박히므로 바꾸면 릴리스가 따라온다 —
+// 어긋나면 구매자 키가 `wrong-product`로 거부된다(8/3에 같은 이유로 재빌드한 전례).
 export const LS_VARIANTS: Record<string, 'byo' | 'plus'> = {
-  '1974924': 'byo', // ZTO 단건 $5 (상품 1263143 기본 variant)
-  '1973940': 'plus', // ZTO Plus · Monthly $15
-  '1973941': 'plus' // ZTO Plus · Yearly $150
+  '2017994': 'byo', // ZTO 단건 $5 (단일 variant 상품의 기본 variant)
+  '2018058': 'plus', // ZTO Plus · Monthly $15
+  '2018051': 'plus', // ZTO Plus · Yearly $150
+  // ZTO Plus 상품의 **자동 생성 기본 variant**(UI에 안 보이는 유물, pending).
+  // 삭제하려면 대시보드에서 손이 안 닿는데, 언젠가 이걸로 키가 발급되면 우리 지도에 없어
+  // `wrong-product`로 거부된다 — 지우는 대신 **미리 받아준다**. 어차피 같은 Plus 상품이다.
+  '2018059': 'plus'
 }
 
 export type Plan = 'byo' | 'plus'

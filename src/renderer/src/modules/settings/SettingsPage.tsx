@@ -22,7 +22,7 @@ const PROVIDER_CLI: Record<AiProviderId, string> = {
 }
 
 const PLUS_CHECKOUT =
-  'https://all-libertas.lemonsqueezy.com/checkout/buy/b18e23c6-1605-4715-bc4c-e1f8ecf6925d?enabled=1973940'
+  'https://all-libertas.lemonsqueezy.com/checkout/buy/de2ef48a-43ae-4cd0-aae7-bf9bac5796ef?enabled=2018058'
 // Lemon Squeezy 고객 포털 — 구독 해지·영수증은 여기서 셀프 서비스
 const LS_BILLING = 'https://all-libertas.lemonsqueezy.com/billing' 
 
