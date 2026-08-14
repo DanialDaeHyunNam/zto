@@ -99,7 +99,9 @@ export const en = {
     watchTitle:
       'When on, ZTO periodically reads the page on the left and sends it to the AI. If your AI is on an API key, that content leaves your computer — turn it on only when you need it.',
     follow: 'Follow',
-    followTitle: 'Ask AI automatically whenever the form on the left changes. Turn it off to think on your own.'
+    followTitle: 'Ask AI automatically whenever the form on the left changes. Turn it off to think on your own.',
+    newChat: 'New chat',
+    newChatTitle: 'Clear this conversation and start fresh'
   },
   settings: {
     title: 'Settings',
@@ -136,7 +138,7 @@ export const en = {
     licensePlaceholder: 'License key',
     licenseActivate: 'Activate',
     licenseChecking: 'Checking…',
-    licenseOffline: 'Usable offline for {d} more days.',
+    licenseOffline: "Can't verify your license right now — connect to the internet within {d} days to keep everything unlocked.",
     licenseErrors: {
       empty: 'Enter a key',
       expired: 'This key has expired',

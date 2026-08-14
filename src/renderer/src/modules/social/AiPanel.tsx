@@ -33,6 +33,50 @@ interface Msg {
   tone?: 'need'
 }
 
+// 소셜 대화는 패널보다 오래 산다 — 다른 모듈을 다녀오면 패널이 언마운트되는데, 그때마다
+// 대화가 0이 되면 이어가던 맥락이 통째로 사라진다(2026-08-14 Dan 실사용). 세션 id까지 같이
+// 들어야 돌아왔을 때 AI도 같은 대화를 기억한다(resume). 콘솔 코파일럿은 매번 새 task로
+// 여는 물건이라 제외 — 지난 작업의 브리핑이 새 작업에 섞이면 안 된다.
+// 재시작도 넘긴다(2026-08-14 Dan "대화는 저장되게 하자") — localStorage에 두면 data:wipe의
+// clearStorageData()가 지워주므로 삭제 경로도 공짜다. GPT의 대화 맥락은 main이
+// zto-ai-sessions.json으로 따로 남긴다 — 화면(여기)과 AI 기억(main)이 함께 살아야 복원이다.
+const CHAT_KEY = 'zto-social-chat'
+const socialMemory: { msgs: Msg[]; session?: string; persona: boolean } = (() => {
+  try {
+    const j = JSON.parse(localStorage.getItem(CHAT_KEY) ?? '') as {
+      msgs?: Msg[]
+      session?: string
+      persona?: boolean
+    }
+    return {
+      msgs: Array.isArray(j.msgs) ? j.msgs : [],
+      session: typeof j.session === 'string' ? j.session : undefined,
+      persona: !!j.persona
+    }
+  } catch {
+    return { msgs: [], session: undefined, persona: false }
+  }
+})()
+// 디스크에는 이미지를 남기지 않는다 — 화면 캡처 dataURL 몇 장이면 localStorage 쿼터가 찬다.
+// 복원된 대화에서 그 턴은 글만 남는다(main의 이력도 같은 이유로 자리표시자만 남긴다)
+const persistSocial = (): void => {
+  try {
+    localStorage.setItem(
+      CHAT_KEY,
+      JSON.stringify({
+        msgs: socialMemory.msgs.slice(-200).map(({ imgs: _imgs, ...rest }) => rest),
+        session: socialMemory.session,
+        persona: socialMemory.persona
+      })
+    )
+  } catch {
+    /* 쿼터 초과 등 — 이번 실행의 기억(메모리)은 그대로다 */
+  }
+}
+// 읽기 토글은 마지막으로 명시한 상태를 기억한다 — 켰으면 켠 대로, 껐으면 끈 대로(2026-08-14 Dan).
+// 올 때마다 다시 켜야 하면 기능이 아니라 관문이다. 다만 프라이버시 스위치라 기본값은 여전히 꺼짐.
+const FOLLOW_KEY = 'zto-social-follow'
+
 // data:image/png;base64,XXXX → { mediaType, data }
 function splitDataUrl(dataUrl: string): { mediaType: string; data: string } | null {
   const m = dataUrl.match(/^data:(.+?);base64,(.*)$/)
@@ -100,7 +144,7 @@ export default function AiPanel({
 } = {}): React.JSX.Element {
   const { m, locale } = useI18n()
   const ko = locale === 'ko'
-  const [msgs, setMsgs] = useState<Msg[]>([])
+  const [msgs, setMsgs] = useState<Msg[]>(() => (watchable ? socialMemory.msgs : []))
   const [input, setInput] = useState('')
   const [busy, setBusy] = useState(false)
   const [, setSession] = useState<string | undefined>(undefined)
@@ -108,12 +152,21 @@ export default function AiPanel({
   const [form, setForm] = useState<FormSnapshot | null>(null)
   // 화면이 바뀔 때마다 자동으로 물어볼지 — 기본 켜짐이되 **끌 수 있어야 한다**.
   // 자동 질문은 토큰을 쓰므로 사용자가 통제권을 가져야 하고, 생각을 정리하는 동안
-  // AI가 계속 끼어드는 것도 방해다.
-  const [follow, setFollow] = useState(watch)
-  const followRef = useRef(watch)
+  // AI가 계속 끼어드는 것도 방해다. 소셜은 지난번에 두고 간 상태에서 시작한다.
+  const initialFollow = watchable ? localStorage.getItem(FOLLOW_KEY) === '1' : watch
+  const [follow, setFollow] = useState(initialFollow)
+  const followRef = useRef(initialFollow)
   useEffect(() => {
     followRef.current = follow
-  }, [follow])
+    if (watchable) localStorage.setItem(FOLLOW_KEY, follow ? '1' : '0')
+  }, [follow, watchable])
+  // 대화를 밖의 기억으로 흘려보낸다 — 언마운트 직전이 아니라 매번. 직전에만 쓰면
+  // 크래시·강제 전환에서 마지막 턴이 사라진다
+  useEffect(() => {
+    if (!watchable) return
+    socialMemory.msgs = msgs
+    persistSocial()
+  }, [msgs, watchable])
   // 프라이버시 게이트가 볼 값. 소셜은 화면의 토글(follow), 콘솔은 prop(watch)이 기준이다.
   // ⚠️ 이 둘을 헷갈려 **게이트가 소셜에서 항상 막혀 있었다** — 도구가 전부 거부되어
   // AI가 "저는 화면 자체를 못 봅니다"라고 답했다(2026-08-14 실사용, provider와 무관했다).
@@ -190,7 +243,7 @@ export default function AiPanel({
 
   // busy·session을 ref로도 든다 — 자동 질문은 이벤트 콜백에서 불리므로 state 클로저가 낡는다
   const busyRef = useRef(false)
-  const sessionRef = useRef<string | undefined>(undefined)
+  const sessionRef = useRef<string | undefined>(watchable ? socialMemory.session : undefined)
 
   // 한 턴 보내기. `show`는 화면에 남길 사용자 말풍선 — 자동 질문일 땐 폼 덤프 대신
   // 짧은 시스템 줄만 남기려고 프롬프트와 표시를 분리했다(대화가 기계 텍스트로 도배되면 못 읽는다).
@@ -317,6 +370,10 @@ export default function AiPanel({
       if (r.sessionId) {
         sessionRef.current = r.sessionId
         setSession(r.sessionId)
+        if (watchable) {
+          socialMemory.session = r.sessionId
+          persistSocial()
+        }
       }
       const hit = round < 3 ? TOOL_TAG.exec(r.text) : null
       const said = hit ? r.text.replace(TOOL_TAG, '').trim() : r.text
@@ -361,6 +418,8 @@ export default function AiPanel({
   useEffect(() => {
     if (!watchable || !follow || personaRef.current) return
     personaRef.current = true
+    socialMemory.persona = true
+    persistSocial()
     void ask(
       [
         socialPersona(ko),
@@ -371,6 +430,21 @@ export default function AiPanel({
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [watchable, follow])
+
+  // 기록이 지워지지 않으면 관리가 아니라 축적이다 — 대화·세션·페르소나를 함께 비운다.
+  // 세션을 남기면 화면은 비었는데 AI는 지난 대화를 기억하는 어긋남이 생긴다.
+  const resetChat = (): void => {
+    setMsgs([])
+    setSession(undefined)
+    sessionRef.current = undefined
+    personaRef.current = false
+    if (watchable) {
+      socialMemory.msgs = []
+      socialMemory.session = undefined
+      socialMemory.persona = false
+      persistSocial()
+    }
+  }
 
   const send = async (): Promise<void> => {
     const text = input.trim()
@@ -406,8 +480,10 @@ export default function AiPanel({
   // ---- 목적 브리핑 — 열리자마자 한 번 ----
   // 화면에는 목적 한 줄만 남기고(사람이 읽을 수 있게) 상세 지시는 프롬프트로만 보낸다.
   const briefed = useRef(false)
-  // 소셜 페르소나를 이 대화에 한 번만 심는다
-  const personaRef = useRef(false)
+  // 소셜 페르소나를 이 대화에 한 번만 심는다. **복원으로 켜진 토글은 심은 것으로 친다** —
+  // 첫인사는 사람이 직접 켠 순간의 응답이지, 앱을 열 때마다 먼저 말을 걸며 토큰을 쓰는 게
+  // 아니다(페르소나 자체는 매 호출 system 프롬프트로 실리므로 인사를 건너뛰어도 역할은 산다)
+  const personaRef = useRef(watchable ? socialMemory.persona || initialFollow : false)
   useEffect(() => {
     if (!task || briefed.current) return
     briefed.current = true
@@ -492,6 +568,11 @@ export default function AiPanel({
     <aside className="ai-panel">
       <div className="ai-panel-head">
         <strong>{m.social.aiTitle}</strong>
+        {msgs.length > 0 && !busy && (
+          <button className="ghost-btn mini" onClick={resetChat} title={m.social.newChatTitle}>
+            {m.social.newChat}
+          </button>
+        )}
         {groups.length > 0 && (
           <select
             className="ai-model-select"

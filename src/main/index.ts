@@ -431,6 +431,36 @@ const IMAGE_FALLBACK_MODEL = 'gpt-5.6-luna'
 const openAiSessions = new Map<string, unknown[]>()
 const OPENAI_MAX_MESSAGES = 24 // 이력 폭주 방지 — 오래된 턴부터 버린다
 
+// GPT 이력의 유일한 기억이 이 Map이다(Responses API는 무상태) — 메모리에만 두면 앱 재시작이
+// 곧 기억상실이고, 렌더러가 복원한 대화 화면과 "아무것도 모르는 AI"가 어긋난다(2026-08-14 Dan
+// 실사용: 잘 나눈 대화가 통째로 사라짐). Claude는 CLI가 세션을 자기 디스크에 남기므로 무관.
+// 파일명은 zto- 접두사 — data:wipe가 자동으로 지운다(대화도 개인 데이터다).
+const aiSessionsFile = (): string => join(app.getPath('userData'), 'zto-ai-sessions.json')
+const OPENAI_MAX_SESSIONS = 20 // 대화 수 상한 — 무한히 쌓이면 파일이 곧 늪이 된다
+let aiSessionsLoaded = false
+function loadAiSessions(): void {
+  if (aiSessionsLoaded) return
+  aiSessionsLoaded = true
+  try {
+    const j: Record<string, unknown[]> = JSON.parse(readFileSync(aiSessionsFile(), 'utf8'))
+    for (const [k, v] of Object.entries(j)) if (Array.isArray(v)) openAiSessions.set(k, v)
+  } catch {
+    /* 파일 없음(첫 실행) — 빈 기억으로 시작 */
+  }
+}
+function saveAiSessions(): void {
+  while (openAiSessions.size > OPENAI_MAX_SESSIONS) {
+    const oldest = openAiSessions.keys().next().value
+    if (!oldest) break
+    openAiSessions.delete(oldest)
+  }
+  try {
+    writeFileSync(aiSessionsFile(), JSON.stringify(Object.fromEntries(openAiSessions)))
+  } catch {
+    /* 디스크가 거부해도 대화는 계속된다 — 이번 실행은 메모리가 진실이다 */
+  }
+}
+
 interface OpenAiPart {
   type: string
   text?: string
@@ -481,6 +511,7 @@ async function chatOpenAi(
   for (const im of opts?.images ?? []) {
     content.push({ type: 'input_image', image_url: `data:${im.mediaType};base64,${im.data}` })
   }
+  loadAiSessions()
   const history = (opts?.resume ? openAiSessions.get(opts.resume) : null) ?? []
   const input = [...history, { role: 'user', content }]
 
@@ -537,7 +568,10 @@ async function chatOpenAi(
     // **이력에는 이미지를 남기지 않는다.** Responses API는 무상태라 매 턴 이력을 통째로 다시
     // 보내는데, 이미지가 남아 있으면 한 장이 창(24메시지) 동안 계속 재청구된다 — 붙인 장수가
     // 아니라 이 곱셈이 비용을 지배한다. 자리표시자를 남겨 "그때 화면을 봤다"는 사실은 유지한다.
+    // delete 후 set — Map 순서가 곧 최근 사용 순서가 되어, 상한 정리가 이어가던 대화를 안 자른다
+    openAiSessions.delete(sid)
     openAiSessions.set(sid, next.slice(-OPENAI_MAX_MESSAGES).map(stripImages))
+    saveAiSessions()
     return { ok: true, text, sessionId: sid }
   } catch (e) {
     const aborted = ctrl.signal.aborted
@@ -2475,6 +2509,9 @@ app.whenReady().then(() => {
   // 무료 사용 3일은 공식 빌드 **첫 실행부터** — userData가 준비된 뒤에 시계를 박는다.
   // 소스 빌드는 시계 자체가 없다 (계정 인벤토리는 어느 빌드든 영구 무료)
   if (license.info().official) license.startTrial()
+  // 시작 시 강제 재검증(2026-08-14 Dan) — 24시간 게이트를 우회해 환불·만료가 "재시작 = 즉시
+  // 반영"이 된다. 키가 없으면 내부에서 즉시 반환하고, 오프라인이면 유예가 답한다
+  void license.revalidate(true)
   // 패키징 앱의 답안 시트는 userData에 산다(번들 안은 서명 때문에 쓰기 불가) — 없으면 만든다
   try {
     mkdirSync(ANSWERS_DIR, { recursive: true })

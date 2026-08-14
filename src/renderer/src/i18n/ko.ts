@@ -101,7 +101,9 @@ export const ko: Messages = {
     watchTitle:
       '켜면 ZTO가 왼쪽 화면을 주기적으로 읽어 AI에게 보냅니다. 지금 쓰는 AI가 API 키 방식이면 그 내용이 외부로 나갑니다 — 필요할 때만 켜세요.',
     follow: '따라가기',
-    followTitle: '왼쪽 폼이 바뀔 때마다 AI에게 자동으로 묻습니다. 혼자 생각할 땐 끄세요.'
+    followTitle: '왼쪽 폼이 바뀔 때마다 AI에게 자동으로 묻습니다. 혼자 생각할 땐 끄세요.',
+    newChat: '새 대화',
+    newChatTitle: '지금 대화를 비우고 처음부터 시작합니다'
   },
   settings: {
     title: '설정',
@@ -138,7 +140,7 @@ export const ko: Messages = {
     licensePlaceholder: '라이선스 키',
     licenseActivate: '등록',
     licenseChecking: '확인 중…',
-    licenseOffline: '인터넷 없이 {d}일까지 사용할 수 있어요.',
+    licenseOffline: '지금 라이선스 확인이 안 되고 있어요 — {d}일 안에 인터넷에 연결되면 그대로 계속 쓸 수 있어요.',
     licenseErrors: {
       empty: '키를 입력하세요',
       expired: '만료된 키예요',

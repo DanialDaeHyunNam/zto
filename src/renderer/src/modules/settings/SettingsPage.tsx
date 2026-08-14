@@ -131,8 +131,11 @@ function LicenseCard({
           </div>
         </>
       )}
-      {/* 오프라인 유예는 숨기지 않는다 — 언제 잠기는지 모르는 게 가장 나쁘다 */}
-      {info?.state === 'active' && info.offlineUntil && (
+      {/* 오프라인 유예는 재검증이 실제로 밀릴 때만 띄운다(2026-08-14 Dan) — 온라인이면 매일
+          14일로 다시 차오르는 값이라 상시 노출하면 평생 안 변하는 카운트다운으로 읽힌다.
+          "언제 잠기는지 모르는 게 가장 나쁘다"는 창이 소모 중일 때의 이야기다. 유예 14일에서
+          이틀 이상 깎였으면(≤12) 검증 실패가 이어지고 있다는 뜻 */}
+      {info?.state === 'active' && info.offlineUntil && daysLeft(info.offlineUntil) <= 12 && (
         <p className="settings-intro">
           {m.settings.licenseOffline.replace('{d}', String(daysLeft(info.offlineUntil)))}
         </p>
