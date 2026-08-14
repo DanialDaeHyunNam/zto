@@ -4,6 +4,7 @@ import type { FormSnapshot } from '../../../../shared/console-types'
 import { useI18n } from '../../i18n'
 // 프롬프트는 공용 모듈에 산다 — evals가 같은 것을 돌려야 회귀를 잡는다(복제하면 곧 갈라진다)
 import {
+  consolePersona,
   isResearchUrl,
   langLine,
   socialPersona,
@@ -27,6 +28,9 @@ interface Msg {
   role: 'user' | 'assistant' | 'system'
   text: string
   imgs?: string[] // dataURL 썸네일 (표시용)
+  // 'need' = 사람이 손을 대야 진행되는 줄(읽기 토글을 켜달라 등). 관찰 줄과 톤이 다르다 —
+  // 조용한 회색 칩으로 두면 **읽히지 않고 넘어간다**(2026-08-14 Dan: "눈에 확 띄게")
+  tone?: 'need'
 }
 
 // data:image/png;base64,XXXX → { mediaType, data }
@@ -110,6 +114,19 @@ export default function AiPanel({
   useEffect(() => {
     followRef.current = follow
   }, [follow])
+  // 프라이버시 게이트가 볼 값. 소셜은 화면의 토글(follow), 콘솔은 prop(watch)이 기준이다.
+  // ⚠️ 이 둘을 헷갈려 **게이트가 소셜에서 항상 막혀 있었다** — 도구가 전부 거부되어
+  // AI가 "저는 화면 자체를 못 봅니다"라고 답했다(2026-08-14 실사용, provider와 무관했다).
+  const reading = watchable ? follow : watch
+  // 읽기가 꺼진 채 AI가 화면을 필요로 하면 **토글 자체**를 빛나게 한다 — 눌러야 할 자리가
+  // 안내 문장 바로 위에 있는데 그걸 글로만 말하면 사람이 찾아야 한다
+  const [hintToggle, setHintToggle] = useState(false)
+  useEffect(() => {
+    if (!hintToggle) return
+    if (follow) return setHintToggle(false) // 켜는 순간 힌트는 할 일을 다 했다
+    const t = setTimeout(() => setHintToggle(false), 8000)
+    return () => clearTimeout(t)
+  }, [hintToggle, follow])
   // provider별 모델 전부 — 한 드롭다운에서 두뇌(provider)와 모델을 같이 고른다.
   // 값은 "provider:modelId"로 인코딩해 어느 그룹에서 골랐는지 잃지 않는다.
   const [groups, setGroups] = useState<[AiProviderId, AiModel[]][]>([])
@@ -177,6 +194,19 @@ export default function AiPanel({
 
   // 한 턴 보내기. `show`는 화면에 남길 사용자 말풍선 — 자동 질문일 땐 폼 덤프 대신
   // 짧은 시스템 줄만 남기려고 프롬프트와 표시를 분리했다(대화가 기계 텍스트로 도배되면 못 읽는다).
+  // 화면 내용을 프롬프트로 옮기는 형식. **제목을 앞세우지 않는다** — SPA에서 document.title은
+  // 낡는다: TikTok 로그인 모달을 닫아도 탭 제목이 "가입하기"로 남아, AI가 본문(영상·댓글)을
+  // 받고도 "지금은 가입 페이지"라고 답했다(2026-08-14 실사용). 본문이 사실이고 제목은 참고다.
+  const pageContext = (pg: { url: string; title: string; text: string }): string =>
+    [
+      `URL: ${pg.url}`,
+      pg.title ? `(${m.social.staleTitle.replace('{t}', pg.title)})` : '',
+      '',
+      pg.text
+    ]
+      .filter(Boolean)
+      .join('\n')
+
   // 도구 한 건 실행 — 모델이 짠 코드를 돌리지 않는다. 이름으로 우리 함수를 고를 뿐이다.
   const runTool = async (
     spec: { tool?: string; dy?: number; q?: string; url?: string } | null
@@ -203,7 +233,8 @@ export default function AiPanel({
           ? `https://www.google.com/search?q=${encodeURIComponent(String(spec?.q ?? ''))}`
           : String(spec?.url ?? '')
       if (!url) return { note: m.social.toolFailed }
-      if (!watch && !isResearchUrl(url)) {
+      if (!reading && !isResearchUrl(url)) {
+        setHintToggle(true)
         onNeedPage?.('text')
         return { note: m.social.needPage, need: 'text' }
       }
@@ -212,15 +243,16 @@ export default function AiPanel({
       if (!pg?.text) return { note: m.social.toolFailed }
       return {
         note: m.social.toolOpened.replace('{u}', pg.title || pg.url),
-        text: `[${pg.title}] ${pg.url}\n${pg.text}`
+        text: pageContext(pg)
       }
     }
 
     // **토글이 꺼져 있으면 내 화면을 읽지 않는다.** 이 스위치는 편의가 아니라 약속이다 —
     // 피드엔 남의 글·DM이 섞여 있고, provider가 API 키면 그게 밖으로 나간다.
     // 대신 사람에게 요청한다: 왼쪽 버튼이 빛나고, 누른 순간에만 화면이 나간다.
-    if (!watch && kind) {
+    if (!reading && kind) {
       const want = kind === 'page_html' ? 'html' : 'text'
+      setHintToggle(true)
       onNeedPage?.(want)
       return { note: want === 'html' ? m.social.needHtml : m.social.needPage, need: want }
     }
@@ -243,7 +275,7 @@ export default function AiPanel({
       if (!pg?.text) return { note: m.social.toolFailed }
       return {
         note: kind === 'page_html' ? m.social.toolHtml : m.social.toolText,
-        text: `[${pg.title}] ${pg.url}\n${pg.text}`
+        text: pageContext(pg)
       }
     }
     return { note: m.social.toolUnknown }
@@ -272,7 +304,11 @@ export default function AiPanel({
       const r = await window.zto.ai.chat(nextPrompt, {
         resume: sessionRef.current,
         images: images.length > 0 ? images : undefined,
-        feature
+        feature,
+        // 역할·도구 규약은 **시스템 프롬프트로** 보낸다. 프롬프트 앞에 붙이면 CLI의 기본
+        // 시스템 프롬프트(코딩 에이전트)가 그대로 남아, 모델이 자기 파일 도구를 우리 규약보다
+        // 앞세운다 — "지금 열 수 있는 건 .pen 파일뿐"이 그 증상이었다(2026-08-14).
+        system: `${watchable ? socialPersona(ko) : consolePersona(ko)}\n\n${toolPreamble(ko)}`
       })
       if (!r.ok) {
         setMsgs((prev) => [...prev, { role: 'assistant', text: '⚠ ' + (r.error ?? 'failed') }])
@@ -282,7 +318,7 @@ export default function AiPanel({
         sessionRef.current = r.sessionId
         setSession(r.sessionId)
       }
-      const hit = watchable && round < 3 ? TOOL_TAG.exec(r.text) : null
+      const hit = round < 3 ? TOOL_TAG.exec(r.text) : null
       const said = hit ? r.text.replace(TOOL_TAG, '').trim() : r.text
       if (said) setMsgs((prev) => [...prev, { role: 'assistant', text: said }])
       if (!hit) break
@@ -301,7 +337,10 @@ export default function AiPanel({
       }
       const res = await runTool(spec)
       // 화면엔 무엇을 했는지 한 줄만 — 본문은 프롬프트로만 간다
-      setMsgs((prev) => [...prev, { role: 'system', text: res.note }])
+      setMsgs((prev) => [
+        ...prev,
+        { role: 'system', text: res.note, ...(res.need ? { tone: 'need' as const } : {}) }
+      ])
       if (res.need) break // 사람이 버튼을 누를 차례다 — AI에게 되묻지 않는다(왕복도 토큰도 낭비)
       let body = res.text ?? ''
       if (body.length > budget) {
@@ -347,22 +386,21 @@ export default function AiPanel({
     // 안 실렸고, AI가 "영상 내용을 볼 수 없다"고 답했다(2026-08-13 실사용). 그럴 땐 화면의
     // **글**을 그 자리에서 읽어 붙인다 — 주기적으로 긁지 않으므로 토글이 곧 약속 그대로다.
     let context = ''
-    if (watch) {
-      if (form && form.controls.length > 0) context = describeForm(form)
+    if (reading) {
+      // **소셜에선 폼이 아니라 글이다.** 폼 프로브는 어느 페이지에서든 컨트롤 몇 개(검색창 등)를
+      // 잡아내는데, 그걸 우선하면 TikTok에서 AI에게 "탐색 탭"만 전달되고 정작 영상·캡션·댓글은
+      // 안 간다 — AI가 "영상 내용이 저한테는 안 보여요"라고 답한 이유다(2026-08-14 실사용).
+      // 콘솔은 반대다: 거기선 폼 구조가 곧 내용이다.
+      if (!watchable && form && form.controls.length > 0) context = describeForm(form)
       else {
         const r = await window.zto.browser.pageText()
         const pg = r.ok ? (r.result as { url: string; title: string; text: string }) : null
-        if (pg?.text?.trim()) context = `[${pg.title}] ${pg.url}\n${pg.text}`
+        if (pg?.text?.trim()) context = pageContext(pg)
       }
     }
     const withForm = context ? `${prompt}\n\n---\n${context}` : prompt
     // 토글을 안 켜고 바로 말을 걸어도 역할은 앞서야 한다 — 첫 답부터 결이 달라진다
-    const withPersona =
-      watchable && !personaRef.current
-        ? ((personaRef.current = true),
-          `${socialPersona(ko)}\n\n${toolPreamble(ko)}\n\n---\n${withForm}`)
-        : withForm
-    await ask(withPersona, sending, { role: 'user', text, imgs: sending })
+    await ask(withForm, sending, { role: 'user', text, imgs: sending })
   }
 
   // ---- 목적 브리핑 — 열리자마자 한 번 ----
@@ -397,8 +435,7 @@ export default function AiPanel({
       void ask(
         [
           `${m.social.injectPrompt}`,
-          `[${pg.title}] ${pg.url}`,
-          pg.text,
+          pageContext(pg),
           langLine(ko)
         ].join('\n\n'),
         [],
@@ -411,18 +448,18 @@ export default function AiPanel({
   // ---- 콘솔 코파일럿: 왼쪽 폼 따라가기 ----
   // main이 1.5초마다 폼을 읽어 **달라졌을 때만** 알려준다. 여기서는 그걸 대화로 옮긴다.
   useEffect(() => {
-    // **꺼져 있으면 읽지도 않는다** — '자동 질문만 끈다'로는 화면을 계속 읽는 셈이라
-    // 프라이버시 약속이 되지 못한다
-    if ((!watch && !watchable) || !follow) return
+    // **폴링은 콘솔에서만.** 소셜은 자동으로 말 걸지 않으므로(피드의 '변경'은 대개 스크롤이라
+    // 신호가 아니라 소음이고 매번 토큰이다) 1.5초마다 폼을 긁을 이유가 없다. 소셜의 읽기는
+    // 물을 때 그 자리에서 한다 — 토글이 약속하는 것과 실제 행위가 그래야 일치한다.
+    if (!watch || !follow) return
     void window.zto.browser.watchForm(true)
     const off = window.zto.browser.onFormChanged((c) => {
       setForm(c.snapshot)
       // 화면에 남기는 건 짧은 한 줄 — 사람이 대화를 읽을 수 있어야 한다
-      const line = c.navigated
-        ? m.social.formMoved.replace('{t}', c.snapshot.title.split('|')[0].trim())
-        : c.changed.join(' · ')
-      if (!line) return
-      setMsgs((prev) => [...prev, { role: 'system', text: line }])
+      // 이동 알림("Moved to …")은 그리지 않는다 — 화면이 이미 말해주고, 대화만 지저분해진다.
+      // 게다가 SPA 제목은 낡아서 엉뚱한 이름이 남는다("가입하기"). 바뀐 값만 짧게 남긴다.
+      const line = c.navigated ? '' : c.changed.join(' · ')
+      if (line) setMsgs((prev) => [...prev, { role: 'system', text: line }])
       if (!followRef.current) return
       // 자동 질문 — 바뀐 것 + 남은 항목만. 전체를 매번 보내면 토큰이 그대로 샌다.
       // **소셜과 콘솔은 물어볼 것이 다르다**: 콘솔은 "다음에 뭘 고르나", 소셜은 쓰고 있는 글이
@@ -432,7 +469,7 @@ export default function AiPanel({
         ? [
             c.navigated ? '사용자가 다른 화면으로 이동했습니다.' : `왼쪽 화면이 바뀌었습니다: ${c.changed.join(', ')}`,
             describeForm(c.snapshot),
-            '사용자가 소셜미디어에 올릴 글을 쓰는 중일 수 있습니다. 쓰고 있는 글이 있으면 훅(첫 문장)·읽히는 매력·퍼질 만한 요소를 한두 문장으로 짚고, 고칠 곳을 하나만 제안하세요. 쓰는 글이 없으면 아무 말도 하지 말고 "—"만 답하세요.',
+            '사용자가 소셜미디어에 올릴 글을 쓰는 중일 수 있습니다. 쓰고 있는 글이 있으면 훅(첫 문장)·읽히는 매력·퍼질 만한 요소를 한두 문장으로 짚고, 고칠 곳을 하나만 제안하세요. 쓰는 글이 없으면 **지금 화면이 무엇인지 한 줄로만** 알려주세요(예: "릴스 편집 화면으로 넘어오셨네요"). 빈 답이나 기호만 보내지 마세요.',
             langLine(ko)
           ].join('\n\n')
         : [
@@ -482,7 +519,7 @@ export default function AiPanel({
           <span className="switch-row">
             <span className="switch-label">{m.social.watchLabel}</span>
             <button
-              className={`switch ${follow ? 'on' : ''}`}
+              className={`switch ${follow ? 'on' : ''} ${hintToggle ? 'wanted' : ''}`}
               onClick={() => setFollow((v) => !v)}
               role="switch"
               aria-checked={follow}
@@ -516,7 +553,7 @@ export default function AiPanel({
           <div className="ai-empty">{watch ? m.social.aiEmptyConsole : m.social.aiEmpty}</div>
         )}
         {msgs.map((mm, i) => (
-          <div key={i} className={`ai-msg ${mm.role}`}>
+          <div key={i} className={`ai-msg ${mm.role} ${mm.tone ?? ''}`}>
             {mm.imgs && mm.imgs.length > 0 && (
               <div className="ai-msg-imgs">
                 {mm.imgs.map((src, k) => (

@@ -63,6 +63,7 @@ export const en = {
     imgPrompt: 'Take a look at this screen and help.',
     injectPrompt: "Here's the page I'm looking at. Read it and wait for my question — a one-line summary of what this is is enough for now.",
     injectEmpty: "Nothing to read on this page yet.",
+    staleTitle: 'tab title says "{t}" — SPA titles go stale, trust the text below over it',
     toolText: 'Read the page',
     toolHtml: 'Read the page HTML',
     toolShot: 'Took a screenshot',
@@ -78,8 +79,10 @@ export const en = {
     toolTruncated: '[truncated — the rest was cut to stay within budget. Ask for a narrower part if you need more.]',
     toolAccounts: 'Checked your accounts',
     toolApps: 'Checked your apps',
-    needPage: 'AI needs to see this page — press [Send page] on the left',
-    needHtml: 'AI needs this page\'s HTML — press [Send HTML] on the left',
+    needPage:
+      'AI needs to see this page. Turn on “Let AI read the web page” above and it works right away — or press [Send page] on the left for this once, attach a screenshot with ▣, or just describe it.',
+    needHtml:
+      'AI needs this page\'s HTML. Turn on “Let AI read the web page” above, or press [Send HTML] on the left for this once.',
     draftEdit: 'Edit',
     draftDone: 'Done',
     draftCopy: 'Copy',

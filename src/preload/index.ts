@@ -120,6 +120,9 @@ const api = {
         resume?: string
         images?: { mediaType: string; data: string }[]
         feature?: AiFeature
+        // 역할·도구 규약. claude CLI에선 --system-prompt로 **기본 시스템 프롬프트를 대체**한다 —
+        // 안 그러면 코딩 에이전트로 프라이밍된 채라 우리 규약과 자기 도구가 경쟁한다
+        system?: string
       }
     ): Promise<AiChatResult> => ipcRenderer.invoke('ai:chat', prompt, opts),
     usage: (): Promise<AiUsageEntry[]> => ipcRenderer.invoke('ai:usage'),

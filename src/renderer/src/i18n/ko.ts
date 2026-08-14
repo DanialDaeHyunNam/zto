@@ -65,6 +65,7 @@ export const ko: Messages = {
     imgPrompt: '이 화면을 보고 도와줘.',
     injectPrompt: '지금 보고 있는 화면입니다. 읽어두고 제 질문을 기다려 주세요 — 지금은 이게 뭔지 한 줄이면 충분합니다.',
     injectEmpty: '이 화면에서 읽을 글이 아직 없습니다.',
+    staleTitle: '탭 제목은 "{t}" — SPA에서 제목은 낡습니다. 아래 본문을 더 믿으세요',
     toolText: '화면을 읽었습니다',
     toolHtml: 'HTML을 읽었습니다',
     toolShot: '화면을 캡처했습니다',
@@ -80,8 +81,10 @@ export const ko: Messages = {
     toolTruncated: '[잘림 — 예산을 넘어 뒤쪽을 잘랐습니다. 더 필요하면 범위를 좁혀 다시 요청하세요.]',
     toolAccounts: '내 계정을 확인했습니다',
     toolApps: '내 앱을 확인했습니다',
-    needPage: 'AI가 이 화면을 봐야 합니다 — 왼쪽 [화면 글]을 눌러주세요',
-    needHtml: 'AI가 이 화면의 HTML이 필요합니다 — 왼쪽 [HTML]을 눌러주세요',
+    needPage:
+      'AI가 이 화면을 봐야 합니다. 위의 “웹 화면 AI가 읽을 수 있게 하기”를 켜면 바로 됩니다 — 켜지 않으시려면 왼쪽 [화면 글]로 이번만 넘기거나, ▣로 화면을 찍어 붙이거나, 직접 설명해 주세요.',
+    needHtml:
+      'AI가 이 화면의 HTML이 필요합니다. 위의 “웹 화면 AI가 읽을 수 있게 하기”를 켜면 바로 됩니다 — 아니면 왼쪽 [HTML]로 이번만 넘겨주세요.',
     draftEdit: '편집',
     draftDone: '완료',
     draftCopy: '복사',

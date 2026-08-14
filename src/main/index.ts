@@ -2549,6 +2549,14 @@ app.whenReady().then(() => {
     }
   }
 
+  // ⚠️ spawn하는 `claude`는 **사용자의 Claude Code 환경을 그대로 물려받는다** — MCP 서버,
+  // 훅, 플러그인, CLAUDE.md, 스킬까지. 그래서 ZTO 안에서 "왼쪽 영상 봐줘"라고 물었더니
+  // 모델이 "지금 열 수 있는 건 .pen 디자인 파일뿐"이라고 답했다(2026-08-14 실사용):
+  // 사용자의 Pencil MCP를 자기 도구로 알고 있었고, 우리 <zto-tool> 규약과 경쟁했다.
+  // 우리는 **깨끗한 한 턴**만 필요하다 — MCP를 격리해서 부른다.
+  // (`--bare`도 있지만 키체인 읽기까지 꺼서 구독 로그인이 깨진다 — 실측 "Not logged in".)
+  const CLAUDE_ISOLATE = ['--strict-mcp-config']
+
   // AI 한 턴 — active provider·mode로 실행. 구독(claude CLI spawn) 우선 구현, resume로 대화 이어감.
   // 이미지가 있으면 stream-json 입력으로 멀티모달(실증 확인) — 없으면 가벼운 --output-format json.
   ipcMain.handle(
@@ -2560,6 +2568,7 @@ app.whenReady().then(() => {
         resume?: string
         images?: { mediaType: string; data: string }[]
         feature?: AiFeature
+        system?: string
       }
     ): Promise<AiChatResult> => {
       // AI도 유료 기능이다(공식 빌드 한정). **자기 키를 쓰는 BYO여도** 앱 자체가 유료다 —
@@ -2605,7 +2614,16 @@ app.whenReady().then(() => {
 
         // 텍스트만 — 검증된 가벼운 경로
         if (images.length === 0) {
-          const args = ['-p', prompt, '--output-format', 'json', '--model', model]
+          const args = [
+            '-p',
+            prompt,
+            ...CLAUDE_ISOLATE,
+            ...(opts?.system ? ['--system-prompt', opts.system] : []),
+            '--output-format',
+            'json',
+            '--model',
+            model
+          ]
           if (opts?.resume) args.push('--resume', opts.resume)
           return await new Promise<AiChatResult>((resolve) => {
             // ⚠️ stdin을 반드시 닫는다. `claude -p`는 파이프로 열린 stdin에 입력이 올까 봐
@@ -2644,6 +2662,8 @@ app.whenReady().then(() => {
         const msg = JSON.stringify({ type: 'user', message: { role: 'user', content } })
         const args = [
           '-p',
+          ...CLAUDE_ISOLATE,
+          ...(opts?.system ? ['--system-prompt', opts.system] : []),
           '--input-format',
           'stream-json',
           '--output-format',
