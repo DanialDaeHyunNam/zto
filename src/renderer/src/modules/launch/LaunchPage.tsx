@@ -787,6 +787,9 @@ export default function LaunchPage(): React.JSX.Element {
     // 신규 여정은 빈 손으로 시작한다 — 관리 홈의 선택이 남아 있으면 기존 앱 카드도 없는
     // 화면에서 그 앱의 뒷단계(콘텐츠·등록)가 유령처럼 뜬다
     if (next === 'new') setSelected(null)
+    // 되돌아온 관리 홈은 첫 진입과 같아야 한다 — 선택이 비었으면 첫 앱 자동 선택
+    // (비워둔 채 두면 칩만 있고 대시보드가 없는 빈 화면이 된다, 2026-08-15 실사용)
+    else if (!selected && sheets.length > 0) selectSheet(sheets[0].file)
   }
 
   const setDevAccount = useCallback((store: StoreKind, status: 'yes' | 'no', email?: string) => {
