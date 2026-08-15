@@ -70,6 +70,7 @@ import {
   type PlayReleaseRow,
   type RunResult,
   type SheetIapInfo,
+  type SheetListing,
   type StoreKind,
   type SecretVersion,
   type StoreSnapshotEntry
@@ -2944,7 +2945,8 @@ app.whenReady().then(() => {
       _e,
       name: string,
       packageName: string,
-      bundleId: string
+      bundleId: string,
+      about?: string
     ): Promise<{ ok: boolean; file?: string; error?: string; detail?: string }> => {
       // 파일명은 우리가 정하는 것이고 얼마든지 피할 수 있다 — **진짜 중복은 패키지 이름**이다.
       // (예전엔 패키지의 마지막 조각을 파일명으로 썼는데, com.<브랜드>.app 관례에서 그 조각은
@@ -2976,13 +2978,159 @@ app.whenReady().then(() => {
       for (let i = 2; existsSync(join(ANSWERS_DIR, file)); i++) file = `${base}-${i}.json`
       const path = join(ANSWERS_DIR, file)
       const sheet = {
-        app: { name, packageName, bundleId: bundleId || packageName },
+        // about: "이 앱이 뭔지"의 자연어 원본(2026-08-15 Dan). 신규 앱은 스토어 설명이 아직 없어
+        // AI가 기준 삼을 게 없다 — 이후 메타 초안·설문(데이터 보안 등) 답 추론의 기준이 된다.
+        // 기존 앱은 스토어에서 pull한 설명이 그 역할을 하므로 import 경로엔 없다.
+        app: { name, packageName, bundleId: bundleId || packageName, about: (about ?? '').trim() },
         iap: [],
         credentials: { googleSa: '', asc: { keyPath: '', keyId: '', issuerId: '' } },
         console_answers: { data_safety: {}, content_rating: {}, app_access: '', review_notes: '' }
       }
       writeFileSync(path, JSON.stringify(sheet, null, 2))
       return { ok: true, file }
+    }
+  )
+  // 신규 앱 여정 ① — Bundle ID를 ASC API로 등록한다(2026-08-14 Dan "압도적으로 편하게").
+  // 첫 관문이 developer.apple.com이라는 것부터가 최초 설정의 고통이었다 — 포털이 둘로 갈라져
+  // 처음 하는 사람은 ①의 존재를 모른 채 ASC에서 "번들 ID가 목록에 없는데?"로 막힌다.
+  // 앱에 붙기 전의 Bundle ID는 삭제 가능하므로 **되돌릴 수 있는 쓰기**다(컨펌 불필요).
+  // 멱등: 이미 등록돼 있으면 성공으로 친다 — 재시도도, 수동 선등록도 같은 결과로 흡수된다.
+  ipcMain.handle(
+    'launch:registerBundleId',
+    async (
+      _e,
+      file: string
+    ): Promise<{ ok: boolean; already?: boolean; error?: string; detail?: string }> => {
+      let bundleId = ''
+      let appName = ''
+      try {
+        const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+        bundleId = sheet.app?.bundleId || sheet.app?.packageName || ''
+        appName = sheet.app?.name || ''
+      } catch {
+        return { ok: false, error: 'sheet-not-found' }
+      }
+      if (!bundleId) return { ok: false, error: 'no-bundle-id' }
+      const asc = firstAscCreds()
+      if (!asc) return { ok: false, error: 'no-asc-creds' }
+      const tok = await ascTokenFor(asc)
+      if (!tok) return { ok: false, error: 'token-failed' }
+      const A = 'https://api.appstoreconnect.apple.com/v1'
+      const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+      try {
+        const q = await fetch(
+          `${A}/bundleIds?filter%5Bidentifier%5D=${encodeURIComponent(bundleId)}&limit=200`,
+          { headers }
+        )
+        if (q.ok) {
+          const rows =
+            ((await q.json()) as { data?: { attributes?: { identifier?: string } }[] }).data ?? []
+          // filter[identifier]는 부분 일치까지 돌려준다 — 정확 일치만 "이미 있음"으로 인정
+          if (rows.some((r) => r.attributes?.identifier === bundleId)) return { ok: true, already: true }
+        }
+        // Apple은 Bundle ID 이름의 특수문자를 거부한다 — 영숫자·공백만 남기고, 비면(한글 앱명 등)
+        // 식별자에서 만든다
+        const bidName =
+          appName.replace(/[^A-Za-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim() ||
+          bundleId.replace(/[^A-Za-z0-9]+/g, ' ').trim()
+        const r = await fetch(`${A}/bundleIds`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            data: { type: 'bundleIds', attributes: { name: bidName, identifier: bundleId, platform: 'IOS' } }
+          })
+        })
+        if (!r.ok) {
+          const j = (await r.json().catch(() => ({}))) as {
+            errors?: { detail?: string; title?: string }[]
+          }
+          return {
+            ok: false,
+            error: `http-${r.status}`,
+            detail: (j.errors?.[0]?.detail ?? j.errors?.[0]?.title ?? '').slice(0, 200)
+          }
+        }
+        return { ok: true }
+      } catch (e) {
+        return { ok: false, error: String(e).slice(0, 200) }
+      }
+    }
+  )
+  // 신규 앱 여정 ② — 콘텐츠(리스팅) 초안. 스토어 레코드가 생기기 전의 원본이자, 생긴 뒤
+  // applyEdits가 실어 보낼 재료다. 시트가 단일 진실 — 별도 저장소를 만들면 곧 갈라진다.
+  ipcMain.handle('launch:getListing', (_e, file: string): SheetListing | null => {
+    try {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const l = sheet.listing ?? {}
+      const name = sheet.app?.name ?? ''
+      return {
+        locale: l.locale ?? 'en-US',
+        android: {
+          title: l.android?.title ?? name,
+          short: l.android?.short ?? '',
+          full: l.android?.full ?? '',
+          icon: l.android?.icon ?? ''
+        },
+        ios: {
+          name: l.ios?.name ?? name,
+          subtitle: l.ios?.subtitle ?? '',
+          keywords: l.ios?.keywords ?? '',
+          full: l.ios?.full ?? ''
+        }
+      }
+    } catch {
+      return null
+    }
+  })
+  ipcMain.handle('launch:saveListing', (_e, file: string, listing: SheetListing): boolean => {
+    try {
+      const p = join(ANSWERS_DIR, file)
+      const sheet = JSON.parse(readFileSync(p, 'utf8'))
+      sheet.listing = listing
+      writeFileSync(p, JSON.stringify(sheet, null, 2))
+      return true
+    } catch {
+      return false
+    }
+  })
+  // 아이콘 선택 — 512×512 PNG(≤1MB, Play 규격)만 받고 **userData/assets로 복사**한다.
+  // 원본 위치를 참조로 들고 있으면 다운로드 폴더 청소 한 번에 끊긴다(자격증명에서 겪은 것과 같은 결).
+  // Play가 업로드에서 거부하기 전에 우리가 먼저 잡는다 — 규격 검증은 빠를수록 싸다.
+  ipcMain.handle(
+    'launch:pickListingIcon',
+    async (_e, file: string): Promise<{ ok: boolean; name?: string; error?: string }> => {
+      const picked = await dialog.showOpenDialog({
+        properties: ['openFile'],
+        filters: [{ name: 'PNG', extensions: ['png'] }]
+      })
+      if (picked.canceled || !picked.filePaths[0]) return { ok: false, error: 'canceled' }
+      let buf: Buffer
+      try {
+        buf = readFileSync(picked.filePaths[0])
+      } catch {
+        return { ok: false, error: 'read-failed' }
+      }
+      if (buf.length < 33 || buf.readUInt32BE(0) !== 0x89504e47) return { ok: false, error: 'not-png' }
+      const w = buf.readUInt32BE(16)
+      const h = buf.readUInt32BE(20)
+      if (w !== 512 || h !== 512) return { ok: false, error: `size-${w}x${h}` }
+      if (buf.length > 1024 * 1024) return { ok: false, error: 'too-big' }
+      const assetsDir = join(app.getPath('userData'), 'assets')
+      try {
+        mkdirSync(assetsDir, { recursive: true })
+        const name = `${basename(file, '.json')}-icon.png`
+        writeFileSync(join(assetsDir, name), buf)
+        const p = join(ANSWERS_DIR, file)
+        const sheet = JSON.parse(readFileSync(p, 'utf8'))
+        sheet.listing = {
+          ...(sheet.listing ?? {}),
+          android: { ...(sheet.listing?.android ?? {}), icon: name }
+        }
+        writeFileSync(p, JSON.stringify(sheet, null, 2))
+        return { ok: true, name }
+      } catch {
+        return { ok: false, error: 'write-failed' }
+      }
     }
   )
   // 기존 앱 가져오기 — 패키지명 실존·접근 검증(SA 제공 시) 후 시트 생성
@@ -2999,9 +3147,15 @@ app.whenReady().then(() => {
         .replace(/[^a-z0-9-]+/g, '-')
         .replace(/^-+|-+$/g, '')
       if (!slug || !packageName) return { ok: false, error: 'invalid-name' }
-      const file = `${slug}.json`
+      // import는 "있는 걸 들여오기"다 — 같은 패키지의 시트가 이미 있으면 에러가 아니라
+      // **그 시트가 답**이다(2026-08-14 Dan: "가져오는 건데 이미 있다는 에러가 왜 나").
+      // 막아버리면 사용자는 자기 앱을 가져오다 막다른 길에 선다.
+      const dup = listSheets().find((x) => x.packageName === packageName)
+      if (dup) return { ok: true, file: dup.file }
+      // 파일명 충돌은 패키지가 다른 딴 앱이라는 뜻 — 막지 말고 이름만 비켜 간다(createSheet와 동일)
+      let file = `${slug}.json`
+      for (let i = 2; existsSync(join(ANSWERS_DIR, file)); i++) file = `${slug}-${i}.json`
       const path = join(ANSWERS_DIR, file)
-      if (existsSync(path)) return { ok: false, error: 'exists' }
 
       let verified = false
       if (saPath) {

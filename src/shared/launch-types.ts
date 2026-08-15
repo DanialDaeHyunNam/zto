@@ -522,3 +522,12 @@ export function suggestEmailDomain(email: string): string | null {
   }
   return null
 }
+
+// 신규 앱 여정 ② — 콘텐츠(스토어 리스팅) 초안. 시트에 저장했다가 스토어 레코드가 생기면 반영한다.
+// 양대 스토어가 같은 정보를 다른 규격으로 받으므로 플랫폼별로 든다. iOS 아이콘이 없는 이유:
+// App Store 아이콘은 빌드(Asset Catalog) 소속이라 여기서 못 넣는다 — 핸드오프로 넘긴다.
+export interface SheetListing {
+  locale: string
+  android: { title: string; short: string; full: string; icon: string }
+  ios: { name: string; subtitle: string; keywords: string; full: string }
+}

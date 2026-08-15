@@ -16,6 +16,7 @@ import type { Messages } from '../../i18n/en'
 import { PlatformIcon } from '../../platform-icons'
 import AppDashboard from './AppDashboard'
 import EditScope from './EditScope'
+import ListingForm from './ListingForm'
 import CredentialSetup from './CredentialSetup'
 
 type IapChoice = 'undecided' | 'yes' | 'no'
@@ -282,15 +283,35 @@ function NewSheetForm({
   const [name, setName] = useState('')
   const [pkg, setPkg] = useState('')
   const [bundle, setBundle] = useState('')
+  // "이 앱이 뭔지" 자연어 — 신규 앱은 스토어 설명이 없어 AI가 기준 삼을 게 없다(2026-08-15 Dan).
+  // 여기서 한 번 받아두면 이후 메타 초안·설문 답 추론이 전부 이 문장을 기준으로 돈다.
+  const [about, setAbout] = useState('')
   const [err, setErr] = useState('')
+  // 시트가 만들어지면 그 자리에서 Bundle ID를 ASC에 등록하고 결과를 보여준다(신규 앱 여정 ①).
+  // 조용히 등록하고 넘어가면 Apple 계정에 뭔가 생겼다는 걸 사용자가 모른다 — 한 줄은 보여야 한다.
+  const [reg, setReg] = useState<'' | 'busy' | 'ok' | 'already' | 'skipped' | 'failed'>('')
+  const [regDetail, setRegDetail] = useState('')
+  const [createdFile, setCreatedFile] = useState('')
 
   const create = (): void => {
     if (!name.trim() || !pkg.trim()) {
       setErr(m.launch.sheetInvalid)
       return
     }
-    window.zto.launch.createSheet(name.trim(), pkg.trim(), bundle.trim()).then((r) => {
-      if (r.ok && r.file) return onCreated(r.file)
+    window.zto.launch.createSheet(name.trim(), pkg.trim(), bundle.trim(), about).then(async (r) => {
+      if (r.ok && r.file) {
+        setErr('')
+        setCreatedFile(r.file)
+        setReg('busy')
+        const b = await window.zto.launch.registerBundleId(r.file)
+        if (b.ok) setReg(b.already ? 'already' : 'ok')
+        else if (b.error === 'no-asc-creds') setReg('skipped')
+        else {
+          setReg('failed')
+          setRegDetail([b.detail, b.error].filter(Boolean).join(' · '))
+        }
+        return
+      }
       // 번들 ID 선점은 **누가 쓰고 있는지**까지 말해준다 — "안 됩니다"만으로는 다음 수를 못 정한다
       const msg =
         r.error === 'exists'
@@ -302,6 +323,35 @@ function NewSheetForm({
               : m.launch.sheetInvalid
       setErr(r.detail ? `${msg} — ${r.detail}` : msg)
     })
+  }
+
+  // 등록 결과 화면 — 실패해도 시트는 이미 있으므로 여정은 [계속]으로 이어진다
+  if (reg) {
+    const line =
+      reg === 'busy'
+        ? m.launch.bundleRegBusy
+        : reg === 'ok'
+          ? m.launch.bundleRegOk
+          : reg === 'already'
+            ? m.launch.bundleRegAlready
+            : reg === 'skipped'
+              ? m.launch.bundleRegSkipped
+              : `${m.launch.bundleRegFailed}${regDetail ? ` — ${regDetail}` : ''}`
+    return (
+      <div className="form-card slim">
+        <div className="form-card-title">{name.trim()}</div>
+        <p className="settings-intro">{line}</p>
+        <div className="form-actions">
+          <button
+            className="choice small active"
+            disabled={reg === 'busy'}
+            onClick={() => onCreated(createdFile)}
+          >
+            {m.launch.sheetContinue}
+          </button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -334,6 +384,17 @@ function NewSheetForm({
           placeholder={pkg || m.launch.packagePlaceholder}
           onChange={(e) => setBundle(e.target.value)}
         />
+      </label>
+      <label className="form-field">
+        <span className="form-label">{m.launch.aboutLabel}</span>
+        <textarea
+          className="email-input"
+          rows={3}
+          value={about}
+          placeholder={m.launch.aboutPlaceholder}
+          onChange={(e) => setAbout(e.target.value)}
+        />
+        <span className="step-note no-indent">{m.launch.aboutHint}</span>
       </label>
       {err && <p className="field-err no-indent">{err}</p>}
       <div className="form-actions">
@@ -403,16 +464,27 @@ function ImportSheetForm({
           <span className="no-apps">{m.launch.ascLoading}</span>
         ) : (
           <div className="app-picker">
+            {/* 칩 클릭 = 즉시 임포트(2026-08-14 Dan) — ASC가 준 이름·번들ID를 사람이 다시
+                확인할 이유가 없다. 필드 확인은 직접 추가(manual)에서만. 실패하면 그때 폼이 열린다 */}
             {ascApps.map((a) => (
               <button
                 key={a.bundleId}
                 type="button"
                 className={`app-chip ${chosen === a.bundleId ? 'active' : ''}`}
+                disabled={busy}
                 onClick={() => {
                   setName(a.name)
                   setPkg(a.bundleId)
                   setErr('')
                   setChosen(a.bundleId)
+                  setBusy(true)
+                  window.zto.launch.importApp(a.name, a.bundleId, saPath.trim()).then((r) => {
+                    setBusy(false)
+                    if (r.ok && r.file) return onCreated(r.file)
+                    if (r.error === 'verify-failed')
+                      setErr(m.launch.verifyFailed.replace('{d}', r.detail ?? ''))
+                    else setErr(m.launch.importPkgRequired)
+                  })
                 }}
               >
                 <PlatformIcon id="app-store-connect" />
@@ -434,7 +506,7 @@ function ImportSheetForm({
           </div>
         )}
       </div>
-      {chosen !== null && (
+      {chosen === 'manual' && (
         <>
           <label className="form-field">
             <span className="form-label">{m.launch.packageLabel}</span>
@@ -471,13 +543,16 @@ function ImportSheetForm({
         <button className="choice small" onClick={onCancel} disabled={busy}>
           {m.accounts.cancel}
         </button>
-        <button
-          className="choice small active"
-          onClick={doImport}
-          disabled={busy || chosen === null || !pkg.trim()}
-        >
-          {busy ? m.launch.verifying : m.launch.importBtn}
-        </button>
+        {/* [Import]는 직접 추가에서만 — 칩은 클릭이 곧 임포트다 */}
+        {chosen === 'manual' && (
+          <button
+            className="choice small active"
+            onClick={doImport}
+            disabled={busy || !pkg.trim()}
+          >
+            {busy ? m.launch.verifying : m.launch.importBtn}
+          </button>
+        )}
       </div>
     </div>
   )
@@ -721,6 +796,27 @@ export default function LaunchPage(): React.JSX.Element {
     selectSheet(file)
   }
 
+  // ⌥1..9 = 앱 칩 전환 (2026-08-14 Dan). 층 구분은 브라우저와 같은 규칙 — 바깥(모듈)이 ⌘,
+  // 안(탭·칩)이 ⌥. 브라우저 오버레이가 열려 있으면 ⌥n은 그쪽 탭 몫이라 여기 안 온다(뷰가 키를
+  // 먼저 받는다). 입력창에 포커스 중이면 ⌥숫자가 특수문자 입력일 수 있어 건드리지 않는다.
+  useEffect(() => {
+    if (view !== 'manage') return
+    const onKey = (e: KeyboardEvent): void => {
+      if (!e.altKey || e.metaKey || e.ctrlKey) return
+      const hit = /^Digit([1-9])$/.exec(e.code)
+      if (!hit) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      const i = parseInt(hit[1], 10) - 1
+      if (i < sheets.length) {
+        e.preventDefault()
+        selectSheet(sheets[i].file)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [view, sheets, selectSheet])
+
   useEffect(() => {
     if (selected && iapChoice === 'yes') {
       window.zto.launch.checkCredentials(selected).then(setCreds)
@@ -781,7 +877,7 @@ export default function LaunchPage(): React.JSX.Element {
         )}
         <div className="wizard wide">
           <div className="app-picker">
-            {sheets.map((s) => (
+            {sheets.map((s, i) => (
               <button
                 key={s.file}
                 className={`app-chip big ${selected === s.file ? 'active' : ''}`}
@@ -789,6 +885,7 @@ export default function LaunchPage(): React.JSX.Element {
               >
                 {s.icon && <img className="chip-app-icon" src={s.icon} alt="" />}
                 {s.appName}
+                {i < 9 && <span className="chip-kbd">⌥{i + 1}</span>}
               </button>
             ))}
             <button
@@ -892,6 +989,17 @@ export default function LaunchPage(): React.JSX.Element {
             <NewSheetForm onCreated={onSheetCreated} onCancel={() => setSheetForm('none')} />
           )}
         </div>
+
+        {/* 여정 ② — 콘텐츠 입력. 스토어 등록(콘솔) 전에 받는다: 여기 적힌 값이
+            앱 레코드 생성 폼과 이후 메타 반영의 재료가 된다 */}
+        {selected && (
+          <div className="step">
+            <div className="step-head">
+              <span className="step-no">{n()}</span> {m.launch.stepContent}
+            </div>
+            <ListingForm file={selected} />
+          </div>
+        )}
 
         {selected && (
           <div className="step">

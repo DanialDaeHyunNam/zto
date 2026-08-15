@@ -57,9 +57,10 @@ export default function BrowserSurface({
     const b = isStartUrl(stateRef.current)
       ? { x: r.left, y: r.top, width: 0, height: 0 }
       : { x: r.left, y: r.top, width: r.width, height: r.height }
-    if (first) window.zto.browser.attach(b)
+    // mode가 곧 방이다 — 콘솔과 소셜은 탭 세트를 공유하지 않는다(2026-08-14 Dan)
+    if (first) window.zto.browser.attach(b, mode)
     else window.zto.browser.setBounds(b)
-  }, [])
+  }, [mode])
 
   useLayoutEffect(() => {
     applyView(true)
