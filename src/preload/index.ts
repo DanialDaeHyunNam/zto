@@ -22,6 +22,7 @@ import type {
   RunResult,
   SecretVersion,
   SheetIapInfo,
+  SheetListing,
   SheetSummary,
   StoreKind,
   StoreSnapshotEntry
@@ -65,8 +66,9 @@ const api = {
   getLocale: (): Promise<'ko' | 'en'> => ipcRenderer.invoke('app:getLocale'),
   // #4 ZTO 자체 브라우저 — WebContentsView 임베드·네비게이트·eval/CDP 제어
   browser: {
-    attach: (bounds: BrowserBounds): Promise<boolean> =>
-      ipcRenderer.invoke('browser:attach', bounds),
+    // space: 콘솔·소셜이 딴 방(탭 세트)을 쓴다 — 어느 방을 붙일지는 화면이 안다
+    attach: (bounds: BrowserBounds, space?: 'console' | 'social'): Promise<boolean> =>
+      ipcRenderer.invoke('browser:attach', bounds, space),
     setBounds: (bounds: BrowserBounds): Promise<void> =>
       ipcRenderer.invoke('browser:setBounds', bounds),
     detach: (): Promise<void> => ipcRenderer.invoke('browser:detach'),
@@ -199,10 +201,23 @@ const api = {
     createSheet: (
       name: string,
       packageName: string,
-      bundleId: string
+      bundleId: string,
+      about?: string // 자연어 "이 앱이 뭔지" — 이후 AI 초안의 기준
       // detail = 선점된 번들 ID의 임자(앱 이름 — 개발자)
     ): Promise<{ ok: boolean; file?: string; error?: string; detail?: string }> =>
-      ipcRenderer.invoke('launch:createSheet', name, packageName, bundleId),
+      ipcRenderer.invoke('launch:createSheet', name, packageName, bundleId, about),
+    // 신규 앱 여정 ① — 시트의 bundleId를 ASC에 등록(멱등). developer.apple.com 관문 제거
+    registerBundleId: (
+      file: string
+    ): Promise<{ ok: boolean; already?: boolean; error?: string; detail?: string }> =>
+      ipcRenderer.invoke('launch:registerBundleId', file),
+    // 신규 앱 여정 ② — 콘텐츠(리스팅) 초안. 시트가 단일 진실
+    getListing: (file: string): Promise<SheetListing | null> =>
+      ipcRenderer.invoke('launch:getListing', file),
+    saveListing: (file: string, listing: SheetListing): Promise<boolean> =>
+      ipcRenderer.invoke('launch:saveListing', file, listing),
+    pickListingIcon: (file: string): Promise<{ ok: boolean; name?: string; error?: string }> =>
+      ipcRenderer.invoke('launch:pickListingIcon', file),
     importApp: (
       name: string,
       packageName: string,

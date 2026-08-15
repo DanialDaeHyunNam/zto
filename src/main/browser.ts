@@ -23,10 +23,23 @@ interface Tab {
   view: WebContentsView
 }
 
-let tabs: Tab[] = []
-let activeId: string | null = null
-let attached = false // 활성 뷰가 창에 붙어 있나 (다른 모듈로 나가면 뗀다)
-let lastBounds: Bounds | null = null // 렌더러가 보고한 '구멍' 사각형
+// ---------- 스페이스: 콘솔과 소셜은 딴 방을 쓴다 (2026-08-14 Dan) ----------
+// 한 방을 쓰면 앱스토어 관리에서 열어둔 콘솔 탭이 소셜 화면에 그대로 떠 있다 — 문맥이 섞이고,
+// 한쪽에서 탭을 닫으면 다른 쪽 작업까지 사라진다. 탭·활성탭·bounds는 방마다 따로 들되,
+// 로그인 세션(쿠키)은 기본 세션 공유 그대로 — 콘솔 로그인은 어느 방에서든 유지되는 게 맞다.
+export type SpaceId = 'console' | 'social'
+interface Space {
+  tabs: Tab[]
+  activeId: string | null
+  lastBounds: Bounds | null // 렌더러가 보고한 '구멍' 사각형 (레이아웃이 방마다 다르다)
+}
+const spaces: Record<SpaceId, Space> = {
+  console: { tabs: [], activeId: null, lastBounds: null },
+  social: { tabs: [], activeId: null, lastBounds: null }
+}
+let current: SpaceId = 'console'
+const sp = (): Space => spaces[current]
+let attached = false // 현재 방의 활성 뷰가 창에 붙어 있나 (다른 모듈로 나가면 뗀다)
 let winWired = false // 메인 창 webContents에 단축키 바인딩했나
 const debugAttached = new Set<string>() // CDP 디버거 연결된 탭 id
 let getWin: () => BrowserWindow | null = () => null
@@ -71,8 +84,9 @@ let pendingDownload: {
 // before-input-event로는 못 막는다: 메뉴 액셀러레이터가 네이티브 층에서 먼저 처리되기 때문에
 // 앱 메뉴에서 이 함수를 불러 판단해야 한다(2026-08-14 실사용에서 창이 통째로 닫혔다).
 export function closeTabIfBrowserVisible(): boolean {
-  if (!attached || !activeId) return false
-  closeTab(activeId)
+  const id = sp().activeId
+  if (!attached || !id) return false
+  closeTab(id)
   return true
 }
 
@@ -126,7 +140,10 @@ const normalizeUrl = (raw: string): string => {
   return 'https://www.google.com/search?q=' + encodeURIComponent(s)
 }
 
-const activeTab = (): Tab | null => tabs.find((t) => t.id === activeId) ?? null
+const activeTab = (): Tab | null => sp().tabs.find((t) => t.id === sp().activeId) ?? null
+// 탭이 어느 방에 있든 찾는다 — 자동화 dispose가 방 전환 뒤에 불려도 제 탭을 지워야 한다
+const spaceOf = (id: string): Space | null =>
+  Object.values(spaces).find((s) => s.tabs.some((t) => t.id === id)) ?? null
 const activeWc = (): WebContents | null => activeTab()?.view.webContents ?? null
 const isStartWc = (wc: WebContents): boolean => {
   const u = wc.getURL()
@@ -136,7 +153,7 @@ const isStartWc = (wc: WebContents): boolean => {
 function emit(): void {
   const w = getWin()
   if (!w || w.isDestroyed()) return
-  const list = tabs.map((t) => ({
+  const list = sp().tabs.map((t) => ({
     id: t.id,
     title: t.view.webContents.getTitle(),
     url: t.view.webContents.getURL(),
@@ -145,7 +162,7 @@ function emit(): void {
   const a = activeWc()
   const state: BrowserState = {
     tabs: list,
-    activeId,
+    activeId: sp().activeId,
     url: a?.getURL() ?? '',
     title: a?.getTitle() ?? '',
     loading: a?.isLoading() ?? false,
@@ -197,7 +214,7 @@ function wireShortcuts(wc: WebContents): void {
       newTab()
     } else if (k === 'w') {
       event.preventDefault()
-      if (activeId) closeTab(activeId)
+      if (sp().activeId) closeTab(sp().activeId as string)
     }
   })
 }
@@ -319,13 +336,16 @@ function unmute(wc: WebContents): void {
 function showActive(): void {
   const w = getWin()
   if (!w || w.isDestroyed()) return
-  for (const t of tabs) {
-    try {
-      w.contentView.removeChildView(t.view)
-    } catch {
-      /* 안 붙어 있었으면 무시 */
+  // **모든 방**의 뷰를 뗀다 — 방을 전환할 때 이전 방의 활성 뷰가 남아 있으면 두 화면이 겹친다
+  for (const s of Object.values(spaces)) {
+    for (const t of s.tabs) {
+      try {
+        w.contentView.removeChildView(t.view)
+      } catch {
+        /* 안 붙어 있었으면 무시 */
+      }
+      if (t.id !== sp().activeId) suspendMedia(t.view.webContents)
     }
-    if (t.id !== activeId) suspendMedia(t.view.webContents)
   }
   const a = activeTab()
   if (a) {
@@ -337,10 +357,11 @@ function showActive(): void {
       /* 파괴 직후면 무시 */
     }
     unmute(a.view.webContents) // 재생은 되살리지 않는다 — 사람이 누른 적 없는 소리를 내지 않는다
-    if (lastBounds) {
+    const lb = sp().lastBounds
+    if (lb) {
       const b = isStartWc(a.view.webContents)
-        ? { x: lastBounds.x, y: lastBounds.y, width: 0, height: 0 }
-        : roundBounds(lastBounds)
+        ? { x: lb.x, y: lb.y, width: 0, height: 0 }
+        : roundBounds(lb)
       a.view.setBounds(b)
     }
     attached = true
@@ -349,8 +370,8 @@ function showActive(): void {
 
 export function newTab(url?: string): void {
   const t = makeTab()
-  tabs.push(t)
-  activeId = t.id
+  sp().tabs.push(t)
+  sp().activeId = t.id
   showActive()
   t.view.webContents.loadURL(url ? normalizeUrl(url) : 'about:blank')
   emit()
@@ -443,42 +464,48 @@ export function openAutomationTab(): {
   reveal: () => void
   dispose: () => void
 } {
-  const restore = activeId // 끝나면 사용자가 보던 탭으로 돌려놓는다
+  // 자동화는 콘솔 일이다 — 소셜 방에 끼어들지 않는다
+  current = 'console'
+  const room = spaces.console
+  const restore = room.activeId // 끝나면 사용자가 보던 탭으로 돌려놓는다
   const t = makeTab()
-  tabs.push(t)
-  activeId = t.id
+  room.tabs.push(t)
+  room.activeId = t.id
   showActive()
   emit()
   return {
     wc: t.view.webContents,
     // 핸드오프용 — 도중에 사용자가 다른 탭으로 옮겼어도 다시 앞으로 가져온다
     reveal: (): void => {
-      if (activeId === t.id) return
-      activeId = t.id
+      if (current === 'console' && room.activeId === t.id) return
+      current = 'console'
+      room.activeId = t.id
       showActive()
       emit()
     },
     dispose: (): void => {
-      if (activeId === t.id && restore && tabs.some((x) => x.id === restore)) activeId = restore
+      if (room.activeId === t.id && restore && room.tabs.some((x) => x.id === restore))
+        room.activeId = restore
       closeTab(t.id)
     }
   }
 }
 
 export function selectTab(id: string): void {
-  if (!tabs.find((t) => t.id === id)) return
-  activeId = id
+  if (!sp().tabs.find((t) => t.id === id)) return
+  sp().activeId = id
   showActive()
   emit()
 }
 
 export function selectIndex(i: number): void {
-  if (i >= 0 && i < tabs.length) selectTab(tabs[i].id)
+  if (i >= 0 && i < sp().tabs.length) selectTab(sp().tabs[i].id)
 }
 
 // 탭 순서 바꾸기 — 배열 자체를 옮긴다. ⌘1..9가 인덱스 기준이라 이래야
 // 화면에 보이는 순서와 단축키 번호가 어긋나지 않는다(뷰는 활성 탭만 붙으므로 순서와 무관).
 export function moveTab(id: string, toIndex: number): void {
+  const tabs = sp().tabs
   const from = tabs.findIndex((t) => t.id === id)
   if (from < 0) return
   const to = Math.max(0, Math.min(tabs.length - 1, toIndex))
@@ -489,9 +516,10 @@ export function moveTab(id: string, toIndex: number): void {
 }
 
 export function closeTab(id: string): void {
-  const idx = tabs.findIndex((t) => t.id === id)
-  if (idx < 0) return
-  const [removed] = tabs.splice(idx, 1)
+  const room = spaceOf(id)
+  if (!room) return
+  const idx = room.tabs.findIndex((t) => t.id === id)
+  const [removed] = room.tabs.splice(idx, 1)
   const w = getWin()
   try {
     if (w && !w.isDestroyed()) w.contentView.removeChildView(removed.view)
@@ -504,18 +532,18 @@ export function closeTab(id: string): void {
   } catch {
     /* 무시 */
   }
-  if (activeId === id) {
-    const next = tabs[idx] ?? tabs[idx - 1] ?? null
+  if (room.activeId === id) {
+    const next = room.tabs[idx] ?? room.tabs[idx - 1] ?? null
     if (next) {
-      activeId = next.id
+      room.activeId = next.id
     } else {
       // 마지막 탭을 닫으면 빈 탭 하나 유지
       const t = makeTab()
-      tabs.push(t)
-      activeId = t.id
+      room.tabs.push(t)
+      room.activeId = t.id
       t.view.webContents.loadURL('about:blank')
     }
-    showActive()
+    if (room === sp()) showActive()
   }
   emit()
 }
@@ -524,18 +552,20 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
   getWin = winGetter
   wireDownloads()
 
-  ipcMain.handle('browser:attach', (_e, bounds: Bounds): boolean => {
+  // space를 받는다 — 어느 방을 화면에 붙일지는 렌더러(어느 화면이 열렸나)가 안다
+  ipcMain.handle('browser:attach', (_e, bounds: Bounds, space?: SpaceId): boolean => {
     const w = getWin()
     if (!w) return false
-    lastBounds = bounds
+    if (space === 'console' || space === 'social') current = space
+    sp().lastBounds = bounds
     if (!winWired) {
       wireShortcuts(w.webContents)
       winWired = true
     }
-    if (tabs.length === 0) {
+    if (sp().tabs.length === 0) {
       const t = makeTab()
-      tabs.push(t)
-      activeId = t.id
+      sp().tabs.push(t)
+      sp().activeId = t.id
       t.view.webContents.loadURL('about:blank')
     }
     showActive()
@@ -544,7 +574,7 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
   })
 
   ipcMain.handle('browser:setBounds', (_e, bounds: Bounds): void => {
-    lastBounds = bounds
+    sp().lastBounds = bounds
     const a = activeTab()
     if (a && attached) {
       const b = isStartWc(a.view.webContents)
@@ -565,7 +595,7 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
       }
     }
     // 다른 모듈로 나갔다 = 이 브라우저는 지금 활성이 아니다. 탭 전부 재생을 멈춘다
-    for (const t of tabs) suspendMedia(t.view.webContents)
+    for (const t of sp().tabs) suspendMedia(t.view.webContents)
     // 키보드 포커스를 렌더러로 되돌린다 — 떼어진 뷰가 포커스를 쥔 채 남으면 단축키가 갈 곳을 잃는다
     if (w && !w.isDestroyed()) w.webContents.focus()
     attached = false
@@ -673,8 +703,8 @@ export function registerBrowserIpc(winGetter: () => BrowserWindow | null): void 
     const target = normalizeUrl(url)
     if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'bad-url' }
     const t = makeTab()
-    tabs.push(t)
-    activeId = t.id
+    sp().tabs.push(t)
+    sp().activeId = t.id
     showActive()
     emit()
     const wc = t.view.webContents
