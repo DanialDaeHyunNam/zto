@@ -784,6 +784,9 @@ export default function LaunchPage(): React.JSX.Element {
     setCreds(null)
     setSheetForm('none')
     setAddOpen(false)
+    // 신규 여정은 빈 손으로 시작한다 — 관리 홈의 선택이 남아 있으면 기존 앱 카드도 없는
+    // 화면에서 그 앱의 뒷단계(콘텐츠·등록)가 유령처럼 뜬다
+    if (next === 'new') setSelected(null)
   }
 
   const setDevAccount = useCallback((store: StoreKind, status: 'yes' | 'no', email?: string) => {
@@ -964,29 +967,25 @@ export default function LaunchPage(): React.JSX.Element {
           <div className="step-head">
             <span className="step-no">{n()}</span> {m.launch.stepDefineApp}
           </div>
-          <div className="sheet-list">
-            {sheets.map((s) => (
-              <button
-                key={s.file}
-                className={`sheet-card ${selected === s.file ? 'active' : ''}`}
-                onClick={() => selectSheet(s.file)}
-              >
-                <span className="sheet-head">
-                  {s.icon && <img className="sheet-icon" src={s.icon} alt="" />}
-                  <strong>{s.appName}</strong>
-                </span>
-                <span>{s.packageName || m.launch.noPackageName}</span>
-                <span>{m.launch.iapDefined.replace('{n}', String(s.iapCount))}</span>
-              </button>
-            ))}
-            {sheetForm === 'none' && (
-              <button className="sheet-card new" onClick={() => setSheetForm('new')}>
-                <strong>{m.launch.newApp}</strong>
-              </button>
-            )}
-          </div>
-          {sheetForm === 'new' && (
-            <NewSheetForm onCreated={onSheetCreated} onCancel={() => setSheetForm('none')} />
+          {/* 신규 여정에선 기존 앱을 늘어놓지 않는다(2026-08-15 Dan) — 여기는 만드는 곳이지
+              고르는 곳이 아니다. 기존 앱은 관리 홈이 담당. 만들고 나면 그 앱 카드 하나만 남는다 */}
+          {selected ? (
+            <div className="sheet-list">
+              {sheets
+                .filter((s) => s.file === selected)
+                .map((s) => (
+                  <button key={s.file} className="sheet-card active">
+                    <span className="sheet-head">
+                      {s.icon && <img className="sheet-icon" src={s.icon} alt="" />}
+                      <strong>{s.appName}</strong>
+                    </span>
+                    <span>{s.packageName || m.launch.noPackageName}</span>
+                    <span>{m.launch.iapDefined.replace('{n}', String(s.iapCount))}</span>
+                  </button>
+                ))}
+            </div>
+          ) : (
+            <NewSheetForm onCreated={onSheetCreated} onCancel={() => setView('manage')} />
           )}
         </div>
 
