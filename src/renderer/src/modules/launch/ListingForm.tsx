@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { SheetListing } from '../../../../shared/launch-types'
+import { LISTING_LOCALES, type SheetListing } from '../../../../shared/launch-types'
 import { useI18n } from '../../i18n'
 
 // 신규 앱 여정 ② — 콘텐츠 입력 (2026-08-14 Dan). 양대 스토어가 같은 정보를 다른 규격으로
@@ -104,17 +104,24 @@ export default function ListingForm({ file }: { file: string }): React.JSX.Eleme
   return (
     <div>
       <p className="step-note no-indent">{m.launch.listingIntro}</p>
-      <label className="form-field" style={{ maxWidth: 220 }}>
+      <label className="form-field" style={{ maxWidth: 260 }}>
         <span className="form-label">{m.launch.listingLocale}</span>
-        <input
+        {/* 드롭다운인 이유: 같은 언어를 Play는 ko-KR, ASC는 ko로 받는다 — 자유 입력이면
+            이 변환표를 못 태워 한쪽 반영이 조용히 깨진다 */}
+        <select
           className="email-input"
           value={l.locale}
-          placeholder="en-US"
           onChange={(e) => {
             setL({ ...l, locale: e.target.value })
             setSaved(false)
           }}
-        />
+        >
+          {LISTING_LOCALES.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label} — {o.value}
+            </option>
+          ))}
+        </select>
       </label>
       <div className="meta-cols">
         <div className="meta-col">
