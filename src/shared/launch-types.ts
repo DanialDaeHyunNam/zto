@@ -531,3 +531,27 @@ export interface SheetListing {
   android: { title: string; short: string; full: string; icon: string }
   ios: { name: string; subtitle: string; keywords: string; full: string }
 }
+
+// 콘텐츠 기본 언어 후보 — 양대 스토어가 **같은 언어를 다른 코드로** 받는다(Play=BCP-47,
+// ASC=자체 코드: ko-KR↔ko, zh-CN↔zh-Hans). value는 Play 형으로 저장하고 ASC 반영 시 변환한다.
+// 자유 입력이면 이 변환이 불가능해 한쪽 반영이 조용히 깨진다 — 그래서 드롭다운이다.
+export const LISTING_LOCALES: { value: string; asc: string; label: string }[] = [
+  { value: 'en-US', asc: 'en-US', label: 'English (US)' },
+  { value: 'ko-KR', asc: 'ko', label: '한국어' },
+  { value: 'ja-JP', asc: 'ja', label: '日本語' },
+  { value: 'zh-CN', asc: 'zh-Hans', label: '中文(简体)' },
+  { value: 'zh-TW', asc: 'zh-Hant', label: '中文(繁體)' },
+  { value: 'de-DE', asc: 'de-DE', label: 'Deutsch' },
+  { value: 'fr-FR', asc: 'fr-FR', label: 'Français' },
+  { value: 'es-ES', asc: 'es-ES', label: 'Español' },
+  { value: 'pt-BR', asc: 'pt-BR', label: 'Português (BR)' },
+  { value: 'it-IT', asc: 'it', label: 'Italiano' },
+  { value: 'nl-NL', asc: 'nl-NL', label: 'Nederlands' },
+  { value: 'id', asc: 'id', label: 'Bahasa Indonesia' },
+  { value: 'th', asc: 'th', label: 'ไทย' },
+  { value: 'vi', asc: 'vi', label: 'Tiếng Việt' },
+  { value: 'ru-RU', asc: 'ru', label: 'Русский' },
+  { value: 'tr-TR', asc: 'tr', label: 'Türkçe' }
+]
+export const ascLocaleOf = (v: string): string =>
+  LISTING_LOCALES.find((l) => l.value === v)?.asc ?? v

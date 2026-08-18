@@ -17,6 +17,7 @@ import { PlatformIcon } from '../../platform-icons'
 import AppDashboard from './AppDashboard'
 import EditScope from './EditScope'
 import ListingForm from './ListingForm'
+import JourneyApply from './JourneyApply'
 import CredentialSetup from './CredentialSetup'
 
 type IapChoice = 'undecided' | 'yes' | 'no'
@@ -802,6 +803,27 @@ export default function LaunchPage(): React.JSX.Element {
     selectSheet(file)
   }
 
+  // 테스트 앱 청소 — 시트·아이콘(로컬)+미사용 Bundle ID까지 ZTO가 지운다(2026-08-15 Dan).
+  // 2단 컨펌: 지우기는 비가역이라 한 번 눌렀다고 나가지 않는다(4초 안에 한 번 더)
+  const [delArmed, setDelArmed] = useState(false)
+  const deleteSelected = (): void => {
+    if (!selected) return
+    if (!delArmed) {
+      setDelArmed(true)
+      setTimeout(() => setDelArmed(false), 4000)
+      return
+    }
+    setDelArmed(false)
+    window.zto.launch.deleteSheet(selected).then(() => {
+      window.zto.launch.listSheets().then((list) => {
+        setSheets(list)
+        // 관리 홈에서 지웠으면 남은 첫 앱으로 — 빈 화면을 만들지 않는다
+        if (view === 'manage' && list.length > 0) selectSheet(list[0].file)
+        else setSelected(null)
+      })
+    })
+  }
+
   // ⌥1..9 = 앱 칩 전환 (2026-08-14 Dan). 층 구분은 브라우저와 같은 규칙 — 바깥(모듈)이 ⌘,
   // 안(탭·칩)이 ⌥. 브라우저 오버레이가 열려 있으면 ⌥n은 그쪽 탭 몫이라 여기 안 온다(뷰가 키를
   // 먼저 받는다). 입력창에 포커스 중이면 ⌥숫자가 특수문자 입력일 수 있어 건드리지 않는다.
@@ -933,6 +955,14 @@ export default function LaunchPage(): React.JSX.Element {
               onAscAppId={setIosInfo}
             />
           )}
+          {/* 삭제는 화면 맨 아래 구석 — 위험 액션은 눈에 밟히지 않는 자리에(여정 끝과 같은 부품) */}
+          {selected && (
+            <div className="choice-row" style={{ marginTop: 10 }}>
+              <button className="ghost-btn mini" onClick={deleteSelected}>
+                {delArmed ? m.launch.sheetDeleteSure : m.launch.sheetDelete}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     )
@@ -1000,6 +1030,26 @@ export default function LaunchPage(): React.JSX.Element {
               <span className="step-no">{n()}</span> {m.launch.stepContent}
             </div>
             <ListingForm file={selected} />
+          </div>
+        )}
+
+        {/* 여정 ③④ — 스토어 감지·초안 반영·핸드오프. 앱 레코드 생성만 콘솔(코파일럿 동행) */}
+        {selected && (
+          <div className="step">
+            <div className="step-head">
+              <span className="step-no">{n()}</span> {m.launch.stepStoreApply}
+            </div>
+            <JourneyApply
+              file={selected}
+              onMakeInConsole={(p) =>
+                openConsole(
+                  p,
+                  p === 'android'
+                    ? 'https://play.google.com/console'
+                    : 'https://appstoreconnect.apple.com/apps'
+                )
+              }
+            />
           </div>
         )}
 
@@ -1101,17 +1151,46 @@ export default function LaunchPage(): React.JSX.Element {
           <ApplyStep file={selected} googleOk={creds.googleSa.ok} stepNo={n()} />
         )}
 
-        {iapUnlocked && iapChoice !== 'undecided' && (
-          <div className="step dim">
+        {/* 남은 일 안내 — 여정이 끝나도 출시까지는 스토어별 숙제(설문·자산·심사)가 남는다.
+            무엇이 남았고 각각 ZTO 어디서 푸는지까지 짚는다(2026-08-15 Dan) — 안내 없이 끝나면
+            "다 된 건가?"가 된다. 출구는 대시보드, 테스트 앱 청소도 여정의 끝에서 */}
+        {selected && (
+          <div className="step">
             <div className="step-head">
               <span className="step-no">{n()}</span> {m.launch.stepNext}
             </div>
-            <ul className="todo-list">
-              <li>{m.launch.todoForms}</li>
-              <li>{m.launch.todoBuild}</li>
-              <li>{m.launch.todoListing}</li>
-              <li>{m.launch.todoChecklist}</li>
-            </ul>
+            <p className="step-note no-indent">{m.launch.nextIntro}</p>
+            <div className="meta-cols">
+              <div className="meta-col">
+                <div className="meta-col-head">{m.launch.jaPlay}</div>
+                <div className="guide no-indent">
+                  <ol>
+                    {m.launch.nextPlay.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+              <div className="meta-col">
+                <div className="meta-col-head">{m.launch.jaAsc}</div>
+                <div className="guide no-indent">
+                  <ol>
+                    {m.launch.nextIos.map((t, i) => (
+                      <li key={i}>{t}</li>
+                    ))}
+                  </ol>
+                </div>
+              </div>
+            </div>
+            <p className="step-note no-indent">{m.launch.nextOutro}</p>
+            <div className="choice-row">
+              <button className="choice small" onClick={() => setView('manage')}>
+                {m.launch.goDashboard}
+              </button>
+              <button className="ghost-btn mini" onClick={deleteSelected}>
+                {delArmed ? m.launch.sheetDeleteSure : m.launch.sheetDelete}
+              </button>
+            </div>
           </div>
         )}
       </div>

@@ -69,6 +69,7 @@ import {
   type PendingEdit,
   type PlayReleaseRow,
   type RunResult,
+  ascLocaleOf,
   type SheetIapInfo,
   type SheetListing,
   type StoreKind,
@@ -3131,6 +3132,211 @@ app.whenReady().then(() => {
       } catch {
         return { ok: false, error: 'write-failed' }
       }
+    }
+  )
+  // 여정 ③-감지 — 스토어에 앱 레코드가 생겼는지. 앱 생성은 양쪽 다 공개 API가 없어 콘솔에서
+  // 사람이 하지만, **생겼는지는 ZTO가 안다**: Play는 edit 생성이 되면 있는 것(404=없음),
+  // ASC는 bundleId 정확 일치 조회. 반영 버튼의 전제조건이자 "만들었어요" 수동 체크의 대체다.
+  ipcMain.handle(
+    'launch:journeyStores',
+    async (
+      _e,
+      file: string
+    ): Promise<{ play: { exists: boolean; reason?: string }; ios: { exists: boolean; reason?: string } }> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const out: { play: { exists: boolean; reason?: string }; ios: { exists: boolean; reason?: string } } = {
+        play: { exists: false },
+        ios: { exists: false }
+      }
+      const saPath = resolveGoogleSa(sheet)
+      if (!saPath) out.play.reason = 'no-creds'
+      else {
+        const tok = await googleTokenFor(saPath)
+        if (!tok) out.play.reason = 'token-failed'
+        else {
+          const base = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${encodeURIComponent(sheet.app.packageName)}`
+          const headers = { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }
+          const r = await fetch(`${base}/edits`, { method: 'POST', headers, body: '{}' })
+          if (r.ok) {
+            out.play.exists = true
+            const editId = ((await r.json()) as { id?: string }).id
+            if (editId) void fetch(`${base}/edits/${editId}`, { method: 'DELETE', headers }).catch(() => {})
+          } else out.play.reason = `http-${r.status}`
+        }
+      }
+      const asc = resolveAsc(sheet)
+      if (!asc) out.ios.reason = 'no-creds'
+      else {
+        const tok = await ascTokenFor(asc)
+        if (!tok) out.ios.reason = 'token-failed'
+        else {
+          const r = await fetch(
+            `https://api.appstoreconnect.apple.com/v1/apps?filter%5BbundleId%5D=${encodeURIComponent(sheet.app.bundleId)}`,
+            { headers: { Authorization: 'Bearer ' + tok } }
+          )
+          if (!r.ok) out.ios.reason = `http-${r.status}`
+          else {
+            const rows =
+              ((await r.json()) as { data?: { attributes?: { bundleId?: string } }[] }).data ?? []
+            out.ios.exists = rows.some((x) => x.attributes?.bundleId === sheet.app.bundleId)
+          }
+        }
+      }
+      return out
+    }
+  )
+  // 여정 ③-반영 — 콘텐츠 초안(sheet.listing)을 PendingEdit로 변환해 **검증된 적용 경로**
+  // (applyPlayEdits/applyAscEdits)로 민다. 별도 write 코드를 만들지 않는 것이 핵심 —
+  // 대시보드 편집과 여정 반영이 같은 파이프를 타야 한쪽만 고장 나는 일이 없다.
+  ipcMain.handle(
+    'launch:applyListing',
+    async (_e, file: string, platform: 'android' | 'ios'): Promise<ApplyResult[]> => {
+      const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      const l = sheet.listing as SheetListing | undefined
+      if (!l) return []
+      const playLocale = (l.locale || 'en-US').trim()
+      // ASC는 같은 언어를 다른 코드로 받는다(ko-KR→ko) — 변환표는 shared, 드롭다운과 같은 원본
+      const locale = platform === 'ios' ? ascLocaleOf(playLocale) : playLocale
+      const pe = (section: 'meta' | 'assets', field: string, newValue: string): PendingEdit => ({
+        id: `${platform}:${section}:${locale}:${field}`,
+        platform,
+        section,
+        field,
+        locale,
+        label: field,
+        oldValue: '',
+        newValue
+      })
+      const edits: PendingEdit[] = []
+      if (platform === 'android') {
+        const a = l.android ?? { title: '', short: '', full: '', icon: '' }
+        if (a.title) edits.push(pe('meta', 'title', a.title))
+        if (a.short) edits.push(pe('meta', 'short', a.short))
+        if (a.full) edits.push(pe('meta', 'full', a.full))
+        if (a.icon) {
+          const p = join(app.getPath('userData'), 'assets', basename(a.icon))
+          if (existsSync(p)) edits.push(pe('assets', 'icon', p))
+        }
+        if (edits.length === 0) return []
+        return await applyPlayEdits(sheet, edits)
+      }
+      const i = l.ios ?? { name: '', subtitle: '', keywords: '', full: '' }
+      if (i.name) edits.push(pe('meta', 'name', i.name))
+      if (i.subtitle) edits.push(pe('meta', 'subtitle', i.subtitle))
+      if (i.keywords) edits.push(pe('meta', 'keywords', i.keywords))
+      if (i.full) edits.push(pe('meta', 'description', i.full))
+      if (edits.length === 0) return []
+      return await applyAscEdits(sheet, edits)
+    }
+  )
+  // 여정 ④ — 핸드오프. ZTO의 경계는 스토어 껍데기·콘텐츠까지고 빌드·업로드는 LLM CLI 몫이다
+  // (2026-08-14 Dan). 만들어진 것을 마크다운으로 — 붙여넣으면 "이 껍데기에 빌드 올려줘"가 된다.
+  ipcMain.handle('launch:handoffText', (_e, file: string): string => {
+    const sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+    const l = sheet.listing ?? {}
+    const iconPath = l.android?.icon
+      ? join(app.getPath('userData'), 'assets', basename(l.android.icon))
+      : ''
+    const ko = appLocale === 'ko'
+    return [
+      `# ${sheet.app?.name ?? ''} — ${ko ? '스토어 셋업 핸드오프 (ZTO)' : 'Store setup handoff (ZTO)'}`,
+      '',
+      `- Android applicationId: \`${sheet.app?.packageName ?? ''}\``,
+      `- iOS Bundle ID: \`${sheet.app?.bundleId ?? ''}\` ${ko ? '(Apple Developer에 등록됨)' : '(registered with Apple Developer)'}`,
+      l.locale ? `- ${ko ? '기본 언어' : 'Primary language'}: ${l.locale}` : '',
+      sheet.app?.about ? `- ${ko ? '앱 설명' : 'About'}: ${sheet.app.about}` : '',
+      iconPath ? `- ${ko ? '아이콘 원본' : 'Icon file'}: \`${iconPath}\`` : '',
+      '',
+      ko ? '## 빌드 쪽에서 할 일' : '## Build-side TODO',
+      ko
+        ? '1. 위 식별자로 앱 프로젝트 구성 (iOS bundle id / Android applicationId)'
+        : '1. Configure the app project with the identifiers above',
+      iconPath
+        ? ko
+          ? '2. iOS: 아이콘을 Xcode Asset Catalog(AppIcon)에 포함해 빌드 — App Store 아이콘은 빌드 소속 (Android 리스팅 아이콘은 ZTO가 반영)'
+          : '2. iOS: include the icon in the Xcode Asset Catalog (AppIcon) — the App Store icon ships with the build (ZTO handles the Play listing icon)'
+        : '',
+      ko
+        ? '3. 빌드 업로드: iOS → App Store Connect(TestFlight) / Android → Play Console(내부 테스트)'
+        : '3. Upload builds: iOS → App Store Connect (TestFlight) / Android → Play Console (internal testing)'
+    ]
+      .filter(Boolean)
+      .join('\n')
+  })
+  // 시트 삭제 — 테스트로 만든 앱을 ZTO가 스스로 치운다(2026-08-15 Dan "너가 지울 수 있는
+  // 기능도 주면 안 됨?"). 지우는 범위는 **ZTO가 만든 것까지만**: 시트·아이콘(로컬) + Bundle ID
+  // (단, **앱 레코드가 안 쓰고 있을 때만** — 쓰는 중이면 Apple이 거부하기 전에 우리가 먼저 안
+  // 건드린다). 콘솔의 앱 레코드는 삭제 API가 양쪽 다 없어 콘솔에서만 지울 수 있다.
+  ipcMain.handle(
+    'launch:deleteSheet',
+    async (
+      _e,
+      file: string
+    ): Promise<{ ok: boolean; bundleDeleted: boolean; bundleNote?: string }> => {
+      let sheet: {
+        app?: { bundleId?: string }
+        listing?: { android?: { icon?: string } }
+      }
+      try {
+        sheet = JSON.parse(readFileSync(join(ANSWERS_DIR, file), 'utf8'))
+      } catch {
+        return { ok: false, bundleDeleted: false }
+      }
+      let bundleDeleted = false
+      let bundleNote: string | undefined
+      const bundleId = sheet.app?.bundleId ?? ''
+      const asc = firstAscCreds()
+      if (asc && bundleId) {
+        const tok = await ascTokenFor(asc)
+        if (tok) {
+          const A = 'https://api.appstoreconnect.apple.com/v1'
+          const headers = { Authorization: 'Bearer ' + tok }
+          try {
+            const usedR = await fetch(
+              `${A}/apps?filter%5BbundleId%5D=${encodeURIComponent(bundleId)}`,
+              { headers }
+            )
+            const used =
+              usedR.ok &&
+              (((await usedR.json()) as { data?: { attributes?: { bundleId?: string } }[] }).data ?? []).some(
+                (x) => x.attributes?.bundleId === bundleId
+              )
+            if (used) bundleNote = 'in-use'
+            else {
+              const q = await fetch(
+                `${A}/bundleIds?filter%5Bidentifier%5D=${encodeURIComponent(bundleId)}&limit=200`,
+                { headers }
+              )
+              const row = q.ok
+                ? (
+                    ((await q.json()) as { data?: { id: string; attributes?: { identifier?: string } }[] }).data ?? []
+                  ).find((x) => x.attributes?.identifier === bundleId)
+                : undefined
+              if (row) {
+                const d = await fetch(`${A}/bundleIds/${row.id}`, { method: 'DELETE', headers })
+                bundleDeleted = d.ok
+                if (!d.ok) bundleNote = `http-${d.status}`
+              }
+            }
+          } catch {
+            bundleNote = 'network'
+          }
+        }
+      }
+      try {
+        rmSync(join(ANSWERS_DIR, file))
+      } catch {
+        return { ok: false, bundleDeleted }
+      }
+      const icon = sheet.listing?.android?.icon
+      if (icon) {
+        try {
+          rmSync(join(app.getPath('userData'), 'assets', basename(icon)))
+        } catch {
+          /* 아이콘은 없어도 된다 */
+        }
+      }
+      return { ok: true, bundleDeleted, bundleNote }
     }
   )
   // 기존 앱 가져오기 — 패키지명 실존·접근 검증(SA 제공 시) 후 시트 생성

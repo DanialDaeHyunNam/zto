@@ -218,6 +218,20 @@ const api = {
       ipcRenderer.invoke('launch:saveListing', file, listing),
     pickListingIcon: (file: string): Promise<{ ok: boolean; name?: string; error?: string }> =>
       ipcRenderer.invoke('launch:pickListingIcon', file),
+    // 여정 ③ — 스토어 앱 레코드 감지 + 초안 반영(검증된 applyEdits 경로 재사용)
+    journeyStores: (
+      file: string
+    ): Promise<{ play: { exists: boolean; reason?: string }; ios: { exists: boolean; reason?: string } }> =>
+      ipcRenderer.invoke('launch:journeyStores', file),
+    applyListing: (file: string, platform: 'android' | 'ios'): Promise<ApplyResult[]> =>
+      ipcRenderer.invoke('launch:applyListing', file, platform),
+    // 여정 ④ — 빌드 도구(LLM CLI)에 넘길 핸드오프 마크다운
+    handoffText: (file: string): Promise<string> => ipcRenderer.invoke('launch:handoffText', file),
+    // 테스트 앱 청소 — 시트·아이콘(로컬) + 미사용 Bundle ID(ASC). 앱 레코드는 콘솔에서만
+    deleteSheet: (
+      file: string
+    ): Promise<{ ok: boolean; bundleDeleted: boolean; bundleNote?: string }> =>
+      ipcRenderer.invoke('launch:deleteSheet', file),
     importApp: (
       name: string,
       packageName: string,
